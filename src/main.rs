@@ -1,11 +1,151 @@
-use subjective_logic::{BOpinion, Deduction, MOpinion1d};
+use subjective_logic::{
+    Abduction, BOpinion, Deduction, Fusion, MOpinion1d, MOpinion1dRef, MSimplex, MSimplexRef,
+};
 
 fn main() {
-    // deduce_unit();
-    deduce_unit3();
-    let w = BOpinion::<f32>::new(0.0, 1.0, 0.0, 0.5);
-    let w2 = BOpinion::<f32>::new(0.5, 0.0, 0.5, 0.5);
-    println!("{}", w.cfuse(&w2).unwrap());
+    let mut agent = Agent::new(
+        MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.5, 0.5]),
+        MOpinion1d::<f32, 3>::new([0.0, 0.0, 0.0], 1.0, [0.01, 0.1, 0.89]),
+        MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.01, 0.99]),
+        [
+            MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
+            MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
+            MSimplex::<f32, 2>::new([0.35, 0.35], 0.3),
+        ],
+        [
+            MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
+            MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
+            MSimplex::<f32, 2>::new([0.0, 0.7], 0.3),
+        ],
+    );
+
+    let mw_o = MSimplex::<f32, 2>::new([0.95, 0.0], 0.05);
+    let mw_x = MSimplex::<f32, 3>::new([0.95, 0.0, 0.0], 0.05);
+    println!("-- m3 --");
+    agent.process3(mw_o.borrow());
+    println!("{}", agent);
+    agent.reset();
+
+    println!("-- m4 --");
+    agent.process4(mw_o.borrow(), mw_x.borrow());
+    println!("{}", agent);
+    agent.reset();
+
+    println!("-- m5 --");
+    agent.process4(
+        mw_o.borrow(),
+        MSimplex::<f32, 3>::new([0.0, 0.0, 0.95], 0.05).borrow(),
+    );
+    println!("{}", agent);
+    agent.reset();
+
+    println!("-- m5* --");
+    agent.process4(
+        mw_o.borrow(),
+        MSimplex::<f32, 3>::new([0.0, 0.95, 0.0], 0.05).borrow(),
+    );
+    println!("{}", agent);
+}
+
+#[derive(Debug)]
+struct Agent {
+    w_o: MOpinion1d<f32, 2>,
+    w_x: MOpinion1d<f32, 3>,
+    w_th: MOpinion1d<f32, 2>,
+    conds_ox: [MSimplex<f32, 2>; 3],
+    conds_thx: [MSimplex<f32, 2>; 3],
+    init_a_o: [f32; 2],
+    init_a_x: [f32; 3],
+    init_a_th: [f32; 2],
+}
+
+impl std::fmt::Display for Agent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "w_O  s: {:?}, a: {:?}",
+            self.w_o.simplex, self.w_o.base_rate
+        )?;
+        writeln!(
+            f,
+            "w_X  s: {:?}, a: {:?}",
+            self.w_x.simplex, self.w_x.base_rate
+        )?;
+        writeln!(
+            f,
+            "w_TH s: {:?}, a: {:?}",
+            self.w_th.simplex, self.w_th.base_rate
+        )?;
+        write!(f, "P_TH: {}", self.w_th.projection(0))
+    }
+}
+
+impl Agent {
+    pub fn new(
+        w_o: MOpinion1d<f32, 2>,
+        w_x: MOpinion1d<f32, 3>,
+        w_th: MOpinion1d<f32, 2>,
+        conds_ox: [MSimplex<f32, 2>; 3],
+        conds_thx: [MSimplex<f32, 2>; 3],
+    ) -> Self {
+        Self {
+            init_a_o: w_o.base_rate.clone(),
+            init_a_x: w_x.base_rate.clone(),
+            init_a_th: w_th.base_rate.clone(),
+            w_o,
+            w_x,
+            w_th,
+            conds_ox,
+            conds_thx,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.w_o.simplex = MSimplex::new_unchecked([0.0, 0.0], 1.0);
+        self.w_o.base_rate = self.init_a_o.clone();
+        self.w_x.simplex = MSimplex::new_unchecked([0.0, 0.0, 0.0], 1.0);
+        self.w_x.base_rate = self.init_a_x.clone();
+        self.w_th.simplex = MSimplex::new_unchecked([0.0, 0.0], 1.0);
+        self.w_th.base_rate = self.init_a_th.clone();
+    }
+
+    fn update_o(&mut self, w: MSimplexRef<f32, 2>) {
+        self.w_o.simplex = self.w_o.cfuse_al(w, 0.5).unwrap();
+    }
+
+    fn update_x(&mut self, w: MOpinion1d<f32, 3>) {
+        self.w_x = self.w_x.cfuse_al(&w, 0.5).unwrap();
+    }
+
+    fn update_th(&mut self, w: MOpinion1d<f32, 2>) {
+        self.w_th = self.w_th.cfuse_al(&w, 0.5).unwrap();
+    }
+
+    fn process3(&mut self, mw_o: MSimplexRef<f32, 2>) {
+        let (mw_x, _) = mw_o
+            .clone()
+            .abduce(&self.conds_ox, self.w_x.base_rate.clone(), None)
+            .unwrap();
+        let mw_th = mw_x.deduce(&self.conds_thx, self.w_th.base_rate.clone());
+        self.update_o(mw_o);
+        self.update_x(mw_x);
+        self.update_th(mw_th);
+    }
+
+    fn process4(&mut self, mw_o: MSimplexRef<f32, 2>, ms_x: MSimplexRef<f32, 3>) {
+        let (mw_x_ab, _) = mw_o
+            .clone()
+            .abduce(&self.conds_ox, self.w_x.base_rate.clone(), None)
+            .unwrap();
+        let mw_x = {
+            let w = MOpinion1dRef::<f32, 3>::from((ms_x, &self.w_x.base_rate));
+            mw_x_ab.cfuse_al(w, 0.5).unwrap()
+        };
+        let mw_th = mw_x.deduce(&self.conds_thx, self.w_th.base_rate.clone());
+        self.update_o(mw_o);
+        self.update_x(mw_x);
+        self.update_th(mw_th);
+    }
 }
 
 pub fn deduce_unit3() {
@@ -59,7 +199,7 @@ pub fn deduce_unit2() {
         println!("{:?}", cnd);
         for w in &ws {
             println!("   w: {w:?}");
-            println!(" ded: {:?}", w.deduce(cnd.into(), [0.5, 0.5]));
+            println!(" ded: {:?}", w.deduce(cnd, [0.5, 0.5]));
         }
     }
 }
