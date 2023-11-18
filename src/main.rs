@@ -1,54 +1,92 @@
+use approx::relative_eq;
 use subjective_logic::{
-    Abduction, BOpinion, Deduction, Fusion, MOpinion1d, MOpinion1dRef, MSimplex, MSimplexRef,
+    Abduction, BOpinion, Deduction, Fusion, FusionAssign, FusionOp, MOpinion1d, MSimplex,
 };
 
 fn main() {
     let mut agent = Agent::new(
-        MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.5, 0.5]),
-        MOpinion1d::<f32, 3>::new([0.0, 0.0, 0.0], 1.0, [0.01, 0.1, 0.89]),
-        MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.01, 0.99]),
-        [
-            MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
-            MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
-            MSimplex::<f32, 2>::new([0.35, 0.35], 0.3),
-        ],
-        [
-            MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
-            MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
-            MSimplex::<f32, 2>::new([0.0, 0.7], 0.3),
-        ],
+        AgentOpinion::new(
+            MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.5, 0.5]),
+            MOpinion1d::<f32, 3>::new([0.0, 0.0, 0.0], 1.0, [0.01, 0.1, 0.89]),
+            MOpinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.01, 0.99]),
+            [
+                MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
+                MSimplex::<f32, 2>::new([0.99, 0.0], 0.01),
+                MSimplex::<f32, 2>::new([0.35, 0.35], 0.3),
+            ],
+            [
+                MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
+                MSimplex::<f32, 2>::new([0.7, 0.0], 0.3),
+                MSimplex::<f32, 2>::new([0.0, 0.7], 0.3),
+            ],
+        ),
+        AgentCPT::new(0.88, 0.88, 2.25, 0.61, 0.69, [-1.0, 1.0], 0.9),
     );
 
     let mw_o = MSimplex::<f32, 2>::new([0.95, 0.0], 0.05);
-    let mw_x = MSimplex::<f32, 3>::new([0.95, 0.0, 0.0], 0.05);
-    println!("-- m3 --");
-    agent.process3(mw_o.borrow());
-    println!("{}", agent);
-    agent.reset();
+    let mw_x = [
+        MSimplex::<f32, 3>::new([0.2, 0.05, 0.05], 0.7),
+        MSimplex::<f32, 3>::new([0.0, 0.0, 0.95], 0.05),
+        MSimplex::<f32, 3>::new([0.0, 0.95, 0.0], 0.05),
+    ];
+    let ips = [
+        ("m1", InfoProcess::P0 { op_x: &mw_x[0] }),
+        ("m2", InfoProcess::P0 { op_x: &mw_x[1] }),
+        ("m2*", InfoProcess::P0 { op_x: &mw_x[2] }),
+        ("m3", InfoProcess::P1 { op_o: &mw_o }),
+        (
+            "m4",
+            InfoProcess::P2 {
+                op_o: &mw_o,
+                op_x: &mw_x[0],
+            },
+        ),
+        (
+            "m5",
+            InfoProcess::P2 {
+                op_o: &mw_o,
+                op_x: &mw_x[1],
+            },
+        ),
+        (
+            "m5*",
+            InfoProcess::P2 {
+                op_o: &mw_o,
+                op_x: &mw_x[2],
+            },
+        ),
+    ];
 
-    println!("-- m4 --");
-    agent.process4(mw_o.borrow(), mw_x.borrow());
-    println!("{}", agent);
-    agent.reset();
+    println!("-- initial state --");
+    println!("{}", agent.op);
 
-    println!("-- m5 --");
-    agent.process4(
-        mw_o.borrow(),
-        MSimplex::<f32, 3>::new([0.0, 0.0, 0.95], 0.05).borrow(),
-    );
-    println!("{}", agent);
-    agent.reset();
+    for (m, ip) in ips {
+        println!("-- i.s. -> {m} --");
+        agent.op.info_process(ip);
+        println!("{}", agent.op);
+        let val = agent.valuate();
+        println!("V(f_a)={:.3},V(f_~a)={:.3}", val[0], val[1]);
+        agent.op.reset();
+    }
+}
 
-    println!("-- m5* --");
-    agent.process4(
-        mw_o.borrow(),
-        MSimplex::<f32, 3>::new([0.0, 0.95, 0.0], 0.05).borrow(),
-    );
-    println!("{}", agent);
+struct Agent {
+    op: AgentOpinion,
+    cpt: AgentCPT,
+}
+
+impl Agent {
+    pub fn new(op: AgentOpinion, cpt: AgentCPT) -> Self {
+        Self { op, cpt }
+    }
+
+    pub fn valuate(&self) -> [f32; 2] {
+        self.cpt.valuate_prospects(self.op.w_th.projection(0))
+    }
 }
 
 #[derive(Debug)]
-struct Agent {
+struct AgentOpinion {
     w_o: MOpinion1d<f32, 2>,
     w_x: MOpinion1d<f32, 3>,
     w_th: MOpinion1d<f32, 2>,
@@ -59,28 +97,30 @@ struct Agent {
     init_a_th: [f32; 2],
 }
 
-impl std::fmt::Display for Agent {
+impl std::fmt::Display for AgentOpinion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "w_O  s: {:?}, a: {:?}",
-            self.w_o.simplex, self.w_o.base_rate
-        )?;
-        writeln!(
-            f,
-            "w_X  s: {:?}, a: {:?}",
-            self.w_x.simplex, self.w_x.base_rate
-        )?;
-        writeln!(
-            f,
-            "w_TH s: {:?}, a: {:?}",
-            self.w_th.simplex, self.w_th.base_rate
-        )?;
-        write!(f, "P_TH: {}", self.w_th.projection(0))
+        fn put<const N: usize>(w: &MOpinion1d<f32, N>) -> String {
+            let mut str = String::new();
+            for (i, v) in w.simplex.b().iter().enumerate() {
+                str.push_str(&format!("b{}={:.3} ", i, v));
+            }
+            str.push_str(&format!("u ={:.3} ", w.u()));
+            for (i, v) in w.base_rate.iter().enumerate() {
+                str.push_str(&format!("a{}={:.3} ", i, v));
+            }
+            str.pop();
+            str
+        }
+        writeln!(f, "w_O  {}", put(&self.w_o))?;
+        writeln!(f, "w_X  {}", put(&self.w_x))?;
+        writeln!(f, "w_TH {}", put(&self.w_th))?;
+        write!(f, "P(w_TH)={:.3}", self.w_th.projection(0))
     }
 }
 
-impl Agent {
+impl AgentOpinion {
+    const OP: FusionOp<f32> = FusionOp::CumulativeA(0.5);
+
     pub fn new(
         w_o: MOpinion1d<f32, 2>,
         w_x: MOpinion1d<f32, 3>,
@@ -109,42 +149,137 @@ impl Agent {
         self.w_th.base_rate = self.init_a_th.clone();
     }
 
-    fn update_o(&mut self, w: MSimplexRef<f32, 2>) {
-        self.w_o.simplex = self.w_o.cfuse_al(w, 0.5).unwrap();
+    pub fn info_process(&mut self, ip: InfoProcess) {
+        match ip {
+            InfoProcess::P0 { op_x } => self.process0(op_x),
+            InfoProcess::P1 { op_o } => self.process1(op_o),
+            InfoProcess::P2 { op_o, op_x } => self.process2(op_o, op_x),
+        }
     }
 
-    fn update_x(&mut self, w: MOpinion1d<f32, 3>) {
-        self.w_x = self.w_x.cfuse_al(&w, 0.5).unwrap();
+    fn process0(&mut self, ms_x: &MSimplex<f32, 3>) {
+        let mw_th =
+            (ms_x, &self.w_x.base_rate).deduce(&self.conds_thx, self.w_th.base_rate.clone());
+        self.w_x.fusion_assign(ms_x, &Self::OP).unwrap();
+        self.w_th.fusion_assign(&mw_th, &Self::OP).unwrap();
     }
 
-    fn update_th(&mut self, w: MOpinion1d<f32, 2>) {
-        self.w_th = self.w_th.cfuse_al(&w, 0.5).unwrap();
-    }
-
-    fn process3(&mut self, mw_o: MSimplexRef<f32, 2>) {
+    fn process1(&mut self, mw_o: &MSimplex<f32, 2>) {
         let (mw_x, _) = mw_o
             .clone()
             .abduce(&self.conds_ox, self.w_x.base_rate.clone(), None)
             .unwrap();
         let mw_th = mw_x.deduce(&self.conds_thx, self.w_th.base_rate.clone());
-        self.update_o(mw_o);
-        self.update_x(mw_x);
-        self.update_th(mw_th);
+        self.w_o.fusion_assign(mw_o, &Self::OP).unwrap();
+        self.w_x.fusion_assign(&mw_x, &Self::OP).unwrap();
+        self.w_th.fusion_assign(&mw_th, &Self::OP).unwrap();
     }
 
-    fn process4(&mut self, mw_o: MSimplexRef<f32, 2>, ms_x: MSimplexRef<f32, 3>) {
+    fn process2(&mut self, mw_o: &MSimplex<f32, 2>, ms_x: &MSimplex<f32, 3>) {
         let (mw_x_ab, _) = mw_o
             .clone()
             .abduce(&self.conds_ox, self.w_x.base_rate.clone(), None)
             .unwrap();
-        let mw_x = {
-            let w = MOpinion1dRef::<f32, 3>::from((ms_x, &self.w_x.base_rate));
-            mw_x_ab.cfuse_al(w, 0.5).unwrap()
-        };
+        let mw_x = mw_x_ab.cfuse_al((ms_x, &self.w_x.base_rate), 0.5).unwrap();
         let mw_th = mw_x.deduce(&self.conds_thx, self.w_th.base_rate.clone());
-        self.update_o(mw_o);
-        self.update_x(mw_x);
-        self.update_th(mw_th);
+        self.w_o.fusion_assign(mw_o, &Self::OP).unwrap();
+        self.w_x.fusion_assign(&mw_x, &Self::OP).unwrap();
+        self.w_th.fusion_assign(&mw_th, &Self::OP).unwrap();
+    }
+}
+
+enum InfoProcess<'a> {
+    P0 {
+        op_x: &'a MSimplex<f32, 3>,
+    },
+    P1 {
+        op_o: &'a MSimplex<f32, 2>,
+    },
+    P2 {
+        op_o: &'a MSimplex<f32, 2>,
+        op_x: &'a MSimplex<f32, 3>,
+    },
+}
+
+#[derive(Debug)]
+struct AgentCPT {
+    alpha: f32,
+    beta: f32,
+    lambda: f32,
+    gamma: f32,
+    delta: f32,
+    outcomes: [f32; 2],
+    cost: f32,
+}
+
+impl AgentCPT {
+    pub fn new(
+        alpha: f32,
+        beta: f32,
+        lambda: f32,
+        gamma: f32,
+        delta: f32,
+        outcomes: [f32; 2],
+        cost: f32,
+    ) -> Self {
+        assert!(outcomes[0] < outcomes[1]);
+        Self {
+            alpha,
+            beta,
+            lambda,
+            gamma,
+            delta,
+            outcomes,
+            cost,
+        }
+    }
+
+    fn w(p: f32, e: f32) -> f32 {
+        let temp = p.powf(e);
+        temp / (temp + (1.0 - p).powf(e)).powf(1.0 / e)
+    }
+
+    /// Computes a probability weighting function for gains
+    fn weighting_p(&self, p: f32) -> f32 {
+        Self::w(p, self.gamma)
+    }
+
+    /// Computes a probability weighting function for losses
+    fn weighting_m(&self, p: f32) -> f32 {
+        Self::w(p, self.delta)
+    }
+
+    /// Computes a value funciton
+    fn value(&self, x: f32) -> f32 {
+        if x.is_sign_positive() {
+            x.powf(self.alpha)
+        } else {
+            -self.lambda * x.abs().powf(self.beta)
+        }
+    }
+
+    /// Computes a CPT value of a prospect f_a
+    fn valuate_prospect_a(&self) -> f32 {
+        self.value(self.outcomes[1] - self.cost)
+    }
+
+    /// Computes a CPT value of a prospect f_{\bar a}
+    fn valuate_prospect_na(&self, p: f32) -> f32 {
+        let inv_p = 1.0 - p;
+        if self.outcomes[0] > 0.0 || relative_eq!(self.outcomes[0], 0.0) {
+            self.value(self.outcomes[0]) * (1.0 - self.weighting_p(inv_p))
+                + self.value(self.outcomes[1]) * self.weighting_p(inv_p)
+        } else if self.outcomes[1] > 0.0 || relative_eq!(self.outcomes[1], 0.0) {
+            self.value(self.outcomes[0]) * self.weighting_m(p)
+                + self.value(self.outcomes[1]) * self.weighting_p(inv_p)
+        } else {
+            self.value(self.outcomes[0]) * self.weighting_m(p)
+                + self.value(self.outcomes[1]) * (1.0 - self.weighting_m(p))
+        }
+    }
+
+    pub fn valuate_prospects(&self, p: f32) -> [f32; 2] {
+        [self.valuate_prospect_a(), self.valuate_prospect_na(p)]
     }
 }
 

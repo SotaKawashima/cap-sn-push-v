@@ -54,13 +54,14 @@ dependencies = [
 name = "social-dilemma"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "subjective-logic",
 ]
 
 [[package]]
 name = "subjective-logic"
-version = "0.3.7"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.3.7#ddc7b812442ba6462b7c451536a380594c860f73"
+version = "0.4.4"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.4.4#bb8ce275cf53159f1f3c8c05713c8c2e8b69e620"
 dependencies = [
  "approx",
  "paste",
