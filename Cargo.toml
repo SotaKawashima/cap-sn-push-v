@@ -1,10 +1,10 @@
 [package]
-name = "social-dilemma"
+name = "cap-sn"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.4.4" }
+subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.5.2" }
 approx = "0.5"
