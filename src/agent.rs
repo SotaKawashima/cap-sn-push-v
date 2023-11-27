@@ -1,22 +1,27 @@
-use approx::relative_eq;
-use subjective_logic::mul::OpinionRef;
+use std::array;
+
 use subjective_logic::mul::{
     op::{Abduction, Deduction, Fuse, FuseAssign, FuseOp},
     Opinion1d, Simplex,
 };
+use subjective_logic::mul::{OpinionRef, Projection};
+
+use crate::cpt::{LevelSet, CPT};
 
 pub struct Agent {
     pub op: AgentOpinion,
-    cpt: AgentCPT,
+    cpt: CPT,
+    selfish: [LevelSet<usize, f32>; 2],
 }
 
 impl Agent {
-    pub fn new(op: AgentOpinion, cpt: AgentCPT) -> Self {
-        Self { op, cpt }
+    pub fn new(op: AgentOpinion, cpt: CPT, selfish: [LevelSet<usize, f32>; 2]) -> Self {
+        Self { op, cpt, selfish }
     }
 
     pub fn valuate(&self) -> [f32; 2] {
-        self.cpt.valuate_prospects(self.op.w_th.projection()[0])
+        let p = self.op.w_th.projection();
+        array::from_fn(|i| self.cpt.valuate(&self.selfish[i], &p))
     }
 }
 
@@ -104,111 +109,27 @@ impl<'a> InfoProcess<'a> {
             InfoProcess::P0 { op_x } => {
                 let mw_x = OpinionRef::from((op_x, &op.w_x.base_rate));
                 let mw_th = mw_x.deduce_with(&op.conds_thx, op.w_th.base_rate.clone());
-                AgentOpinion::OP.fuse_assign(&mut op.w_x, op_x).unwrap();
-                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th).unwrap();
+                AgentOpinion::OP.fuse_assign(&mut op.w_x, op_x);
+                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th);
             }
             InfoProcess::P1 { op_o } => {
                 let (mw_x, _) = op_o.abduce(&op.conds_ox, op.w_x.base_rate.clone()).unwrap();
                 let mw_th = mw_x.deduce_with(&op.conds_thx, op.w_th.base_rate.clone());
-                AgentOpinion::OP.fuse_assign(&mut op.w_o, op_o).unwrap();
-                AgentOpinion::OP.fuse_assign(&mut op.w_x, &mw_x).unwrap();
-                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th).unwrap();
+                AgentOpinion::OP.fuse_assign(&mut op.w_o, op_o);
+                AgentOpinion::OP.fuse_assign(&mut op.w_x, &mw_x);
+                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th);
             }
             InfoProcess::P2 { op_o, op_x } => {
                 let (mw_x_ab, _) = op_o.abduce(&op.conds_ox, op.w_x.base_rate.clone()).unwrap();
-                let mw_x = AgentOpinion::OP
-                    .fuse(
-                        mw_x_ab.as_ref(),
-                        OpinionRef::from((op_x, &op.w_x.base_rate)),
-                    )
-                    .unwrap();
+                let mw_x = AgentOpinion::OP.fuse(
+                    mw_x_ab.as_ref(),
+                    OpinionRef::from((op_x, &op.w_x.base_rate)),
+                );
                 let mw_th = mw_x.deduce_with(&op.conds_thx, op.w_th.base_rate.clone());
-                AgentOpinion::OP.fuse_assign(&mut op.w_o, op_o).unwrap();
-                AgentOpinion::OP.fuse_assign(&mut op.w_x, &mw_x).unwrap();
-                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th).unwrap();
+                AgentOpinion::OP.fuse_assign(&mut op.w_o, op_o);
+                AgentOpinion::OP.fuse_assign(&mut op.w_x, &mw_x);
+                AgentOpinion::OP.fuse_assign(&mut op.w_th, &mw_th);
             }
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct AgentCPT {
-    alpha: f32,
-    beta: f32,
-    lambda: f32,
-    gamma: f32,
-    delta: f32,
-    outcomes: [f32; 2],
-    cost: f32,
-}
-
-impl AgentCPT {
-    pub fn new(
-        alpha: f32,
-        beta: f32,
-        lambda: f32,
-        gamma: f32,
-        delta: f32,
-        outcomes: [f32; 2],
-        cost: f32,
-    ) -> Self {
-        assert!(outcomes[0] < outcomes[1]);
-        Self {
-            alpha,
-            beta,
-            lambda,
-            gamma,
-            delta,
-            outcomes,
-            cost,
-        }
-    }
-
-    fn w(p: f32, e: f32) -> f32 {
-        let temp = p.powf(e);
-        temp / (temp + (1.0 - p).powf(e)).powf(1.0 / e)
-    }
-
-    /// Computes a probability weighting function for gains
-    fn weighting_p(&self, p: f32) -> f32 {
-        Self::w(p, self.gamma)
-    }
-
-    /// Computes a probability weighting function for losses
-    fn weighting_m(&self, p: f32) -> f32 {
-        Self::w(p, self.delta)
-    }
-
-    /// Computes a value funciton
-    fn value(&self, x: f32) -> f32 {
-        if x.is_sign_positive() {
-            x.powf(self.alpha)
-        } else {
-            -self.lambda * x.abs().powf(self.beta)
-        }
-    }
-
-    /// Computes a CPT value of a prospect f_a
-    fn valuate_prospect_a(&self) -> f32 {
-        self.value(self.outcomes[1] - self.cost)
-    }
-
-    /// Computes a CPT value of a prospect f_{\bar a}
-    fn valuate_prospect_na(&self, p: f32) -> f32 {
-        let inv_p = 1.0 - p;
-        if self.outcomes[0] > 0.0 || relative_eq!(self.outcomes[0], 0.0) {
-            self.value(self.outcomes[0]) * (1.0 - self.weighting_p(inv_p))
-                + self.value(self.outcomes[1]) * self.weighting_p(inv_p)
-        } else if self.outcomes[1] > 0.0 || relative_eq!(self.outcomes[1], 0.0) {
-            self.value(self.outcomes[0]) * self.weighting_m(p)
-                + self.value(self.outcomes[1]) * self.weighting_p(inv_p)
-        } else {
-            self.value(self.outcomes[0]) * self.weighting_m(p)
-                + self.value(self.outcomes[1]) * (1.0 - self.weighting_m(p))
-        }
-    }
-
-    pub fn valuate_prospects(&self, p: f32) -> [f32; 2] {
-        [self.valuate_prospect_a(), self.valuate_prospect_na(p)]
     }
 }

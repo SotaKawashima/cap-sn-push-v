@@ -1,4 +1,7 @@
-use cap_sn::agent::{Agent, AgentCPT, AgentOpinion, InfoProcess};
+use cap_sn::{
+    agent::{Agent, AgentOpinion, InfoProcess},
+    cpt::{LevelSet, CPT},
+};
 use subjective_logic::mul::{Opinion1d, Simplex};
 
 fn main() {
@@ -18,7 +21,11 @@ fn main() {
                 Simplex::<f32, 2>::new([0.0, 0.7], 0.3),
             ],
         ),
-        AgentCPT::new(0.88, 0.88, 2.25, 0.61, 0.69, [-1.0, 1.0], 0.9),
+        CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
+        [
+            LevelSet::<_, f32>::new(&[0.5, -0.5]),
+            LevelSet::<_, f32>::new(&[0.2, -0.2]),
+        ],
     );
 
     let mw_o = Simplex::<f32, 2>::new([0.95, 0.0], 0.05);

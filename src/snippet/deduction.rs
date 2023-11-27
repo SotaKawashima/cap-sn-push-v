@@ -1,5 +1,5 @@
 use subjective_logic::bi::{BOpinion, BSimplex};
-use subjective_logic::mul::{op::Deduction, Opinion1d, Simplex};
+use subjective_logic::mul::{op::Deduction, Opinion1d, Projection, Simplex};
 
 pub fn deduce_unit3() {
     let w = Opinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.2, 0.8]);
