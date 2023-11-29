@@ -22,6 +22,7 @@ name = "cap-sn"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "once_cell",
  "subjective-logic",
 ]
 
@@ -33,6 +34,12 @@ checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "once_cell"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 
 [[package]]
 name = "paste"
@@ -60,8 +67,8 @@ dependencies = [
 
 [[package]]
 name = "subjective-logic"
-version = "0.6.1"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.6.2#76fece5feca6cd2b08b1c4fb99269c88e5f835f0"
+version = "0.6.5"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.6.5#d8680767586fdc74c58e42bda4cd8d263d983ab0"
 dependencies = [
  "approx",
  "paste",
