@@ -1,76 +1,57 @@
-use cap_sn::{
-    agent::{Agent, AgentOpinion},
-    cpt::{LevelSet, CPT},
-};
+use cap_sn::agent::{Agent, Info, InfoContent, A, PHI, PSI, THETA};
+use graph_lib::prelude::{DiGraphL, Graph};
+use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use subjective_logic::mul::{Opinion1d, Simplex};
 
 fn main() {
-    // let mut agent = Agent::new(
-    //     AgentOpinion::new(
-    //         Opinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.5, 0.5]),
-    //         Opinion1d::<f32, 3>::new([0.0, 0.0, 0.0], 1.0, [0.01, 0.1, 0.89]),
-    //         Opinion1d::<f32, 2>::new([0.0, 0.0], 1.0, [0.01, 0.99]),
-    //         [
-    //             Simplex::<f32, 2>::new([0.99, 0.0], 0.01),
-    //             Simplex::<f32, 2>::new([0.99, 0.0], 0.01),
-    //             Simplex::<f32, 2>::new([0.35, 0.35], 0.3),
-    //         ],
-    //         [
-    //             Simplex::<f32, 2>::new([0.7, 0.0], 0.3),
-    //             Simplex::<f32, 2>::new([0.7, 0.0], 0.3),
-    //             Simplex::<f32, 2>::new([0.0, 0.7], 0.3),
-    //         ],
-    //     ),
-    //     CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
-    //     [
-    //         LevelSet::<_, f32>::new(&[0.5, -0.5]),
-    //         LevelSet::<_, f32>::new(&[0.2, -0.2]),
-    //     ],
-    // );
+    let mut g = DiGraphL::<Agent>::new();
+    let mut received = Vec::<(usize, usize)>::new();
 
-    // let mw_o = Simplex::<f32, 2>::new([0.95, 0.0], 0.05);
-    // let mw_x = [
-    //     Simplex::<f32, 3>::new([0.2, 0.05, 0.05], 0.7),
-    //     Simplex::<f32, 3>::new([0.0, 0.0, 0.95], 0.05),
-    //     Simplex::<f32, 3>::new([0.0, 0.95, 0.0], 0.05),
-    // ];
-    // let ips = [
-    //     ("m1", InfoProcess::P0 { op_x: &mw_x[0] }),
-    //     ("m2", InfoProcess::P0 { op_x: &mw_x[1] }),
-    //     ("m2*", InfoProcess::P0 { op_x: &mw_x[2] }),
-    //     ("m3", InfoProcess::P1 { op_o: &mw_o }),
-    //     (
-    //         "m4",
-    //         InfoProcess::P2 {
-    //             op_o: &mw_o,
-    //             op_x: &mw_x[0],
-    //         },
-    //     ),
-    //     (
-    //         "m5",
-    //         InfoProcess::P2 {
-    //             op_o: &mw_o,
-    //             op_x: &mw_x[1],
-    //         },
-    //     ),
-    //     (
-    //         "m5*",
-    //         InfoProcess::P2 {
-    //             op_o: &mw_o,
-    //             op_x: &mw_x[2],
-    //         },
-    //     ),
-    // ];
+    let br_psi = [1.0, 0.0];
+    let br_ppsi = [1.0, 0.0];
+    let br_pa = [1.0, 0.0];
+    let br_phi = [1.0, 0.0];
+    let mut infos = [Info::new(
+        0,
+        InfoContent::new(
+            Opinion1d::<f32, PSI>::new([0.9, 0.09], 0.01, br_psi.clone()),
+            Opinion1d::<f32, PSI>::new([0.0, 0.0], 1.0, br_ppsi.clone()),
+            Opinion1d::<f32, A>::new([0.0, 0.0], 1.0, br_pa.clone()),
+            Opinion1d::<f32, PHI>::new([0.0, 0.0], 1.0, br_phi.clone()),
+            [
+                Simplex::<f32, THETA>::vacuous(),
+                Simplex::<f32, THETA>::vacuous(),
+            ],
+        ),
+    )];
+    // step
+    let mut rng = SmallRng::seed_from_u64(0);
+    let n = g.node_count() as f32;
+    let d: f32 = 5.0; // todo! (compute average degree)
 
-    // println!("-- initial state --");
-    // println!("{}", agent.op);
-
-    // for (m, ip) in ips {
-    //     println!("-- i.s. -> {m} --");
-    //     ip.info_process(&mut agent.op);
-    //     println!("{}", agent.op);
-    //     let val = agent.valuate();
-    //     println!("V(f_a)={:.3},V(f_~a)={:.3}", val[0], val[1]);
-    //     agent.op.reset();
-    // }
+    while !received.is_empty() {
+        received.shuffle(&mut rng);
+        received = received
+            .into_iter()
+            .filter_map(|(aid, iid)| {
+                let a = &mut g.node_slice_mut()[aid];
+                let info = &mut infos[iid];
+                let receipt_prob = 1.0 - (1.0 - info.num_shared() as f32 / n).powf(d);
+                let b = a.receive_info(info, receipt_prob);
+                if b.sharing {
+                    info.shared();
+                    Some(
+                        g.successors(aid)
+                            .unwrap()
+                            .iter()
+                            .filter_map(|bid| Some((*bid, iid))) // todo! (consider reading probability)
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+    }
 }
