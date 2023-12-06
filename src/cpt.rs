@@ -1,3 +1,4 @@
+use approx::ulps_eq;
 use subjective_logic::mul::IndexedContainer;
 
 #[derive(Default, Debug)]
@@ -21,8 +22,12 @@ impl CPT {
     }
 
     fn w(p: f32, e: f32) -> f32 {
-        let temp = p.powf(e);
-        temp / (temp + (1.0 - p).powf(e)).powf(1.0 / e)
+        if ulps_eq!(p, 1.0) {
+            1.0
+        } else {
+            let temp = p.powf(e);
+            temp / (temp + (1.0 - p).powf(e)).powf(1.0 / e)
+        }
     }
 
     /// Computes a probability weighting function for gains
@@ -90,7 +95,7 @@ impl CPT {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct LevelSet<Idx, V> {
     positive: Vec<(V, Vec<Idx>)>,
     negative: Vec<(V, Vec<Idx>)>,
@@ -149,9 +154,12 @@ impl_level_set!(f64);
 #[cfg(test)]
 mod tests {
     use crate::cpt::{LevelSet, CPT};
-    use approx::ulps_eq;
+    use approx::{assert_ulps_eq, relative_eq, ulps_eq};
     use std::ops::Deref;
-    use subjective_logic::harr2;
+    use subjective_logic::{
+        harr2,
+        mul::{prod::Product2, Opinion1d, OpinionBase, Projection},
+    };
 
     fn v(o: f32) -> f32 {
         if o.is_sign_negative() {
@@ -230,5 +238,66 @@ mod tests {
 
         assert!(ulps_eq!(a, b));
         assert!(ulps_eq!(a, c));
+    }
+
+    #[test]
+    fn test_nan() {
+        let fa = Opinion1d::<f32, 2>::new(
+            [0.090361536, 0.082669996],
+            0.8269686,
+            [0.9991985, 0.0008016379],
+        );
+        let theta = Opinion1d::<f32, 3>::new(
+            [0.009244099, 0.37928966, 0.41457662],
+            0.19688994,
+            [0.99831605, 0.00080163794, 0.0008825256],
+        );
+        let fatheta = OpinionBase::product2(&fa, &theta);
+
+        println!("fa {}", fa.b().into_iter().sum::<f32>() + fa.u());
+        println!("fa {}", fa.base_rate.into_iter().sum::<f32>());
+        println!("th {}", theta.b().into_iter().sum::<f32>() + theta.u());
+        println!("th {}", theta.base_rate.into_iter().sum::<f32>());
+        println!(
+            "fath {}",
+            fatheta.b().into_iter().sum::<f32>() + fatheta.u()
+        );
+        println!("fath {}", fatheta.base_rate.into_iter().sum::<f32>());
+
+        assert_ulps_eq!(fa.projection().into_iter().sum::<f32>(), 1.0);
+        assert_ulps_eq!(theta.projection().into_iter().sum::<f32>(), 1.0);
+
+        let p = fatheta.projection();
+        let sump = p.into_iter().sum::<f32>();
+        println!("{}", sump);
+        // let p = HigherArr2::<f32, 2, 3>::map(|i| p[i] / sump);
+
+        // let fad = Opinion1d::<f32, 2>::new(
+        //     fa.b().map(|b| b / ),
+        //     0.8269686,
+        //     [0.9991985, 0.0008016379],
+        // );
+        // let theta = Opinion1d::<f32, 3>::new(
+        //     [0.009244099, 0.37928966, 0.41457662],
+        //     0.19688994,
+        //     [0.99831605, 0.00080163794, 0.0008825256],
+        // );
+        // assert_ulps_eq!(, 1.0);
+
+        // let p = harr2![
+        //     [0.18865241, 0.34782714, 0.3801881],
+        //     [0.017150123, 0.03162047, 0.03456236]
+        // ];
+        let x0 = -0.1;
+        let x1 = -2.0;
+        let y = -0.01;
+        let sharing_outcome_maps = harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]];
+        let level_sets = LevelSet::<_, f32>::new(sharing_outcome_maps.deref());
+        let cpt = CPT::new(0.88, 0.88, 2.25, 0.61, 0.69);
+        let a = p.into_iter().sum::<f32>();
+        println!("{}, {}", a, relative_eq!(a, 1.0));
+        println!("{:?}", level_sets);
+        // println!("{}", cpt.valuate(&level_sets, &p));
+        println!("V-={}", cpt.negative_valuate(&level_sets.negative, &p));
     }
 }

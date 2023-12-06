@@ -230,8 +230,8 @@ dependencies = [
 
 [[package]]
 name = "graph-lib"
-version = "0.2.1"
-source = "git+https://github.com/shinomi-lab/graph-lib.git?tag=v0.2.1#d9d5afc3784902c0fd47f79bd4b7342eee31a050"
+version = "0.2.5"
+source = "git+https://github.com/shinomi-lab/graph-lib.git?tag=v0.2.5#636b070c71f1fd7dc7eb644af292cf5a73f2d94c"
 dependencies = [
  "flate2",
  "rayon",
@@ -480,8 +480,8 @@ checksum = "f27f6278552951f1f2b8cf9da965d10969b2efdea95a6ec47987ab46edfe263a"
 
 [[package]]
 name = "subjective-logic"
-version = "0.6.5"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.6.5#d8680767586fdc74c58e42bda4cd8d263d983ab0"
+version = "0.6.6"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.6.6#29f4fa7f578f7a72902eb923d44a537cf7bf22cb"
 dependencies = [
  "approx",
  "paste",
