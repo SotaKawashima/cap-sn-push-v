@@ -2,12 +2,18 @@ pub mod agent;
 pub mod cpt;
 pub mod snippet;
 
+use std::collections::BTreeMap;
+use std::io::{Read, Write};
 use std::ops::Deref;
 
 use agent::{Agent, AgentOpinion, FriendOpinion, Info, InfoContent, A, PHI, PSI, THETA};
+use arrow2::array::PrimitiveArray;
+use arrow2::chunk::Chunk;
+use arrow2::datatypes::{DataType, Field, Schema};
+use arrow2::io::ipc::write::{Compression, StreamWriter, WriteOptions};
 use cpt::{LevelSet, CPT};
 
-use graph_lib::io::FileType;
+use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, Graph};
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use subjective_logic::{
@@ -21,7 +27,10 @@ struct Receipt {
     info_idx: usize,
 }
 
-pub fn exec_sim() {
+pub fn exec_sim<R: Read, W: Write>(
+    reader: R,
+    writer: &mut W,
+) -> Result<(), Box<dyn std::error::Error>> {
     let br_psi = [0.999, 0.001];
     let br_ppsi = [0.999, 0.001];
     let br_fpsi = [0.999, 0.001];
@@ -60,11 +69,10 @@ pub fn exec_sim() {
     ];
     let mut sender = vec![(0, 31, 0)];
 
-    let g: DiGraphB = FileType::EdgeList
-        .read("./dataset/librec-filmtrust-trust/out.librec-filmtrust-trust")
+    let g: DiGraphB = ParseBuilder::new(reader, DataFormat::EdgeList)
+        .parse()
         .unwrap();
-    // println!("{:?}", g.successors(31));
-    // let g = DiGraphB::from(vec![(0, 1), (0, 2), (2, 3)].as_slice());
+
     let mut agents = (0..g.node_count())
         .map(|_| {
             Agent::new(
@@ -97,8 +105,13 @@ pub fn exec_sim() {
     let n = g.node_count() as f32;
     let d = g.edge_count() as f32 / n; // average outdegree
 
-    let mut t = 0;
+    let mut col_t = Vec::new();
+    let mut col_num_sharing = Vec::new();
+    let mut col_num_receipt = Vec::new();
+
+    let mut t: u32 = 0;
     while !received.is_empty() || !sender.is_empty() {
+        col_t.push(t);
         if sender.first().map(|a| a.0 == t).unwrap_or(false) {
             let (_, agent_idx, info_idx) = sender.pop().unwrap();
             received.push(Receipt {
@@ -107,6 +120,7 @@ pub fn exec_sim() {
                 info_idx,
             });
         }
+        let mut num_sharing = 0;
         received.shuffle(&mut rng);
         received = received
             .into_iter()
@@ -121,12 +135,13 @@ pub fn exec_sim() {
                     }
                 }
                 let b = a.read_info(info, receipt_prob);
-                println!("{:?}", b);
+                // println!("{:?}", b);
                 if !b.sharing {
                     return None;
                 }
                 if !r.force {
                     info.shared();
+                    num_sharing += 1;
                 }
                 Some(
                     g.successors(r.agent_idx)
@@ -142,8 +157,43 @@ pub fn exec_sim() {
             })
             .flatten()
             .collect();
+        col_num_sharing.push(num_sharing);
+        col_num_receipt.push(received.len() as u32);
         t += 1;
     }
+    let metadata = BTreeMap::from_iter([
+        ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+        ("graph".to_string(), "filmtrust".to_string()),
+        ("info".to_string(), "#0: misinfo".to_string()),
+        (
+            "senarios".to_string(),
+            "#31 post info #0 at t=0".to_string(),
+        ),
+    ]);
+
+    let schema = Schema {
+        fields: vec![
+            Field::new("t", DataType::UInt32, false),
+            Field::new("num_receipt", DataType::UInt32, false),
+            Field::new("num_sharing", DataType::UInt32, false),
+        ],
+        metadata,
+    };
+    let chunk = Chunk::try_new(vec![
+        PrimitiveArray::from_slice(&col_t).boxed(),
+        PrimitiveArray::from_slice(&col_num_receipt).boxed(),
+        PrimitiveArray::from_slice(&col_num_sharing).boxed(),
+    ])?;
+    let mut writer = StreamWriter::new(
+        writer,
+        WriteOptions {
+            compression: Some(Compression::ZSTD),
+        },
+    );
+    writer.start(&schema, None)?;
+    writer.write(&chunk, None)?;
+    writer.finish()?;
+    Ok(())
 }
 
 pub fn test_agent() {

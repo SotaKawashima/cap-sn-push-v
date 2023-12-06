@@ -9,6 +9,11 @@ edition = "2021"
 subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.6.6" }
 approx = "0.5"
 once_cell = "1"
-graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.2.5" }
+graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.3.0" }
 rand = { version = "0.8", features = ["small_rng"] }
-arrow2 = { version = "0.18", features = ["io_ipc", "io_ipc_compression"] }
+arrow2 = { version = "0.18", features = [
+    "io_ipc",
+    "io_ipc_compression",
+    "io_ipc_write_async",
+] }
+axum = "0.7"

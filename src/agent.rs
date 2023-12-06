@@ -224,8 +224,8 @@ impl Agent {
                 ))),
         );
 
-        println!("~P_FA = {:?}", pred_fa_ref);
-        println!("~P_TH = {:?}", pred_theta);
+        // println!("~P_FA = {:?}", pred_fa_ref);
+        // println!("~P_TH = {:?}", pred_theta);
 
         let fa_theta = Opinion::product2(fa_ref, theta.as_ref());
         let pred_fa_theta = Opinion::product2(pred_fa_ref, pred_theta.as_ref());
@@ -237,9 +237,9 @@ impl Agent {
                 .valuate(&self.prospect.sharing[1], &pred_fa_theta.projection()),
         ];
 
-        println!(" P_FA,TH = {:?}", fa_theta.projection());
-        println!("~P_FA,TH = {:?}", pred_fa_theta.projection());
-        println!(" V_S = {:?}", value_sharing);
+        // println!(" P_FA,TH = {:?}", fa_theta.projection());
+        // println!("~P_FA,TH = {:?}", pred_fa_theta.projection());
+        // println!(" V_S = {:?}", value_sharing);
 
         let sharing = &mut self.shared[info.id];
         let prev_sharing = *sharing;
@@ -261,8 +261,8 @@ impl Agent {
             self.done_selfish = true;
         }
 
-        println!("P_TH = {:?}", self.op.theta.projection());
-        println!(" V_A = {:?}", value_selfish);
+        // println!("P_TH = {:?}", self.op.theta.projection());
+        // println!(" V_A = {:?}", value_selfish);
 
         Behavior {
             selfish: !prev_done_selfish && self.done_selfish,

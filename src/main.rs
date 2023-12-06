@@ -1,6 +1,9 @@
-use cap_sn::{exec_sim, test_agent};
+use std::fs::File;
 
-fn main() {
-    exec_sim();
-    // test_agent();
+use cap_sn::exec_sim;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let reader = File::open("./dataset/librec-filmtrust-trust/out.librec-filmtrust-trust")?;
+    let mut writer = File::create("result.arrow")?;
+    exec_sim(reader, &mut writer)
 }
