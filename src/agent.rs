@@ -1,8 +1,6 @@
-use once_cell::sync::Lazy;
 use rand::Rng;
+use rand_distr::{Beta, Distribution};
 use std::{array, ops::Deref};
-
-use crate::cpt::{LevelSet, CPT};
 use subjective_logic::{
     harr2, harr3,
     mul::{
@@ -12,63 +10,43 @@ use subjective_logic::{
     },
 };
 
-pub const THETA: usize = 3;
-pub const PSI: usize = 2;
-pub const PHI: usize = 2;
-pub const A: usize = 2;
+use crate::{
+    cpt::{LevelSet, CPT},
+    info::Info,
+    opinion::{A, A_VACUOUS, PHI, PSI, THETA, THETA_VACUOUS},
+};
 
-const THETA_VACUOUS: Lazy<Simplex<f32, THETA>> = Lazy::new(|| Simplex::<f32, THETA>::vacuous());
-const A_VACUOUS: Lazy<Simplex<f32, A>> = Lazy::new(|| Simplex::<f32, A>::vacuous());
-
-pub struct InfoContent {
-    psi: Opinion1d<f32, PSI>,
-    ppsi: Opinion1d<f32, PSI>,
-    pa: Opinion1d<f32, A>,
-    phi: Opinion1d<f32, PHI>,
-    cond_theta_phi: [Simplex<f32, THETA>; PHI],
+fn reset_opinion<const N: usize>(w: &mut Opinion1d<f32, N>, base_rate: &[f32; N]) {
+    w.simplex.belief = [0.0; N];
+    w.simplex.uncertainty = 1.0;
+    w.base_rate = *base_rate;
 }
 
-impl InfoContent {
-    pub fn new(
-        psi: Opinion1d<f32, PSI>,
-        ppsi: Opinion1d<f32, PSI>,
-        pa: Opinion1d<f32, A>,
-        phi: Opinion1d<f32, PHI>,
-        cond_theta_phi: [Simplex<f32, THETA>; PHI],
-    ) -> Self {
-        Self {
-            psi,
-            ppsi,
-            pa,
-            phi,
-            cond_theta_phi,
-        }
+fn reset_simplex<const N: usize, const M: usize>(cond: &mut [Simplex<f32, N>; M]) {
+    for i in 0..M {
+        cond[i].belief = [0.0; N];
+        cond[i].uncertainty = 1.0;
     }
 }
 
-pub struct Info {
-    id: usize,
-    content: InfoContent,
-    num_shared: usize,
-}
-
-impl Info {
-    pub fn new(id: usize, content: InfoContent) -> Self {
-        Self {
-            id,
-            content,
-            num_shared: 0,
-        }
-    }
-
-    pub fn shared(&mut self) {
-        self.num_shared += 1;
-    }
-
-    #[inline]
-    pub fn num_shared(&self) -> usize {
-        self.num_shared
-    }
+pub struct Constants {
+    pub br_psi: [f32; PSI],
+    pub br_ppsi: [f32; PSI],
+    pub br_pa: [f32; A],
+    pub br_fa: [f32; A],
+    pub br_fpa: [f32; A],
+    pub br_phi: [f32; PHI],
+    pub br_fpsi: [f32; PSI],
+    pub br_fppsi: [f32; PSI],
+    pub br_fphi: [f32; PHI],
+    pub br_theta: [f32; THETA],
+    pub br_ptheta: [f32; THETA],
+    pub br_ftheta: [f32; THETA],
+    pub br_fptheta: [f32; THETA],
+    pub read_dist: Beta<f32>,
+    pub fclose_dist: Beta<f32>,
+    pub fread_dist: Beta<f32>,
+    pub misinfo_trust_dist: Beta<f32>,
 }
 
 #[derive(Debug)]
@@ -77,16 +55,18 @@ pub struct Behavior {
     pub sharing: bool,
 }
 
+#[derive(Clone)]
 pub struct Prospect {
     selfish: [LevelSet<usize, f32>; 2],
     sharing: [LevelSet<[usize; 2], f32>; 2],
 }
 
+#[derive(Clone)]
 pub struct Agent {
     cpt: CPT,
     prospect: Prospect,
-    op: AgentOpinion,
-    fop: FriendOpinion,
+    pub op: AgentOpinion,
+    pub fop: FriendOpinion,
     trusts: Vec<f32>,
     read_prob: f32,
     friend_arrival_prob: f32,
@@ -95,22 +75,16 @@ pub struct Agent {
     shared: Vec<bool>,
     br_pa: [f32; A],
     br_ptheta: [f32; THETA],
-    // br_theta: [f32; THETA],
     br_fa: [f32; A],
 }
 
 impl Agent {
     pub fn new(
-        num_info: usize,
         op: AgentOpinion,
         fop: FriendOpinion,
         cpt: CPT,
         selfish: [LevelSet<usize, f32>; 2],
         sharing: [LevelSet<[usize; 2], f32>; 2],
-        read_prob: f32,
-        friend_arrival_prob: f32,
-        friend_read_prob: f32,
-        trusts: Vec<f32>,
         br_pa: [f32; A],
         br_ptheta: [f32; THETA],
         br_fa: [f32; A],
@@ -120,17 +94,54 @@ impl Agent {
             prospect: Prospect { selfish, sharing },
             op,
             fop,
-            trusts,
-            read_prob,
-            friend_arrival_prob,
-            friend_read_prob,
-            done_selfish: false,
-            shared: vec![false; num_info],
+            trusts: Vec::new(),
+            read_prob: Default::default(),
+            friend_arrival_prob: Default::default(),
+            friend_read_prob: Default::default(),
+            done_selfish: Default::default(),
+            shared: Vec::new(),
             br_pa,
             br_ptheta,
             br_fa,
-            // br_theta,
         }
+    }
+
+    pub fn reset(
+        &mut self,
+        read_prob: f32,
+        friend_arrival_prob: f32,
+        friend_read_prob: f32,
+        trusts: Vec<f32>,
+    ) {
+        self.read_prob = read_prob;
+        self.friend_arrival_prob = friend_arrival_prob;
+        self.friend_read_prob = friend_read_prob;
+        self.trusts = trusts;
+    }
+
+    pub fn reset_with<R: Rng>(&mut self, constants: &Constants, rng: &mut R) {
+        self.read_prob = constants.read_dist.sample(rng);
+        self.friend_arrival_prob = constants.fclose_dist.sample(rng);
+        self.friend_read_prob = constants.fread_dist.sample(rng);
+        self.trusts = vec![constants.misinfo_trust_dist.sample(rng)];
+
+        self.op.reset(
+            &constants.br_theta,
+            &constants.br_psi,
+            &constants.br_phi,
+            &constants.br_ppsi,
+        );
+        self.fop
+            .reset(&constants.br_fppsi, &constants.br_fpsi, &constants.br_fphi);
+
+        if self.shared.is_empty() {
+            self.shared = vec![false; self.trusts.len()];
+        } else {
+            for i in 0..self.trusts.len() {
+                self.shared[i] = false;
+            }
+        }
+        self.done_selfish = false;
     }
 
     pub fn valuate(&self) -> [f32; 2] {
@@ -138,12 +149,24 @@ impl Agent {
         array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p))
     }
 
-    pub fn try_read<R: Rng>(&self, rng: &mut R) -> bool {
-        rng.gen::<f32>() <= self.read_prob
+    pub fn read_info_trustfully(&mut self, info: &Info, receipt_prob: f32) -> Behavior {
+        self.read_info_with_trust(info, receipt_prob, 1.0)
     }
 
-    pub fn read_info(&mut self, info: &Info, receipt_prob: f32) -> Behavior {
-        let t = self.trusts[info.id];
+    pub fn read_info<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        info: &Info,
+        receipt_prob: f32,
+    ) -> Option<Behavior> {
+        if rng.gen::<f32>() <= self.read_prob {
+            Some(self.read_info_with_trust(info, receipt_prob, self.trusts[info.id]))
+        } else {
+            None
+        }
+    }
+
+    fn read_info_with_trust(&mut self, info: &Info, receipt_prob: f32, t: f32) -> Behavior {
         FuseOp::Avg.fuse_assign(&mut self.op.ppsi, &info.content.ppsi.discount(t));
         FuseOp::Wgh.fuse_assign(&mut self.op.psi, &info.content.psi.discount(t));
         FuseOp::Wgh.fuse_assign(&mut self.op.phi, &info.content.phi.discount(t));
@@ -224,9 +247,6 @@ impl Agent {
                 ))),
         );
 
-        // println!("~P_FA = {:?}", pred_fa_ref);
-        // println!("~P_TH = {:?}", pred_theta);
-
         let fa_theta = Opinion::product2(fa_ref, theta.as_ref());
         let pred_fa_theta = Opinion::product2(pred_fa_ref, pred_theta.as_ref());
 
@@ -236,10 +256,6 @@ impl Agent {
             self.cpt
                 .valuate(&self.prospect.sharing[1], &pred_fa_theta.projection()),
         ];
-
-        // println!(" P_FA,TH = {:?}", fa_theta.projection());
-        // println!("~P_FA,TH = {:?}", pred_fa_theta.projection());
-        // println!(" V_S = {:?}", value_sharing);
 
         let sharing = &mut self.shared[info.id];
         let prev_sharing = *sharing;
@@ -261,9 +277,6 @@ impl Agent {
             self.done_selfish = true;
         }
 
-        // println!("P_TH = {:?}", self.op.theta.projection());
-        // println!(" V_A = {:?}", value_selfish);
-
         Behavior {
             selfish: !prev_done_selfish && self.done_selfish,
             sharing: !prev_sharing && *sharing,
@@ -279,7 +292,7 @@ struct FriendOpinionUpd {
     cond_ftheta_fphi: [Simplex<f32, THETA>; PHI],
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FriendOpinion {
     fppsi: Opinion1d<f32, PSI>,
     fpsi: Opinion1d<f32, PSI>,
@@ -301,18 +314,19 @@ pub struct FriendOpinion {
 }
 
 impl FriendOpinion {
-    pub fn new(
-        br_fppsi: [f32; PSI],
-        br_fpsi: [f32; PSI],
-        br_fphi: [f32; PSI],
-        br_fpa: [f32; A],
-        br_fptheta: [f32; THETA],
-        br_ftheta: [f32; THETA],
-    ) -> Self {
+    pub fn reset(&mut self, br_fppsi: &[f32; PSI], br_fpsi: &[f32; PSI], br_fphi: &[f32; PSI]) {
+        reset_opinion(&mut self.fppsi, br_fppsi);
+        reset_opinion(&mut self.fpsi, br_fpsi);
+        reset_opinion(&mut self.fphi, br_fphi);
+        reset_simplex(&mut self.cond_ftheta_fphi);
+    }
+
+    pub fn new(br_fpa: [f32; A], br_fptheta: [f32; THETA], br_ftheta: [f32; THETA]) -> Self {
         Self {
-            fppsi: Opinion::from_simplex_unchecked(Simplex::<f32, PSI>::vacuous(), br_fppsi),
-            fpsi: Opinion::from_simplex_unchecked(Simplex::<f32, PSI>::vacuous(), br_fpsi),
-            fphi: Opinion::from_simplex_unchecked(Simplex::<f32, PHI>::vacuous(), br_fphi),
+            fppsi: Opinion::default(),
+            fpsi: Opinion::default(),
+            fphi: Opinion::default(),
+            cond_ftheta_fphi: [Simplex::default(), Simplex::default()],
             cond_fa: [
                 Simplex::<f32, A>::new([0.95, 0.00], 0.05),
                 Simplex::<f32, A>::new([0.00, 0.95], 0.05),
@@ -332,10 +346,6 @@ impl FriendOpinion {
                     Simplex::<f32, THETA>::new([0.00, 0.45, 0.50], 0.05),
                     Simplex::<f32, THETA>::new([0.00, 0.47, 0.52], 0.01),
                 ]
-            ],
-            cond_ftheta_fphi: [
-                Simplex::<f32, THETA>::vacuous(),
-                Simplex::<f32, THETA>::vacuous(),
             ],
             cond_fptheta: [
                 Simplex::<f32, THETA>::new([0.99, 0.00, 0.00], 0.01),
@@ -404,7 +414,7 @@ impl FriendOpinion {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AgentOpinion {
     theta: Opinion1d<f32, THETA>,
     psi: Opinion1d<f32, PSI>,
@@ -422,20 +432,27 @@ pub struct AgentOpinion {
 }
 
 impl AgentOpinion {
-    pub fn new(
-        br_theta: [f32; THETA],
-        br_psi: [f32; PSI],
-        br_phi: [f32; PSI],
-        br_ppsi: [f32; PSI],
-    ) -> Self {
+    pub fn reset(
+        &mut self,
+        br_theta: &[f32; THETA],
+        br_psi: &[f32; PSI],
+        br_phi: &[f32; PSI],
+        br_ppsi: &[f32; PSI],
+    ) {
+        reset_opinion(&mut self.theta, br_theta);
+        reset_opinion(&mut self.psi, br_psi);
+        reset_opinion(&mut self.phi, br_phi);
+        reset_opinion(&mut self.ppsi, br_ppsi);
+        reset_simplex(&mut self.cond_theta_phi);
+    }
+
+    pub fn new() -> Self {
         Self {
-            theta: Opinion::from_simplex_unchecked(
-                Simplex::<f32, THETA>::vacuous(),
-                br_theta.clone(),
-            ),
-            psi: Opinion::from_simplex_unchecked(Simplex::<f32, PSI>::vacuous(), br_psi),
-            phi: Opinion::from_simplex_unchecked(Simplex::<f32, PHI>::vacuous(), br_phi),
-            ppsi: Opinion::from_simplex_unchecked(Simplex::<f32, PSI>::vacuous(), br_ppsi),
+            theta: Opinion::default(),
+            psi: Opinion::default(),
+            phi: Opinion::default(),
+            ppsi: Opinion::default(),
+            cond_theta_phi: [Simplex::default(), Simplex::default()],
             cond_pa: [
                 Simplex::<f32, A>::new([0.90, 0.00], 0.10),
                 Simplex::<f32, A>::new([0.00, 0.90], 0.10),
@@ -462,10 +479,6 @@ impl AgentOpinion {
                         Simplex::<f32, THETA>::new([0.00, 0.47, 0.52], 0.01),
                     ],
                 ]
-            ],
-            cond_theta_phi: [
-                Simplex::<f32, THETA>::vacuous(),
-                Simplex::<f32, THETA>::vacuous(),
             ],
             cond_ptheta: [
                 Simplex::<f32, THETA>::new([0.99, 0.00, 0.00], 0.01),

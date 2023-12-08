@@ -1,7 +1,7 @@
 use approx::ulps_eq;
 use subjective_logic::mul::IndexedContainer;
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct CPT {
     alpha: f32,
     beta: f32,
@@ -95,7 +95,7 @@ impl CPT {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LevelSet<Idx, V> {
     positive: Vec<(V, Vec<Idx>)>,
     negative: Vec<(V, Vec<Idx>)>,
