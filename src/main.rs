@@ -7,15 +7,17 @@ use clap::Parser;
 struct Args {
     input: String,
     output: String,
-    strategy: String,
     seed_state: u64,
     iteration_count: u32,
+    strategy: String,
     /// Enable zstd compression
     #[arg(short, long, default_value_t = false)]
     out_compression: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+
     let args = Args::parse();
     let reader = File::open(args.input)?;
     let mut writer = File::create(args.output)?;
