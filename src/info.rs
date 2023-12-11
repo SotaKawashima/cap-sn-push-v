@@ -2,11 +2,11 @@ use std::fmt::Display;
 
 use subjective_logic::mul::Simplex;
 
-use crate::opinion::{A, PHI, PSI, THETA};
+use crate::opinion::{A, PHI, PSI, S, THETA};
 
 pub struct InfoContent {
     pub psi: Simplex<f32, PSI>,
-    pub ppsi: Simplex<f32, PSI>,
+    pub s: Simplex<f32, S>,
     pub pa: Simplex<f32, A>,
     pub phi: Simplex<f32, PHI>,
     pub cond_theta_phi: [Simplex<f32, THETA>; PHI],
@@ -15,14 +15,14 @@ pub struct InfoContent {
 impl InfoContent {
     pub fn new(
         psi: Simplex<f32, PSI>,
-        ppsi: Simplex<f32, PSI>,
+        s: Simplex<f32, S>,
         pa: Simplex<f32, A>,
         phi: Simplex<f32, PHI>,
         cond_theta_phi: [Simplex<f32, THETA>; PHI],
     ) -> Self {
         Self {
             psi,
-            ppsi,
+            s,
             pa,
             phi,
             cond_theta_phi,
@@ -80,7 +80,7 @@ impl From<&InfoType> for InfoContent {
     fn from(value: &InfoType) -> Self {
         match value {
             InfoType::Misinfo => InfoContent::new(
-                Simplex::<f32, PSI>::new([0.0, 0.5], 0.5),
+                Simplex::<f32, PSI>::new([0.0, 0.99], 0.01),
                 Simplex::<f32, PSI>::new([0.0, 0.0], 1.0),
                 Simplex::<f32, A>::new([0.0, 0.0], 1.0),
                 Simplex::<f32, PHI>::new([0.0, 0.0], 1.0),
@@ -90,8 +90,8 @@ impl From<&InfoType> for InfoContent {
                 ],
             ),
             InfoType::Correction => InfoContent::new(
-                Simplex::<f32, PSI>::new([1.0, 0.0], 0.0),
-                Simplex::<f32, PSI>::new([0.0, 0.0], 1.0),
+                Simplex::<f32, PSI>::new([0.99, 0.0], 0.01),
+                Simplex::<f32, PSI>::new([0.0, 1.0], 0.0),
                 Simplex::<f32, A>::new([0.0, 0.0], 1.0),
                 Simplex::<f32, PHI>::new([0.0, 0.0], 1.0),
                 [

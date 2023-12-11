@@ -18,13 +18,47 @@ use info::{Info, InfoType};
 
 use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, Graph};
+use log::debug;
 use rand::Rng;
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use rand_distr::Beta;
 use subjective_logic::harr2;
 
 #[derive(serde::Deserialize, Debug)]
-struct Scenario(Vec<Event>);
+struct Strategy {
+    /// The expected population rate of people with plural ignorance
+    pi_rate: f32,
+    scenario: Vec<Event>,
+}
+
+impl Strategy {}
+fn extract_scenario(
+    scenario: Vec<Event>,
+) -> (Vec<InfoType>, BTreeMap<u32, BTreeMap<usize, usize>>) {
+    let mut info_types = Vec::new();
+    let scenario = scenario
+        .into_iter()
+        .map(|Event { time, informers }| {
+            (
+                time,
+                informers
+                    .into_iter()
+                    .map(
+                        |Inform {
+                             agent_idx,
+                             info_type,
+                         }| {
+                            let info_id = info_types.len();
+                            info_types.push(info_type);
+                            (agent_idx, info_id)
+                        },
+                    )
+                    .collect(),
+            )
+        })
+        .collect();
+    (info_types, scenario)
+}
 
 #[derive(serde::Deserialize, Debug)]
 struct Event {
@@ -36,35 +70,6 @@ struct Event {
 struct Inform {
     agent_idx: usize,
     info_type: InfoType,
-}
-
-impl Scenario {
-    fn extract(self) -> (Vec<InfoType>, BTreeMap<u32, BTreeMap<usize, usize>>) {
-        let mut info_types = Vec::new();
-        let scenario = self
-            .0
-            .into_iter()
-            .map(|Event { time, informers }| {
-                (
-                    time,
-                    informers
-                        .into_iter()
-                        .map(
-                            |Inform {
-                                 agent_idx,
-                                 info_type,
-                             }| {
-                                let info_id = info_types.len();
-                                info_types.push(info_type);
-                                (agent_idx, info_id)
-                            },
-                        )
-                        .collect(),
-                )
-            })
-            .collect();
-        (info_types, scenario)
-    }
 }
 
 #[derive(Debug)]
@@ -80,30 +85,14 @@ struct Stat {
     t: Vec<u32>,
     num_people: Vec<u32>,
     kind: Vec<String>,
-    // num_view: Vec<u32>,
-    // num_sharing: Vec<u32>,
-    // num_selfish: Vec<u32>,
 }
 
 impl Stat {
-    fn push(
-        &mut self,
-        num_iter: u32,
-        t: u32,
-        num_people: u32,
-        kind: String,
-        // num_receipt: u32,
-        // num_sharing: u32,
-        // num_selfish: u32,
-    ) {
+    fn push(&mut self, num_iter: u32, t: u32, num_people: u32, kind: String) {
         self.num_iter.push(num_iter);
         self.t.push(t);
         self.num_people.push(num_people);
         self.kind.push(kind);
-        // self.num_view.push(num_view);
-        // self.num_receipt.push(num_receipt);
-        // self.num_sharing.push(num_sharing);
-        // self.num_selfish.push(num_selfish);
     }
 
     fn write<W: Write>(
@@ -129,8 +118,6 @@ impl Stat {
             PrimitiveArray::from_slice(&self.t).boxed(),
             PrimitiveArray::from_slice(&self.num_people).boxed(),
             Utf8Array::<i32>::from_slice(&self.kind).boxed(),
-            // PrimitiveArray::from_slice(&self.num_sharing).boxed(),
-            // PrimitiveArray::from_slice(&self.num_selfish).boxed(),
         ])?;
         let mut writer = FileWriter::try_new(writer, schema, None, WriteOptions { compression })?;
         writer.write(&chunk, None)?;
@@ -155,10 +142,12 @@ impl Executor {
         strategy: &str,
         seed_state: u64,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let scenario: Scenario = serde_json::from_str(strategy)?;
-        let (info_types, scenario) = scenario.extract();
+        let Strategy { pi_rate, scenario } = serde_json::from_str(strategy)?;
+        let (info_types, scenario) = extract_scenario(scenario);
 
         let constants = Constants {
+            br_s: [0.999, 0.001],
+            br_fs: [0.999, 0.001],
             br_psi: [0.999, 0.001],
             br_ppsi: [0.999, 0.001],
             br_pa: [0.999, 0.001],
@@ -175,6 +164,7 @@ impl Executor {
             read_dist: Beta::new(7.0, 3.0)?,
             fclose_dist: Beta::new(9.0, 1.0)?,
             fread_dist: Beta::new(5.0, 5.0)?,
+            pi_rate,
             misinfo_trust_dist: Beta::new(1.5, 4.5)?,
             correction_trust_dist: Beta::new(4.5, 1.5)?,
         };
@@ -185,9 +175,9 @@ impl Executor {
             .map(|(id, t)| Info::new(id, *t, t.into()))
             .collect::<Vec<_>>();
 
-        let x0 = -0.01;
-        let x1 = -2.0;
-        let y = -0.0002;
+        let x0 = -2.0;
+        let x1 = -40.0;
+        let y = -0.001;
         let selfish_outcome_maps = [[0.0, x1, 0.0], [x0, x0, x0]];
         let sharing_outcome_maps = [
             harr2![[0.0, x1, 0.0], [x0, x0, x0]],
@@ -210,13 +200,10 @@ impl Executor {
         for _ in 0..agents.capacity() {
             agents.push(Agent::new(
                 AgentOpinion::new(),
-                FriendOpinion::new(constants.br_fpa, constants.br_fptheta, constants.br_ftheta),
+                FriendOpinion::new(),
                 CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
                 selfish.clone(),
                 sharing.clone(),
-                constants.br_pa,
-                constants.br_ptheta,
-                constants.br_fa,
                 infos.len(),
             ));
         }
@@ -258,11 +245,11 @@ impl Executor {
                 n,
                 d,
                 &mut rng,
-                &self.constants,
                 &self.graph,
                 &mut self.agents,
                 &mut self.infos,
                 &mut self.stat,
+                &self.constants,
             );
         }
         println!("finished.");
@@ -286,11 +273,11 @@ fn run_loop<R: Rng>(
     n: f32,
     d: f32,
     rng: &mut R,
-    constants: &Constants,
     graph: &DiGraphB,
     agents: &mut [Agent],
     infos: &mut [Info],
     stat: &mut Stat,
+    constants: &Constants,
 ) {
     let mut t = 0;
     let mut num_view_map = BTreeMap::<InfoType, u32>::new();
@@ -327,6 +314,13 @@ fn run_loop<R: Rng>(
                 } else {
                     agent.read_info(rng, info, receipt_prob, constants)?
                 };
+
+                debug!(
+                    "{}: {}",
+                    if r.force { "informer" } else { "sharer" },
+                    info.info_type
+                );
+
                 if !r.force {
                     let num_view = num_view_map.entry(info.info_type).or_insert(0);
                     *num_view += 1;
@@ -373,7 +367,7 @@ fn run_loop<R: Rng>(
 
 #[cfg(test)]
 mod tests {
-    use crate::Scenario;
+    use crate::{extract_scenario, Strategy};
 
     use super::{
         agent::{Agent, AgentOpinion, Constants, FriendOpinion},
@@ -388,6 +382,8 @@ mod tests {
     #[test]
     fn test_agent() {
         let constants = Constants {
+            br_s: [0.999, 0.001],
+            br_fs: [0.999, 0.001],
             br_psi: [0.999, 0.001],
             br_ppsi: [0.999, 0.001],
             br_pa: [0.999, 0.001],
@@ -404,6 +400,7 @@ mod tests {
             read_dist: Beta::new(7.0, 3.0).unwrap(),
             fclose_dist: Beta::new(9.0, 1.0).unwrap(),
             fread_dist: Beta::new(5.0, 5.0).unwrap(),
+            pi_rate: 0.0,
             misinfo_trust_dist: Beta::new(1.5, 4.5).unwrap(),
             correction_trust_dist: Beta::new(4.5, 1.5).unwrap(),
         };
@@ -422,7 +419,7 @@ mod tests {
 
         let mut a = Agent::new(
             AgentOpinion::new(),
-            FriendOpinion::new(constants.br_fpa, constants.br_fptheta, constants.br_ftheta),
+            FriendOpinion::new(),
             CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
             [
                 LevelSet::<_, f32>::new(&selfish_outcome_maps[0]),
@@ -432,13 +429,10 @@ mod tests {
                 LevelSet::<_, f32>::new(sharing_outcome_maps[0].deref()),
                 LevelSet::<_, f32>::new(sharing_outcome_maps[1].deref()),
             ],
-            constants.br_pa,
-            constants.br_ptheta,
-            constants.br_fa,
             1,
         );
 
-        a.reset(0.5, 0.5, 0.5, |_| 0.90, &constants, &info_types);
+        a.reset(0.5, 0.5, 0.5, 0.0, |_| 0.90, &constants, &info_types);
 
         let receipt_prob = 0.0;
         println!(
@@ -464,9 +458,9 @@ mod tests {
                 },
             ]
         );
-        let s: Scenario = serde_json::from_value(v).unwrap();
+        let s: Strategy = serde_json::from_value(v).unwrap();
         println!("{:?}", s);
-        let (is, sc) = s.extract();
+        let (is, sc) = extract_scenario(s.scenario);
         println!("{:?}", is);
         println!("{:?}", sc);
     }
