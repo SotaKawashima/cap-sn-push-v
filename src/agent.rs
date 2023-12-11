@@ -52,7 +52,7 @@ pub struct Constants {
     pub read_dist: Beta<f32>,
     pub fclose_dist: Beta<f32>,
     pub fread_dist: Beta<f32>,
-    // pub pi_rate: f32,
+    pub pi_prob: f32,
     pub pi_dist: Beta<f32>,
     pub misinfo_trust_dist: Beta<f32>,
     pub correction_trust_dist: Beta<f32>,
@@ -149,11 +149,14 @@ impl Agent {
         info_types: &[InfoType],
         rng: &mut R,
     ) {
+        let r = rng.gen::<f32>();
+        let s = constants.pi_dist.sample(rng);
+
         self.reset(
             constants.read_dist.sample(rng),
             constants.fclose_dist.sample(rng),
             constants.fread_dist.sample(rng),
-            constants.pi_dist.sample(rng),
+            if constants.pi_prob > r { s } else { 0.0 },
             |_| constants.misinfo_trust_dist.sample(rng),
             constants,
             info_types,
@@ -374,18 +377,20 @@ pub struct FriendOpinion {
     cond_fppsi: [Simplex<f32, FP_PSI>; F_S],
 }
 
+fn belief_plural_ignorance(pi_rate: f32) -> Simplex<f32, A> {
+    let u = 0.01;
+    let b1 = pi_rate * (1.0 - u);
+    Simplex::<f32, A>::new([1.0 - u - b1, b1], u)
+}
+
 impl FriendOpinion {
-    pub fn reset(
-        &mut self,
-        belief_people_selfish: f32,
-        br_fs: &[f32; F_S],
-        br_fphi: &[f32; F_PHI],
-    ) {
+    pub fn reset(&mut self, pi_rate: f32, br_fs: &[f32; F_S], br_fphi: &[f32; F_PHI]) {
         reset_opinion(&mut self.fs, br_fs);
         reset_opinion(&mut self.fphi, br_fphi);
         reset_simplex(&mut self.cond_ftheta_fphi);
-        let b1 = belief_people_selfish * 0.90;
-        self.cond_fpa[1] = Simplex::<f32, A>::new([0.90 - b1, b1], 0.10);
+        self.cond_fpa[1] = belief_plural_ignorance(pi_rate);
+        // let b1 = pi_rate.powi(2);
+        // self.cond_fpa[1] = Simplex::<f32, FP_A>::new([pi_rate - b1, b1], 1.0 - pi_rate);
     }
 
     pub fn new() -> Self {
@@ -419,7 +424,7 @@ impl FriendOpinion {
             ],
             cond_fppsi: [
                 Simplex::<f32, FP_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, FP_PSI>::new([0.30, 0.60], 0.10),
+                Simplex::<f32, FP_PSI>::new([0.25, 0.65], 0.10),
             ],
         }
     }
@@ -539,8 +544,9 @@ impl AgentOpinion {
         reset_opinion(&mut self.phi, br_phi);
         reset_opinion(&mut self.s, br_s);
         reset_simplex(&mut self.cond_theta_phi);
-        let b1 = pi_rate * 0.90;
-        self.cond_pa[1] = Simplex::<f32, A>::new([0.90 - b1, b1], 0.10);
+        self.cond_pa[1] = belief_plural_ignorance(pi_rate);
+        // let b1 = pi_rate.powi(2);
+        // self.cond_pa[1] = Simplex::<f32, P_A>::new([pi_rate - b1, b1], 1.0 - pi_rate);
     }
 
     pub fn new() -> Self {
@@ -583,11 +589,11 @@ impl AgentOpinion {
             ],
             cond_ppsi: [
                 Simplex::<f32, P_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, P_PSI>::new([0.30, 0.60], 0.10),
+                Simplex::<f32, P_PSI>::new([0.25, 0.65], 0.10),
             ],
             cond_fpsi: [
                 Simplex::<f32, F_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, F_PSI>::new([0.75, 0.15], 0.10),
+                Simplex::<f32, F_PSI>::new([0.70, 0.20], 0.10),
             ],
         }
     }

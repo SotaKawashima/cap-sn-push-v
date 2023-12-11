@@ -26,8 +26,8 @@ use subjective_logic::harr2;
 
 #[derive(serde::Deserialize, Debug)]
 struct Strategy {
-    /// The expected population rate of people with plural ignorance
-    pi_rate: f32,
+    /// probability whether people has plural ignorance
+    pi_prob: f32,
     scenario: Vec<Event>,
 }
 
@@ -142,12 +142,12 @@ impl Executor {
         strategy: &str,
         seed_state: u64,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let Strategy { pi_rate, scenario } = serde_json::from_str(strategy)?;
+        let Strategy { pi_prob, scenario } = serde_json::from_str(strategy)?;
         let (info_types, scenario) = extract_scenario(scenario);
 
         let constants = Constants {
             br_s: [0.999, 0.001],
-            br_fs: [0.999, 0.001],
+            br_fs: [0.99, 0.01],
             br_psi: [0.999, 0.001],
             br_ppsi: [0.999, 0.001],
             br_pa: [0.999, 0.001],
@@ -164,8 +164,8 @@ impl Executor {
             read_dist: Beta::new(7.0, 3.0)?,
             fclose_dist: Beta::new(9.0, 1.0)?,
             fread_dist: Beta::new(5.0, 5.0)?,
-            // The expected value of a beta dist. with alpha & beta is alpha / (alpha + beta), so put the paramters s.t. `pi_rate` = the expected value.
-            pi_dist: Beta::new(pi_rate * 10.0, (1.0 - pi_rate) * 10.0)?,
+            pi_dist: Beta::new(19.0, 1.0)?,
+            pi_prob,
             misinfo_trust_dist: Beta::new(1.5, 4.5)?,
             correction_trust_dist: Beta::new(4.5, 1.5)?,
         };
@@ -177,7 +177,7 @@ impl Executor {
             .collect::<Vec<_>>();
 
         let x0 = -2.0;
-        let x1 = -40.0;
+        let x1 = -50.0;
         let y = -0.001;
         let selfish_outcome_maps = [[0.0, x1, 0.0], [x0, x0, x0]];
         let sharing_outcome_maps = [
@@ -402,6 +402,7 @@ mod tests {
             fclose_dist: Beta::new(9.0, 1.0).unwrap(),
             fread_dist: Beta::new(5.0, 5.0).unwrap(),
             pi_dist: Beta::new(0.5 * 10.0, (1.0 - 0.5) * 10.0).unwrap(),
+            pi_prob: 0.5,
             misinfo_trust_dist: Beta::new(1.5, 4.5).unwrap(),
             correction_trust_dist: Beta::new(4.5, 1.5).unwrap(),
         };
@@ -411,7 +412,7 @@ mod tests {
 
         let x0 = -0.1;
         let x1 = -2.0;
-        let y = -0.01;
+        let y = -0.001;
         let selfish_outcome_maps = [[0.0, x1, 0.0], [x0, x0, x0]];
         let sharing_outcome_maps = [
             harr2![[0.0, x1, 0.0], [x0, x0, x0]],
