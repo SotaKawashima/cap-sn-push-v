@@ -164,7 +164,8 @@ impl Executor {
             read_dist: Beta::new(7.0, 3.0)?,
             fclose_dist: Beta::new(9.0, 1.0)?,
             fread_dist: Beta::new(5.0, 5.0)?,
-            pi_rate,
+            // The expected value of a beta dist. with alpha & beta is alpha / (alpha + beta), so put the paramters s.t. `pi_rate` = the expected value.
+            pi_dist: Beta::new(pi_rate * 10.0, (1.0 - pi_rate) * 10.0)?,
             misinfo_trust_dist: Beta::new(1.5, 4.5)?,
             correction_trust_dist: Beta::new(4.5, 1.5)?,
         };
@@ -400,7 +401,7 @@ mod tests {
             read_dist: Beta::new(7.0, 3.0).unwrap(),
             fclose_dist: Beta::new(9.0, 1.0).unwrap(),
             fread_dist: Beta::new(5.0, 5.0).unwrap(),
-            pi_rate: 0.0,
+            pi_dist: Beta::new(0.5 * 10.0, (1.0 - 0.5) * 10.0).unwrap(),
             misinfo_trust_dist: Beta::new(1.5, 4.5).unwrap(),
             correction_trust_dist: Beta::new(4.5, 1.5).unwrap(),
         };

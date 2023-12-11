@@ -1,6 +1,6 @@
 use log::debug;
 use rand::Rng;
-use rand_distr::{Beta, Distribution, OpenClosed01};
+use rand_distr::{Beta, Distribution};
 use std::{array, ops::Deref};
 use subjective_logic::{
     harr2, harr3,
@@ -52,7 +52,8 @@ pub struct Constants {
     pub read_dist: Beta<f32>,
     pub fclose_dist: Beta<f32>,
     pub fread_dist: Beta<f32>,
-    pub pi_rate: f32,
+    // pub pi_rate: f32,
+    pub pi_dist: Beta<f32>,
     pub misinfo_trust_dist: Beta<f32>,
     pub correction_trust_dist: Beta<f32>,
 }
@@ -113,7 +114,7 @@ impl Agent {
         read_prob: f32,
         friend_arrival_prob: f32,
         friend_read_prob: f32,
-        belief_people_selfish: f32,
+        pi_rate: f32,
         mut trust_map: F,
         constants: &Constants,
         info_types: &[InfoType],
@@ -123,14 +124,14 @@ impl Agent {
         self.friend_read_prob = friend_read_prob;
 
         self.op.reset(
-            belief_people_selfish,
+            pi_rate,
             &constants.br_theta,
             &constants.br_psi,
             &constants.br_phi,
             &constants.br_s,
         );
         self.fop
-            .reset(belief_people_selfish, &constants.br_fs, &constants.br_fphi);
+            .reset(pi_rate, &constants.br_fs, &constants.br_fphi);
 
         self.params_for_info.clear();
         for i in 0..self.params_for_info.capacity() {
@@ -152,7 +153,7 @@ impl Agent {
             constants.read_dist.sample(rng),
             constants.fclose_dist.sample(rng),
             constants.fread_dist.sample(rng),
-            constants.pi_rate * constants.correction_trust_dist.sample(rng), // rng.sample::<f32, _>(OpenClosed01),
+            constants.pi_dist.sample(rng),
             |_| constants.misinfo_trust_dist.sample(rng),
             constants,
             info_types,
@@ -527,7 +528,7 @@ pub struct AgentOpinion {
 impl AgentOpinion {
     pub fn reset(
         &mut self,
-        belief_people_selfish: f32,
+        pi_rate: f32,
         br_theta: &[f32; THETA],
         br_psi: &[f32; PSI],
         br_phi: &[f32; PSI],
@@ -538,7 +539,7 @@ impl AgentOpinion {
         reset_opinion(&mut self.phi, br_phi);
         reset_opinion(&mut self.s, br_s);
         reset_simplex(&mut self.cond_theta_phi);
-        let b1 = belief_people_selfish * 0.90;
+        let b1 = pi_rate * 0.90;
         self.cond_pa[1] = Simplex::<f32, A>::new([0.90 - b1, b1], 0.10);
     }
 
