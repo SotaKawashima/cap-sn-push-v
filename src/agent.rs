@@ -234,6 +234,8 @@ impl Agent {
             .as_ref()
             .map(|w| w.as_ref())
             .unwrap_or(OpinionRef::from((a_vacuous.deref(), &constants.br_pa)));
+
+        // an opinion of PA is deduced by using aleatory cummulative fusion.
         let pa = FuseOp::ACm.fuse(pa_ptheta, &info.content.pa.discount(t));
 
         debug!(" P_PA  :{:?}", pa.projection());
@@ -469,6 +471,8 @@ impl FriendOpinion {
             )));
         debug!(" P_FPTH:{:?}", fptheta_ref.projection());
         let fpa_fptheta = fptheta_ref.deduce(&self.cond_fpa);
+
+        // an opinion of FPA is deduced by using aleatory cummulative fusion.
         let fpa = FuseOp::ACm.fuse(
             fpa_fptheta
                 .as_ref()
