@@ -1,13 +1,13 @@
 use log::debug;
 use rand::Rng;
 use rand_distr::{Beta, Distribution};
-use std::{array, ops::Deref};
+use std::array;
 use subjective_logic::{
     harr2, harr3,
     mul::{
         op::{Deduction, Fuse, FuseAssign, FuseOp},
         prod::{HigherArr2, HigherArr3, Product2, Product3},
-        Discount, Opinion, Opinion1d, Opinion1dRef, OpinionRef, Projection, Simplex,
+        Discount, Opinion, Opinion1d, Projection, Simplex,
     },
 };
 
@@ -15,8 +15,8 @@ use crate::{
     cpt::{LevelSet, CPT},
     info::{Info, InfoType},
     opinion::{
-        A, A_VACUOUS, FP_A, FP_PSI, FP_THETA, F_A, F_PHI, F_PSI, F_S, F_THETA, PHI, PSI,
-        PSI_VACUOUS, P_A, P_PSI, P_THETA, S, THETA, THETA_VACUOUS,
+        A, FP_A, FP_PSI, FP_THETA, F_A, F_PHI, F_PSI, F_S, F_THETA, PHI, PSI, P_A, P_PSI, P_THETA,
+        S, THETA,
     },
 };
 
@@ -205,6 +205,7 @@ impl Agent {
     ) -> Behavior {
         debug!("b_PA|PTH_1:{:?}", self.op.cond_pa[1].belief);
 
+        FuseOp::Wgh.fuse_assign(&mut self.op.s, &info.content.s.discount(t));
         FuseOp::Wgh.fuse_assign(&mut self.op.psi, &info.content.psi.discount(t));
         FuseOp::Wgh.fuse_assign(&mut self.op.phi, &info.content.phi.discount(t));
         for i in 0..PHI {
@@ -213,108 +214,77 @@ impl Agent {
                 &info.content.cond_theta_phi[i].discount(t),
             )
         }
-        FuseOp::ACm.fuse_assign(&mut self.op.s, &info.content.s.discount(t));
 
-        let a_vacuous = A_VACUOUS;
-        let ppsi = self.op.s.deduce(&self.op.cond_ppsi);
-        let ptheta = ppsi
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((PSI_VACUOUS.deref(), &constants.br_ppsi)))
-            .deduce(&self.op.cond_ptheta);
-        let pa_ptheta = ptheta
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((
-                THETA_VACUOUS.deref(),
-                &constants.br_ptheta,
-            )))
-            .deduce(&self.op.cond_pa);
-        let pa_ptheta = pa_ptheta
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((a_vacuous.deref(), &constants.br_pa)));
+        let pa = {
+            let mut pa = self
+                .op
+                .s
+                .deduce(&self.op.cond_ppsi)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ppsi))
+                .deduce(&self.op.cond_ptheta)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ptheta))
+                .deduce(&self.op.cond_pa)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_pa));
 
-        // an opinion of PA is deduced by using aleatory cummulative fusion.
-        let pa = FuseOp::ACm.fuse(pa_ptheta, &info.content.pa.discount(t));
+            // an opinion of PA is computed by using aleatory cummulative fusion.
+            FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(t));
+            pa
+        };
 
         debug!(" P_PA  :{:?}", pa.projection());
 
-        let psi_vacuous = PSI_VACUOUS;
-        let fpsi = self.op.s.deduce(&self.op.cond_fpsi);
-        let fpsi_ref = fpsi
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((psi_vacuous.deref(), &constants.br_fpsi)));
+        // compute friends opinions
+        let fpsi_ded = self
+            .op
+            .s
+            .deduce(&self.op.cond_fpsi)
+            .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fpsi));
         let (fop, fa) = self.fop.compute_new_friend_op(
             info,
-            fpsi_ref.clone(),
+            &fpsi_ded,
             receipt_prob * self.friend_read_prob * t,
             constants,
         );
         self.fop.update(fop);
 
-        let fa_ref = fa
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((a_vacuous.deref(), &constants.br_fa)));
-        let theta_pa_psi_fa = Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), fa_ref.clone())
-            .deduce(&self.op.cond_theta);
-        let theta_phi = self.op.phi.deduce(&self.op.cond_theta_phi);
-        let theta = FuseOp::Wgh.fuse(
-            theta_pa_psi_fa
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &self.op.theta.base_rate,
-                ))),
-            theta_phi
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &self.op.theta.base_rate,
-                ))),
-        );
+        let theta_ded_2 = self
+            .op
+            .phi
+            .deduce(&self.op.cond_theta_phi)
+            .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
 
+        let theta = {
+            let mut theta_ded_1 = Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), fa.as_ref())
+                .deduce(&self.op.cond_theta)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
+            FuseOp::Wgh.fuse_assign(&mut theta_ded_1, &theta_ded_2);
+            theta_ded_1
+        };
+
+        // predict new friends' opinions in case of sharing
         let (pred_fop, pred_fa) = self.fop.compute_new_friend_op(
             info,
-            fpsi_ref,
+            &fpsi_ded,
             self.friend_arrival_prob * self.friend_read_prob * t,
             constants,
         );
-        let pred_fa_ref = pred_fa
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((a_vacuous.deref(), &constants.br_fa)));
-        let pred_theta_pa_psi_fa =
-            Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), pred_fa_ref.clone())
-                .deduce(&self.op.cond_theta);
-        let pred_theta = FuseOp::Wgh.fuse(
-            pred_theta_pa_psi_fa
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &self.op.theta.base_rate,
-                ))),
-            theta_phi
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &self.op.theta.base_rate,
-                ))),
-        );
+        let pred_theta = {
+            let mut pred_theta_ded_1 =
+                Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), pred_fa.as_ref())
+                    .deduce(&self.op.cond_theta)
+                    .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
+            FuseOp::Wgh.fuse_assign(&mut pred_theta_ded_1, &theta_ded_2);
+            pred_theta_ded_1
+        };
 
-        debug!(" P_FA  :{:?}", fa_ref.projection());
-        debug!("~P_FA  :{:?}", pred_fa_ref.projection());
+        debug!(" P_FA  :{:?}", fa.projection());
+        debug!("~P_FA  :{:?}", pred_fa.projection());
         debug!(" P_TH  :{:?}", theta.projection());
         debug!("~P_TH  :{:?}", pred_theta.projection());
 
-        let fa_theta = Opinion::product2(fa_ref, theta.as_ref());
-        let pred_fa_theta = Opinion::product2(pred_fa_ref, pred_theta.as_ref());
+        // compute values of prospects
+        let fa_theta = Opinion::product2(fa.as_ref(), theta.as_ref());
+        let pred_fa_theta = Opinion::product2(pred_fa.as_ref(), pred_theta.as_ref());
 
         let value_sharing: [f32; 2] = [
             self.cpt
@@ -434,12 +404,12 @@ impl FriendOpinion {
     fn compute_new_friend_op(
         &self,
         info: &Info,
-        fpsi_ref: Opinion1dRef<f32, PSI>,
+        fpsi_ded: &Opinion1d<f32, PSI>,
         ft: f32,
         constants: &Constants,
-    ) -> (FriendOpinionUpd, Option<Opinion1d<f32, A>>) {
+    ) -> (FriendOpinionUpd, Opinion1d<f32, F_A>) {
         let fs = FuseOp::Wgh.fuse(&self.fs, &info.content.s.discount(ft));
-        let fpsi = FuseOp::Wgh.fuse(fpsi_ref, &info.content.psi.discount(ft));
+        let fpsi = FuseOp::Wgh.fuse(fpsi_ded, &info.content.psi.discount(ft));
         let fphi = FuseOp::Wgh.fuse(&self.fphi, &info.content.phi.discount(ft));
         let cond_ftheta_fphi = array::from_fn(|i| {
             FuseOp::Wgh.fuse(
@@ -455,52 +425,40 @@ impl FriendOpinion {
 
         debug!(" P_FS  :{:?}", fop.fs.projection());
 
-        let fppsi = fop.fs.deduce(&self.cond_fppsi);
-        let fptheta = fppsi
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((PSI_VACUOUS.deref(), &constants.br_fppsi)))
-            .deduce(&self.cond_fptheta);
-        let theta_vacuous = THETA_VACUOUS;
-        let fptheta_ref = fptheta
-            .as_ref()
-            .map(|w| w.as_ref())
-            .unwrap_or(OpinionRef::from((
-                theta_vacuous.deref(),
-                &constants.br_fptheta,
-            )));
-        debug!(" P_FPTH:{:?}", fptheta_ref.projection());
-        let fpa_fptheta = fptheta_ref.deduce(&self.cond_fpa);
+        let fpa = {
+            let mut fpa = fop
+                .fs
+                .deduce(&self.cond_fppsi)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fppsi))
+                .deduce(&self.cond_fptheta)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fptheta))
+                .deduce(&self.cond_fpa)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fpa));
 
-        // an opinion of FPA is deduced by using aleatory cummulative fusion.
-        let fpa = FuseOp::ACm.fuse(
-            fpa_fptheta
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((A_VACUOUS.deref(), &constants.br_fpa))),
-            &info.content.pa.discount(ft),
-        );
-        let ftheta_fpsi_fpa = Opinion::product2(&fpa, &fpsi).deduce(&self.cond_ftheta);
-        let ftheta_fphi = fop.fphi.deduce(&fop.cond_ftheta_fphi);
-        let ftheta = FuseOp::Wgh.fuse(
-            ftheta_fpsi_fpa
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &constants.br_ftheta,
-                ))),
-            ftheta_fphi
-                .as_ref()
-                .map(|w| w.as_ref())
-                .unwrap_or(OpinionRef::from((
-                    THETA_VACUOUS.deref(),
-                    &constants.br_ftheta,
-                ))),
-        );
+            // compute a FPA opinion by using aleatory cummulative fusion.
+            FuseOp::ACm.fuse_assign(&mut fpa, &info.content.pa.discount(ft));
+            fpa
+        };
+
+        let ftheta = {
+            let mut ftheta_ded_1 = Opinion::product2(&fpa, &fpsi)
+                .deduce(&self.cond_ftheta)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ftheta));
+            let ftheta_ded_2 = fop
+                .fphi
+                .deduce(&fop.cond_ftheta_fphi)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ftheta));
+            FuseOp::Wgh.fuse_assign(&mut ftheta_ded_1, &ftheta_ded_2);
+            ftheta_ded_1
+        };
         debug!(" P_FPA :{:?}", fpa.projection());
         debug!(" P_FTH :{:?}", ftheta.projection());
-        (fop, ftheta.deduce(&self.cond_fa))
+        (
+            fop,
+            ftheta
+                .deduce(&self.cond_fa)
+                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fa)),
+        )
     }
 
     fn update(&mut self, fop: FriendOpinionUpd) {
