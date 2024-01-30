@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "cap-sn"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "approx",
  "arrow2",
@@ -170,6 +170,7 @@ dependencies = [
  "env_logger",
  "graph-lib",
  "log",
+ "num-traits",
  "rand",
  "rand_distr",
  "serde",
@@ -815,10 +816,11 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "subjective-logic"
-version = "0.6.9"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.6.9#710d4cca6e63e2526288b844fccc19697d08cd35"
+version = "0.7.1"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.7.1#1f0b40f5fadaa42ce97e80660b012308a76945f5"
 dependencies = [
  "approx",
+ "num-traits",
  "paste",
  "thiserror",
 ]

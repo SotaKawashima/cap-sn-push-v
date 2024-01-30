@@ -1,0 +1,67 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cap-sn'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cap-sn"
+                ],
+                "filter": {
+                    "name": "cap-sn",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'cap-sn'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=cap-sn",
+                    "--package=cap-sn"
+                ],
+                "filter": {
+                    "name": "cap-sn",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "test/graph1.txt", "test/res_100_.arrow", 
+                "0", "1", "{\"pi_prob\": 1.0,\"scenario\":[{\"time\":0,\"informers\":[{\"agent_idx\":0,\"info_type\":\"Correction\"}]}]}"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'cap-sn'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=cap-sn",
+                    "--package=cap-sn"
+                ],
+                "filter": {
+                    "name": "cap-sn",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

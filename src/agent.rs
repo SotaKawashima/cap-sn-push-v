@@ -1,7 +1,9 @@
+use approx::UlpsEq;
 use log::debug;
+use num_traits::{Float, NumAssign};
 use rand::Rng;
-use rand_distr::{Beta, Distribution};
-use std::array;
+use rand_distr::{Beta, Distribution, Open01, Standard};
+use std::{array, iter::Sum, ops::AddAssign};
 use subjective_logic::{
     harr2, harr3,
     mul::{
@@ -20,42 +22,45 @@ use crate::{
     },
 };
 
-fn reset_opinion<const N: usize>(w: &mut Opinion1d<f32, N>, base_rate: &[f32; N]) {
-    w.simplex.belief = [0.0; N];
-    w.simplex.uncertainty = 1.0;
+fn reset_opinion<V: Float, const N: usize>(w: &mut Opinion1d<V, N>, base_rate: &[V; N]) {
+    w.simplex.belief = [V::zero(); N];
+    w.simplex.uncertainty = V::one();
     w.base_rate = *base_rate;
 }
 
-fn reset_simplex<const N: usize, const M: usize>(cond: &mut [Simplex<f32, N>; M]) {
+fn reset_simplex<V: Float, const N: usize, const M: usize>(cond: &mut [Simplex<V, N>; M]) {
     for i in 0..M {
-        cond[i].belief = [0.0; N];
-        cond[i].uncertainty = 1.0;
+        cond[i].belief = [V::zero(); N];
+        cond[i].uncertainty = V::one();
     }
 }
 
-pub struct Constants {
-    pub br_psi: [f32; PSI],
-    pub br_ppsi: [f32; PSI],
-    pub br_s: [f32; S],
-    pub br_fs: [f32; S],
-    pub br_pa: [f32; A],
-    pub br_fa: [f32; A],
-    pub br_fpa: [f32; A],
-    pub br_phi: [f32; PHI],
-    pub br_fpsi: [f32; PSI],
-    pub br_fppsi: [f32; PSI],
-    pub br_fphi: [f32; PHI],
-    pub br_theta: [f32; THETA],
-    pub br_ptheta: [f32; THETA],
-    pub br_ftheta: [f32; THETA],
-    pub br_fptheta: [f32; THETA],
-    pub read_dist: Beta<f32>,
-    pub fclose_dist: Beta<f32>,
-    pub fread_dist: Beta<f32>,
-    pub pi_prob: f32,
-    pub pi_dist: Beta<f32>,
-    pub misinfo_trust_dist: Beta<f32>,
-    pub correction_trust_dist: Beta<f32>,
+pub struct Constants<V: Float>
+where
+    Open01: Distribution<V>,
+{
+    pub br_psi: [V; PSI],
+    pub br_ppsi: [V; PSI],
+    pub br_s: [V; S],
+    pub br_fs: [V; S],
+    pub br_pa: [V; A],
+    pub br_fa: [V; A],
+    pub br_fpa: [V; A],
+    pub br_phi: [V; PHI],
+    pub br_fpsi: [V; PSI],
+    pub br_fppsi: [V; PSI],
+    pub br_fphi: [V; PHI],
+    pub br_theta: [V; THETA],
+    pub br_ptheta: [V; THETA],
+    pub br_ftheta: [V; THETA],
+    pub br_fptheta: [V; THETA],
+    pub read_dist: Beta<V>,
+    pub fclose_dist: Beta<V>,
+    pub fread_dist: Beta<V>,
+    pub pi_prob: V,
+    pub pi_dist: Beta<V>,
+    pub misinfo_trust_dist: Beta<V>,
+    pub correction_trust_dist: Beta<V>,
 }
 
 #[derive(Debug)]
@@ -64,59 +69,70 @@ pub struct Behavior {
     pub sharing: bool,
 }
 
-pub struct Prospect {
-    selfish: [LevelSet<usize, f32>; 2],
-    sharing: [LevelSet<[usize; 2], f32>; 2],
+pub struct Prospect<V: Float> {
+    selfish: [LevelSet<usize, V>; 2],
+    sharing: [LevelSet<[usize; 2], V>; 2],
 }
 
 #[derive(Clone, Default)]
-pub struct ParamsForInfo {
-    trust: f32,
+pub struct ParamsForInfo<V: Float> {
+    trust: V,
     shared: bool,
 }
 
-pub struct Agent {
-    cpt: CPT,
-    prospect: Prospect,
-    op: AgentOpinion,
-    fop: FriendOpinion,
-    read_prob: f32,
-    friend_arrival_prob: f32,
-    friend_read_prob: f32,
+pub struct Agent<V: Float> {
+    cpt: CPT<V>,
+    prospect: Prospect<V>,
+    op: AgentOpinion<V>,
+    so: AgentStaticOpinion<V>,
+    fop: FriendOpinion<V>,
+    fso: FriendStaticOpinion<V>,
+    read_prob: V,
+    friend_arrival_prob: V,
+    friend_read_prob: V,
     done_selfish: bool,
-    params_for_info: Vec<ParamsForInfo>,
+    params_for_info: Vec<ParamsForInfo<V>>,
 }
 
-impl Agent {
+impl<V> Agent<V>
+where
+    V: Float + UlpsEq + NumAssign + Sum + Default + PluralIgnorance + std::fmt::Debug,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+{
     pub fn new(
-        op: AgentOpinion,
-        fop: FriendOpinion,
-        cpt: CPT,
-        selfish: [LevelSet<usize, f32>; 2],
-        sharing: [LevelSet<[usize; 2], f32>; 2],
+        op: AgentOpinion<V>,
+        so: AgentStaticOpinion<V>,
+        fop: FriendOpinion<V>,
+        fso: FriendStaticOpinion<V>,
+        cpt: CPT<V>,
+        selfish: [LevelSet<usize, V>; 2],
+        sharing: [LevelSet<[usize; 2], V>; 2],
         info_count: usize,
     ) -> Self {
         Self {
             cpt,
             prospect: Prospect { selfish, sharing },
             op,
+            so,
             fop,
-            read_prob: Default::default(),
-            friend_arrival_prob: Default::default(),
-            friend_read_prob: Default::default(),
+            fso,
+            read_prob: V::zero(),
+            friend_arrival_prob: V::zero(),
+            friend_read_prob: V::zero(),
             done_selfish: Default::default(),
             params_for_info: Vec::with_capacity(info_count),
         }
     }
 
-    pub fn reset<F: FnMut(&InfoType) -> f32>(
+    pub fn reset<F: FnMut(&InfoType) -> V>(
         &mut self,
-        read_prob: f32,
-        friend_arrival_prob: f32,
-        friend_read_prob: f32,
-        pi_rate: f32,
+        read_prob: V,
+        friend_arrival_prob: V,
+        friend_read_prob: V,
+        pi_rate: V,
         mut trust_map: F,
-        constants: &Constants,
+        constants: &Constants<V>,
         info_types: &[InfoType],
     ) {
         self.read_prob = read_prob;
@@ -124,14 +140,14 @@ impl Agent {
         self.friend_read_prob = friend_read_prob;
 
         self.op.reset(
-            pi_rate,
             &constants.br_theta,
             &constants.br_psi,
             &constants.br_phi,
             &constants.br_s,
         );
-        self.fop
-            .reset(pi_rate, &constants.br_fs, &constants.br_fphi);
+        self.so.reset(pi_rate);
+        self.fop.reset(&constants.br_fs, &constants.br_fphi);
+        self.fso.reset(pi_rate);
 
         self.params_for_info.clear();
         for i in 0..self.params_for_info.capacity() {
@@ -145,46 +161,41 @@ impl Agent {
 
     pub fn reset_with<R: Rng>(
         &mut self,
-        constants: &Constants,
+        constants: &Constants<V>,
         info_types: &[InfoType],
         rng: &mut R,
     ) {
-        let r = rng.gen::<f32>();
+        let r = rng.gen::<V>();
         let s = constants.pi_dist.sample(rng);
 
         self.reset(
             constants.read_dist.sample(rng),
             constants.fclose_dist.sample(rng),
             constants.fread_dist.sample(rng),
-            if constants.pi_prob > r { s } else { 0.0 },
+            if constants.pi_prob > r { s } else { V::zero() },
             |_| constants.misinfo_trust_dist.sample(rng),
             constants,
             info_types,
         );
     }
 
-    pub fn valuate(&self) -> [f32; 2] {
-        let p = self.op.theta.projection();
-        array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p))
-    }
-
     pub fn read_info_trustfully(
         &mut self,
-        info: &Info,
-        receipt_prob: f32,
-        constants: &Constants,
+        info: &Info<V>,
+        receipt_prob: V,
+        constants: &Constants<V>,
     ) -> Behavior {
-        self.read_info_with_trust(info, receipt_prob, 1.0, constants)
+        self.read_info_with_trust(info, receipt_prob, V::one(), constants)
     }
 
     pub fn read_info<R: Rng>(
         &mut self,
         rng: &mut R,
-        info: &Info,
-        receipt_prob: f32,
-        constants: &Constants,
+        info: &Info<V>,
+        receipt_prob: V,
+        constants: &Constants<V>,
     ) -> Option<Behavior> {
-        if rng.gen::<f32>() <= self.read_prob {
+        if rng.gen::<V>() <= self.read_prob {
             Some(self.read_info_with_trust(
                 info,
                 receipt_prob,
@@ -198,12 +209,12 @@ impl Agent {
 
     fn read_info_with_trust(
         &mut self,
-        info: &Info,
-        receipt_prob: f32,
-        t: f32,
-        constants: &Constants,
+        info: &Info<V>,
+        receipt_prob: V,
+        t: V,
+        constants: &Constants<V>,
     ) -> Behavior {
-        debug!("b_PA|PTH_1:{:?}", self.op.cond_pa[1].belief);
+        debug!("b_PA|PTH_1:{:?}", self.so.cond_pa[1].belief);
 
         FuseOp::Wgh.fuse_assign(&mut self.op.s, &info.content.s.discount(t));
         FuseOp::Wgh.fuse_assign(&mut self.op.psi, &info.content.psi.discount(t));
@@ -219,12 +230,12 @@ impl Agent {
             let mut pa = self
                 .op
                 .s
-                .deduce(&self.op.cond_ppsi)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ppsi))
-                .deduce(&self.op.cond_ptheta)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ptheta))
-                .deduce(&self.op.cond_pa)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_pa));
+                .deduce(&self.so.cond_ppsi)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_ppsi))
+                .deduce(&self.so.cond_ptheta)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_ptheta))
+                .deduce(&self.so.cond_pa)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_pa));
 
             // an opinion of PA is computed by using aleatory cummulative fusion.
             FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(t));
@@ -237,9 +248,10 @@ impl Agent {
         let fpsi_ded = self
             .op
             .s
-            .deduce(&self.op.cond_fpsi)
-            .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fpsi));
+            .deduce(&self.so.cond_fpsi)
+            .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_fpsi));
         let (fop, fa) = self.fop.compute_new_friend_op(
+            &self.fso,
             info,
             &fpsi_ded,
             receipt_prob * self.friend_read_prob * t,
@@ -251,18 +263,19 @@ impl Agent {
             .op
             .phi
             .deduce(&self.op.cond_theta_phi)
-            .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
+            .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(self.op.theta.base_rate));
 
         let theta = {
             let mut theta_ded_1 = Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), fa.as_ref())
-                .deduce(&self.op.cond_theta)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
+                .deduce(&self.so.cond_theta)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(self.op.theta.base_rate));
             FuseOp::Wgh.fuse_assign(&mut theta_ded_1, &theta_ded_2);
             theta_ded_1
         };
 
         // predict new friends' opinions in case of sharing
         let (pred_fop, pred_fa) = self.fop.compute_new_friend_op(
+            &self.fso,
             info,
             &fpsi_ded,
             self.friend_arrival_prob * self.friend_read_prob * t,
@@ -271,8 +284,8 @@ impl Agent {
         let pred_theta = {
             let mut pred_theta_ded_1 =
                 Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), pred_fa.as_ref())
-                    .deduce(&self.op.cond_theta)
-                    .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(self.op.theta.base_rate));
+                    .deduce(&self.so.cond_theta)
+                    .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(self.op.theta.base_rate));
             FuseOp::Wgh.fuse_assign(&mut pred_theta_ded_1, &theta_ded_2);
             pred_theta_ded_1
         };
@@ -286,7 +299,7 @@ impl Agent {
         let fa_theta = Opinion::product2(fa.as_ref(), theta.as_ref());
         let pred_fa_theta = Opinion::product2(pred_fa.as_ref(), pred_theta.as_ref());
 
-        let value_sharing: [f32; 2] = [
+        let value_sharing: [V; 2] = [
             self.cpt
                 .valuate(&self.prospect.sharing[0], &fa_theta.projection()),
             self.cpt
@@ -304,7 +317,7 @@ impl Agent {
         } else {
             self.op.theta = theta;
         }
-        let value_selfish: [f32; 2] = array::from_fn(|i| {
+        let value_selfish: [V; 2] = array::from_fn(|i| {
             self.cpt
                 .valuate(&self.prospect.selfish[i], &self.op.theta.projection())
         });
@@ -324,45 +337,64 @@ impl Agent {
 }
 
 #[derive(Debug)]
-struct FriendOpinionUpd {
-    fs: Opinion1d<f32, F_S>,
-    fphi: Opinion1d<f32, F_PHI>,
-    cond_ftheta_fphi: [Simplex<f32, F_THETA>; F_PHI],
+struct FriendOpinionUpd<V: Float> {
+    fs: Opinion1d<V, F_S>,
+    fphi: Opinion1d<V, F_PHI>,
+    cond_ftheta_fphi: [Simplex<V, F_THETA>; F_PHI],
 }
 
 #[derive(Debug)]
-pub struct FriendOpinion {
-    fs: Opinion1d<f32, F_S>,
-    fphi: Opinion1d<f32, F_PHI>,
-
+pub struct FriendOpinion<V: Float> {
+    fs: Opinion1d<V, F_S>,
+    fphi: Opinion1d<V, F_PHI>,
     // F\Theta | F\Phi
-    cond_ftheta_fphi: [Simplex<f32, F_THETA>; F_PHI],
+    cond_ftheta_fphi: [Simplex<V, F_THETA>; F_PHI],
+}
+
+pub struct FriendStaticOpinion<V: Float> {
     // FP\Theta | FP\Psi
-    cond_fptheta: [Simplex<f32, FP_THETA>; FP_PSI],
+    cond_fptheta: [Simplex<V, FP_THETA>; FP_PSI],
     // FPA | FP\Theta
-    cond_fpa: [Simplex<f32, FP_A>; FP_THETA],
+    cond_fpa: [Simplex<V, FP_A>; FP_THETA],
     // F\Theta | FPA. F\Psi
-    cond_ftheta: HigherArr2<Simplex<f32, F_THETA>, FP_A, F_PSI>,
+    cond_ftheta: HigherArr2<Simplex<V, F_THETA>, FP_A, F_PSI>,
     // FA | F\Theta
-    cond_fa: [Simplex<f32, F_A>; F_THETA],
+    cond_fa: [Simplex<V, F_A>; F_THETA],
     // FP\Psi | FS
-    cond_fppsi: [Simplex<f32, FP_PSI>; F_S],
+    cond_fppsi: [Simplex<V, FP_PSI>; F_S],
 }
 
-fn belief_plural_ignorance(pi_rate: f32) -> Simplex<f32, A> {
-    let u = 0.01;
-    let b1 = pi_rate * (1.0 - u);
-    Simplex::<f32, A>::new([1.0 - u - b1, b1], u)
+pub trait PluralIgnorance
+where
+    Self: Float + AddAssign + UlpsEq,
+{
+    const U: Self;
+    fn plural_ignorance(self) -> Simplex<Self, A> {
+        let b1 = self * (Self::one() - Self::U);
+        Simplex::new([Self::one() - Self::U - b1, b1], Self::U)
+    }
 }
 
-impl FriendOpinion {
-    pub fn reset(&mut self, pi_rate: f32, br_fs: &[f32; F_S], br_fphi: &[f32; F_PHI]) {
+macro_rules! impl_plural_ignorance {
+    ($ft: ty) => {
+        impl PluralIgnorance for $ft {
+            const U: $ft = 0.01;
+        }
+    };
+}
+
+impl_plural_ignorance!(f32);
+impl_plural_ignorance!(f64);
+
+impl<V> FriendOpinion<V>
+where
+    Open01: Distribution<V>,
+    V: Float + UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
+{
+    pub fn reset(&mut self, br_fs: &[V; F_S], br_fphi: &[V; F_PHI]) {
         reset_opinion(&mut self.fs, br_fs);
         reset_opinion(&mut self.fphi, br_fphi);
         reset_simplex(&mut self.cond_ftheta_fphi);
-        self.cond_fpa[1] = belief_plural_ignorance(pi_rate);
-        // let b1 = pi_rate.powi(2);
-        // self.cond_fpa[1] = Simplex::<f32, FP_A>::new([pi_rate - b1, b1], 1.0 - pi_rate);
     }
 
     pub fn new() -> Self {
@@ -370,44 +402,17 @@ impl FriendOpinion {
             fs: Opinion::default(),
             fphi: Opinion::default(),
             cond_ftheta_fphi: [Simplex::default(), Simplex::default()],
-            cond_fa: [
-                Simplex::<f32, F_A>::new([0.95, 0.00], 0.05),
-                Simplex::<f32, F_A>::new([0.00, 0.95], 0.05),
-                Simplex::<f32, F_A>::new([0.95, 0.00], 0.05),
-            ],
-            cond_fpa: [
-                Simplex::<f32, F_A>::new([0.90, 0.00], 0.10),
-                Simplex::<f32, F_A>::default(),
-                Simplex::<f32, F_A>::new([0.90, 0.00], 0.10),
-            ],
-            cond_ftheta: harr2![
-                [
-                    Simplex::<f32, F_THETA>::new([0.95, 0.00, 0.00], 0.05),
-                    Simplex::<f32, F_THETA>::new([0.00, 0.45, 0.45], 0.10),
-                ],
-                [
-                    Simplex::<f32, F_THETA>::new([0.00, 0.475, 0.475], 0.05),
-                    Simplex::<f32, F_THETA>::new([0.00, 0.495, 0.495], 0.01),
-                ]
-            ],
-            cond_fptheta: [
-                Simplex::<f32, FP_THETA>::new([0.99, 0.000, 0.000], 0.01),
-                Simplex::<f32, FP_THETA>::new([0.00, 0.495, 0.495], 0.01),
-            ],
-            cond_fppsi: [
-                Simplex::<f32, FP_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, FP_PSI>::new([0.25, 0.65], 0.10),
-            ],
         }
     }
 
     fn compute_new_friend_op(
         &self,
-        info: &Info,
-        fpsi_ded: &Opinion1d<f32, PSI>,
-        ft: f32,
-        constants: &Constants,
-    ) -> (FriendOpinionUpd, Opinion1d<f32, F_A>) {
+        fso: &FriendStaticOpinion<V>,
+        info: &Info<V>,
+        fpsi_ded: &Opinion1d<V, PSI>,
+        ft: V,
+        constants: &Constants<V>,
+    ) -> (FriendOpinionUpd<V>, Opinion1d<V, F_A>) {
         let fs = FuseOp::Wgh.fuse(&self.fs, &info.content.s.discount(ft));
         let fpsi = FuseOp::Wgh.fuse(fpsi_ded, &info.content.psi.discount(ft));
         let fphi = FuseOp::Wgh.fuse(&self.fphi, &info.content.phi.discount(ft));
@@ -428,12 +433,12 @@ impl FriendOpinion {
         let fpa = {
             let mut fpa = fop
                 .fs
-                .deduce(&self.cond_fppsi)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fppsi))
-                .deduce(&self.cond_fptheta)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fptheta))
-                .deduce(&self.cond_fpa)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fpa));
+                .deduce(&fso.cond_fppsi)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_fppsi))
+                .deduce(&fso.cond_fptheta)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_fptheta))
+                .deduce(&fso.cond_fpa)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_fpa));
 
             // compute a FPA opinion by using aleatory cummulative fusion.
             FuseOp::ACm.fuse_assign(&mut fpa, &info.content.pa.discount(ft));
@@ -442,12 +447,12 @@ impl FriendOpinion {
 
         let ftheta = {
             let mut ftheta_ded_1 = Opinion::product2(&fpa, &fpsi)
-                .deduce(&self.cond_ftheta)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ftheta));
+                .deduce(&fso.cond_ftheta)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_ftheta));
             let ftheta_ded_2 = fop
                 .fphi
                 .deduce(&fop.cond_ftheta_fphi)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_ftheta));
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_ftheta));
             FuseOp::Wgh.fuse_assign(&mut ftheta_ded_1, &ftheta_ded_2);
             ftheta_ded_1
         };
@@ -456,59 +461,109 @@ impl FriendOpinion {
         (
             fop,
             ftheta
-                .deduce(&self.cond_fa)
-                .unwrap_or_else(|| Opinion::<_, f32>::vacuous_with(constants.br_fa)),
+                .deduce(&fso.cond_fa)
+                .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(constants.br_fa)),
         )
     }
 
-    fn update(&mut self, fop: FriendOpinionUpd) {
+    fn update(&mut self, fop: FriendOpinionUpd<V>) {
         self.fs = fop.fs;
         self.fphi = fop.fphi;
         self.cond_ftheta_fphi = fop.cond_ftheta_fphi;
     }
 }
 
-#[derive(Debug)]
-pub struct AgentOpinion {
-    theta: Opinion1d<f32, THETA>,
-    psi: Opinion1d<f32, PSI>,
-    phi: Opinion1d<f32, PHI>,
-    s: Opinion1d<f32, S>,
-
-    // F\Psi | S
-    cond_fpsi: [Simplex<f32, F_PSI>; S],
-
-    // plural ignorance conditions
-    // P\Psi | S
-    cond_ppsi: [Simplex<f32, P_PSI>; S],
-    // P\Theta | P\Psi
-    cond_ptheta: [Simplex<f32, P_THETA>; P_PSI],
-    // PA | P\Theta
-    cond_pa: [Simplex<f32, P_A>; P_THETA],
-
-    // \Theta | PA.\Psi,FA
-    cond_theta: HigherArr3<Simplex<f32, THETA>, P_A, PSI, F_A>,
-    // \Theta | \Phi
-    cond_theta_phi: [Simplex<f32, THETA>; PHI],
+impl<V: PluralIgnorance> FriendStaticOpinion<V> {
+    fn reset(&mut self, pi_rate: V) {
+        self.cond_fpa[1] = pi_rate.plural_ignorance();
+    }
 }
 
-impl AgentOpinion {
+macro_rules! impl_friend_opinion {
+    ($ft: ty) => {
+        #[allow(dead_code)]
+        impl FriendStaticOpinion<$ft> {
+            pub fn new() -> Self {
+                Self {
+                    cond_fa: [
+                        Simplex::<$ft, F_A>::new([0.95, 0.00], 0.05),
+                        Simplex::<$ft, F_A>::new([0.00, 0.95], 0.05),
+                        Simplex::<$ft, F_A>::new([0.95, 0.00], 0.05),
+                    ],
+                    cond_fpa: [
+                        Simplex::<$ft, F_A>::new([0.90, 0.00], 0.10),
+                        Simplex::default(),
+                        Simplex::<$ft, F_A>::new([0.90, 0.00], 0.10),
+                    ],
+                    cond_ftheta: harr2![
+                        [
+                            Simplex::<$ft, F_THETA>::new([0.95, 0.00, 0.00], 0.05),
+                            Simplex::<$ft, F_THETA>::new([0.00, 0.45, 0.45], 0.10),
+                        ],
+                        [
+                            Simplex::<$ft, F_THETA>::new([0.00, 0.475, 0.475], 0.05),
+                            Simplex::<$ft, F_THETA>::new([0.00, 0.495, 0.495], 0.01),
+                        ]
+                    ],
+                    cond_fptheta: [
+                        Simplex::<$ft, FP_THETA>::new([0.99, 0.000, 0.000], 0.01),
+                        Simplex::<$ft, FP_THETA>::new([0.00, 0.495, 0.495], 0.01),
+                    ],
+                    cond_fppsi: [
+                        Simplex::<$ft, FP_PSI>::new([0.99, 0.00], 0.01),
+                        Simplex::<$ft, FP_PSI>::new([0.25, 0.65], 0.10),
+                    ],
+                }
+            }
+        }
+    };
+}
+
+impl_friend_opinion!(f32);
+impl_friend_opinion!(f64);
+
+#[derive(Debug)]
+pub struct AgentOpinion<V> {
+    theta: Opinion1d<V, THETA>,
+    psi: Opinion1d<V, PSI>,
+    phi: Opinion1d<V, PHI>,
+    s: Opinion1d<V, S>,
+
+    // \Theta | \Phi
+    cond_theta_phi: [Simplex<V, THETA>; PHI],
+}
+
+pub struct AgentStaticOpinion<V> {
+    // plural ignorance conditions
+    // P\Psi | S
+    cond_ppsi: [Simplex<V, P_PSI>; S],
+    // P\Theta | P\Psi
+    cond_ptheta: [Simplex<V, P_THETA>; P_PSI],
+    // PA | P\Theta
+    cond_pa: [Simplex<V, P_A>; P_THETA],
+    // F\Psi | S
+    cond_fpsi: [Simplex<V, F_PSI>; S],
+    // \Theta | PA.\Psi,FA
+    cond_theta: HigherArr3<Simplex<V, THETA>, P_A, PSI, F_A>,
+}
+
+impl<V> AgentOpinion<V>
+where
+    V: Float + Default,
+    Open01: Distribution<V>,
+{
     pub fn reset(
         &mut self,
-        pi_rate: f32,
-        br_theta: &[f32; THETA],
-        br_psi: &[f32; PSI],
-        br_phi: &[f32; PSI],
-        br_s: &[f32; S],
+        br_theta: &[V; THETA],
+        br_psi: &[V; PSI],
+        br_phi: &[V; PSI],
+        br_s: &[V; S],
     ) {
         reset_opinion(&mut self.theta, br_theta);
         reset_opinion(&mut self.psi, br_psi);
         reset_opinion(&mut self.phi, br_phi);
         reset_opinion(&mut self.s, br_s);
         reset_simplex(&mut self.cond_theta_phi);
-        self.cond_pa[1] = belief_plural_ignorance(pi_rate);
-        // let b1 = pi_rate.powi(2);
-        // self.cond_pa[1] = Simplex::<f32, P_A>::new([pi_rate - b1, b1], 1.0 - pi_rate);
     }
 
     pub fn new() -> Self {
@@ -518,45 +573,66 @@ impl AgentOpinion {
             phi: Opinion::default(),
             s: Opinion::default(),
             cond_theta_phi: [Simplex::default(), Simplex::default()],
-            cond_pa: [
-                Simplex::<f32, P_A>::new([0.90, 0.00], 0.10),
-                Simplex::default(),
-                Simplex::<f32, P_A>::new([0.90, 0.00], 0.10),
-            ],
-            cond_theta: harr3![
-                [
-                    [
-                        Simplex::<f32, THETA>::new([0.95, 0.00, 0.00], 0.05),
-                        Simplex::<f32, THETA>::new([0.95, 0.00, 0.00], 0.05),
-                    ],
-                    [
-                        Simplex::<f32, THETA>::new([0.00, 0.45, 0.45], 0.10),
-                        Simplex::<f32, THETA>::new([0.00, 0.45, 0.45], 0.10),
-                    ],
-                ],
-                [
-                    [
-                        Simplex::<f32, THETA>::new([0.00, 0.475, 0.475], 0.05),
-                        Simplex::<f32, THETA>::new([0.00, 0.475, 0.475], 0.05),
-                    ],
-                    [
-                        Simplex::<f32, THETA>::new([0.00, 0.495, 0.495], 0.01),
-                        Simplex::<f32, THETA>::new([0.00, 0.495, 0.495], 0.01),
-                    ],
-                ]
-            ],
-            cond_ptheta: [
-                Simplex::<f32, P_THETA>::new([0.99, 0.00, 0.00], 0.01),
-                Simplex::<f32, P_THETA>::new([0.00, 0.495, 0.495], 0.01),
-            ],
-            cond_ppsi: [
-                Simplex::<f32, P_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, P_PSI>::new([0.25, 0.65], 0.10),
-            ],
-            cond_fpsi: [
-                Simplex::<f32, F_PSI>::new([0.99, 0.00], 0.01),
-                Simplex::<f32, F_PSI>::new([0.70, 0.20], 0.10),
-            ],
         }
     }
 }
+
+impl<V: PluralIgnorance> AgentStaticOpinion<V> {
+    fn reset(&mut self, pi_rate: V) {
+        self.cond_pa[1] = pi_rate.plural_ignorance();
+    }
+}
+
+macro_rules! impl_agent_static_opinion {
+    ($ft: ty) => {
+        #[allow(dead_code)]
+        impl AgentStaticOpinion<$ft> {
+            pub fn new() -> Self {
+                Self {
+                    cond_pa: [
+                        Simplex::<$ft, P_A>::new([0.90, 0.00], 0.10),
+                        Simplex::default(),
+                        Simplex::<$ft, P_A>::new([0.90, 0.00], 0.10),
+                    ],
+                    cond_theta: harr3![
+                        [
+                            [
+                                Simplex::<$ft, THETA>::new([0.95, 0.00, 0.00], 0.05),
+                                Simplex::<$ft, THETA>::new([0.95, 0.00, 0.00], 0.05),
+                            ],
+                            [
+                                Simplex::<$ft, THETA>::new([0.00, 0.45, 0.45], 0.10),
+                                Simplex::<$ft, THETA>::new([0.00, 0.45, 0.45], 0.10),
+                            ],
+                        ],
+                        [
+                            [
+                                Simplex::<$ft, THETA>::new([0.00, 0.475, 0.475], 0.05),
+                                Simplex::<$ft, THETA>::new([0.00, 0.475, 0.475], 0.05),
+                            ],
+                            [
+                                Simplex::<$ft, THETA>::new([0.00, 0.495, 0.495], 0.01),
+                                Simplex::<$ft, THETA>::new([0.00, 0.495, 0.495], 0.01),
+                            ],
+                        ]
+                    ],
+                    cond_ptheta: [
+                        Simplex::<$ft, P_THETA>::new([0.99, 0.00, 0.00], 0.01),
+                        Simplex::<$ft, P_THETA>::new([0.00, 0.495, 0.495], 0.01),
+                    ],
+                    cond_ppsi: [
+                        Simplex::<$ft, P_PSI>::new([0.99, 0.00], 0.01),
+                        Simplex::<$ft, P_PSI>::new([0.25, 0.65], 0.10),
+                    ],
+                    cond_fpsi: [
+                        Simplex::<$ft, F_PSI>::new([0.99, 0.00], 0.01),
+                        Simplex::<$ft, F_PSI>::new([0.70, 0.20], 0.10),
+                    ],
+                }
+            }
+        }
+    };
+}
+
+impl_agent_static_opinion!(f32);
+impl_agent_static_opinion!(f64);

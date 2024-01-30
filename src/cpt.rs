@@ -1,17 +1,20 @@
-use approx::ulps_eq;
+use std::{iter::Sum, ops::AddAssign};
+
+use approx::{ulps_eq, UlpsEq};
+use num_traits::Float;
 use subjective_logic::mul::IndexedContainer;
 
 #[derive(Clone, Default, Debug)]
-pub struct CPT {
-    alpha: f32,
-    beta: f32,
-    lambda: f32,
-    gamma: f32,
-    delta: f32,
+pub struct CPT<V: Float> {
+    alpha: V,
+    beta: V,
+    lambda: V,
+    gamma: V,
+    delta: V,
 }
 
-impl CPT {
-    pub fn new(alpha: f32, beta: f32, lambda: f32, gamma: f32, delta: f32) -> Self {
+impl<V: Float + UlpsEq + AddAssign + Sum> CPT<V> {
+    pub fn new(alpha: V, beta: V, lambda: V, gamma: V, delta: V) -> Self {
         Self {
             alpha,
             beta,
@@ -21,75 +24,75 @@ impl CPT {
         }
     }
 
-    fn w(p: f32, e: f32) -> f32 {
-        if ulps_eq!(p, 1.0) {
-            1.0
+    fn w(p: V, e: V) -> V {
+        if ulps_eq!(p, V::one()) {
+            V::one()
         } else {
             let temp = p.powf(e);
-            temp / (temp + (1.0 - p).powf(e)).powf(1.0 / e)
+            temp / (temp + (V::one() - p).powf(e)).powf(V::one() / e)
         }
     }
 
     /// Computes a probability weighting function for gains
-    fn positive_weight(&self, p: f32) -> f32 {
+    fn positive_weight(&self, p: V) -> V {
         Self::w(p, self.gamma)
     }
 
     /// Computes a probability weighting function for losses
-    fn negative_weight(&self, p: f32) -> f32 {
+    fn negative_weight(&self, p: V) -> V {
         Self::w(p, self.delta)
     }
 
     /// Computes a value funciton for positive value
-    fn positive_value(&self, x: f32) -> f32 {
+    fn positive_value(&self, x: V) -> V {
         x.powf(self.alpha)
     }
 
     /// Computes a value funciton for negative value
-    fn negative_value(&self, x: f32) -> f32 {
+    fn negative_value(&self, x: V) -> V {
         -self.lambda * x.abs().powf(self.beta)
     }
 
     /// Computes Choquet integral of a positive function
-    fn positive_valuate<P: IndexedContainer<Idx, Output = f32>, Idx: Copy>(
+    fn positive_valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
         &self,
-        positive_level_sets: &[(f32, Vec<Idx>)],
+        positive_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
-    ) -> f32 {
+    ) -> V {
         positive_level_sets
             .iter()
-            .scan((0.0, 0.0), |(w, acc), (o, ids)| {
+            .scan((V::zero(), V::zero()), |(w, acc), (o, ids)| {
                 let w0 = *w;
-                *acc += ids.iter().map(|i| prob[*i]).sum::<f32>();
+                *acc += ids.iter().map(|i| prob[*i]).sum::<V>();
                 *w = self.positive_weight(*acc);
                 Some(self.positive_value(*o) * (*w - w0))
             })
-            .sum::<f32>()
+            .sum::<V>()
     }
 
     /// Computes Choquet integral of a negative function
-    fn negative_valuate<P: IndexedContainer<Idx, Output = f32>, Idx: Copy>(
+    fn negative_valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
         &self,
-        negative_level_sets: &[(f32, Vec<Idx>)],
+        negative_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
-    ) -> f32 {
+    ) -> V {
         negative_level_sets
             .iter()
-            .scan((0.0, 0.0), |(w, acc), (o, ids)| {
+            .scan((V::zero(), V::zero()), |(w, acc), (o, ids)| {
                 let w0 = *w;
-                *acc += ids.iter().map(|i| prob[*i]).sum::<f32>();
+                *acc += ids.iter().map(|i| prob[*i]).sum::<V>();
                 *w = self.negative_weight(*acc);
                 Some(self.negative_value(*o) * (*w - w0))
             })
-            .sum::<f32>()
+            .sum::<V>()
     }
 
     /// Computes CPT
-    pub fn valuate<P: IndexedContainer<Idx, Output = f32>, Idx: Copy>(
+    pub fn valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
         &self,
-        level_sets: &LevelSet<Idx, f32>,
+        level_sets: &LevelSet<Idx, V>,
         prob: &P,
-    ) -> f32 {
+    ) -> V {
         self.positive_valuate(&level_sets.positive, prob)
             + self.negative_valuate(&level_sets.negative, prob)
     }
@@ -101,55 +104,48 @@ pub struct LevelSet<Idx, V> {
     negative: Vec<(V, Vec<Idx>)>,
 }
 
-macro_rules! impl_level_set {
-    ($ft: ty) => {
-        impl<Idx> LevelSet<Idx, $ft> {
-            pub fn new<T>(outcome: &T) -> Self
-            where
-                T: IndexedContainer<Idx, Output = $ft>,
-                for<'a> &'a T: IntoIterator<Item = &'a $ft>,
-                Idx: Copy,
-            {
-                let mut pos = T::keys()
-                    .zip(outcome)
-                    .filter(|(_, &o)| o > 0.0)
-                    .collect::<Vec<_>>();
-                pos.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-                let mut positive = Vec::<($ft, Vec<Idx>)>::new();
-                for (i, &o) in pos {
-                    match positive.last_mut() {
-                        Some((o2, v)) if o == *o2 => {
-                            v.push(i);
-                        }
-                        _ => {
-                            positive.push((o, vec![i]));
-                        }
-                    }
+impl<Idx, V: Float> LevelSet<Idx, V> {
+    pub fn new<T>(outcome: &T) -> Self
+    where
+        T: IndexedContainer<Idx, Output = V>,
+        for<'a> &'a T: IntoIterator<Item = &'a V>,
+        Idx: Copy,
+    {
+        let mut pos = T::keys()
+            .zip(outcome)
+            .filter(|(_, &o)| o > V::zero())
+            .collect::<Vec<_>>();
+        pos.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        let mut positive = Vec::<(V, Vec<Idx>)>::new();
+        for (i, &o) in pos {
+            match positive.last_mut() {
+                Some((o2, v)) if o == *o2 => {
+                    v.push(i);
                 }
-                let mut neg = T::keys()
-                    .zip(outcome)
-                    .filter(|(_, &o)| o < 0.0)
-                    .collect::<Vec<_>>();
-                neg.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-                let mut negative = Vec::<($ft, Vec<Idx>)>::new();
-                for (i, &o) in neg {
-                    match negative.last_mut() {
-                        Some((o2, v)) if o == *o2 => {
-                            v.push(i);
-                        }
-                        _ => {
-                            negative.push((o, vec![i]));
-                        }
-                    }
+                _ => {
+                    positive.push((o, vec![i]));
                 }
-                Self { positive, negative }
             }
         }
-    };
+        let mut neg = T::keys()
+            .zip(outcome)
+            .filter(|(_, &o)| o < V::zero())
+            .collect::<Vec<_>>();
+        neg.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        let mut negative = Vec::<(V, Vec<Idx>)>::new();
+        for (i, &o) in neg {
+            match negative.last_mut() {
+                Some((o2, v)) if o == *o2 => {
+                    v.push(i);
+                }
+                _ => {
+                    negative.push((o, vec![i]));
+                }
+            }
+        }
+        Self { positive, negative }
+    }
 }
-
-impl_level_set!(f32);
-impl_level_set!(f64);
 
 #[cfg(test)]
 mod tests {
