@@ -8,17 +8,18 @@ use std::io::{Read, Write};
 use std::iter::Sum;
 use std::ops::Deref;
 
-use agent::{
-    Agent, AgentOpinion, AgentStaticOpinion, Constants, FriendOpinion, FriendStaticOpinion,
-    PluralIgnorance,
-};
+use agent::{Agent, Constants};
 use approx::UlpsEq;
 use arrow2::array::{PrimitiveArray, Utf8Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Field, Schema};
 use arrow2::io::ipc::write::{Compression, FileWriter, WriteOptions};
 use cpt::{LevelSet, CPT};
-use info::{Info, InfoType};
+use info::{Info, InfoType, ToInfoContent, TrustDists};
+use opinion::{
+    FriendOpinions, FriendStaticOpinions, GlobalBaseRates, Opinions, PluralIgnorance,
+    StaticOpinions,
+};
 
 use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, Graph};
@@ -36,9 +37,13 @@ struct Strategy<V: Float> {
     scenario: Vec<Event>,
 }
 
-fn extract_scenario(
+fn extract_scenario<V>(
     scenario: Vec<Event>,
-) -> (Vec<InfoType>, BTreeMap<u32, BTreeMap<usize, usize>>) {
+) -> (Vec<Info<V>>, BTreeMap<u32, BTreeMap<usize, usize>>)
+where
+    V: Float + UlpsEq,
+    for<'a> &'a InfoType: ToInfoContent<V>,
+{
     let mut info_types = Vec::new();
     let scenario = scenario
         .into_iter()
@@ -61,7 +66,14 @@ fn extract_scenario(
             )
         })
         .collect();
-    (info_types, scenario)
+
+    let infos = info_types
+        .iter()
+        .enumerate()
+        .map(|(id, t)| Info::new(id, *t, t.into()))
+        .collect::<Vec<_>>();
+
+    (infos, scenario)
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -138,7 +150,6 @@ where
     stat: Stat,
     seed_state: u64,
     agents: Vec<Agent<V>>,
-    info_types: Vec<InfoType>,
     infos: Vec<Info<V>>,
     graph: DiGraphB,
     constants: Constants<V>,
@@ -153,38 +164,38 @@ macro_rules! impl_executor {
                 seed_state: u64,
             ) -> Result<Self, Box<dyn std::error::Error>> {
                 let Strategy { pi_prob, scenario } = serde_json::from_str(strategy)?;
-                let (info_types, scenario) = extract_scenario(scenario);
+                let (infos, scenario) = extract_scenario(scenario);
 
                 let constants = Constants::<$ft> {
-                    br_s: [0.999, 0.001],
-                    br_fs: [0.99, 0.01],
-                    br_psi: [0.999, 0.001],
-                    br_ppsi: [0.999, 0.001],
-                    br_pa: [0.999, 0.001],
-                    br_fa: [0.999, 0.001],
-                    br_fpa: [0.999, 0.001],
-                    br_phi: [0.999, 0.001],
-                    br_fpsi: [0.999, 0.001],
-                    br_fppsi: [0.999, 0.001],
-                    br_fphi: [0.999, 0.001],
-                    br_theta: [0.999, 0.0005, 0.0005],
-                    br_ptheta: [0.999, 0.0005, 0.0005],
-                    br_ftheta: [0.999, 0.0005, 0.0005],
-                    br_fptheta: [0.999, 0.0005, 0.0005],
+                    base_rates: GlobalBaseRates {
+                        s: [0.999, 0.001],
+                        fs: [0.99, 0.01],
+                        psi: [0.999, 0.001],
+                        ppsi: [0.999, 0.001],
+                        pa: [0.999, 0.001],
+                        fa: [0.999, 0.001],
+                        fpa: [0.999, 0.001],
+                        phi: [0.999, 0.001],
+                        fpsi: [0.999, 0.001],
+                        fppsi: [0.999, 0.001],
+                        fphi: [0.999, 0.001],
+                        theta: [0.999, 0.0005, 0.0005],
+                        ptheta: [0.999, 0.0005, 0.0005],
+                        ftheta: [0.999, 0.0005, 0.0005],
+                        fptheta: [0.999, 0.0005, 0.0005],
+                    },
                     read_dist: Beta::new(7.0, 3.0)?,
                     fclose_dist: Beta::new(9.0, 1.0)?,
                     fread_dist: Beta::new(5.0, 5.0)?,
                     pi_dist: Beta::new(19.0, 1.0)?,
                     pi_prob,
-                    misinfo_trust_dist: Beta::new(1.5, 4.5)?,
-                    correction_trust_dist: Beta::new(4.5, 1.5)?,
+                    trust_dists: TrustDists {
+                        misinfo: Beta::new(1.5, 4.5)?,
+                        corrective: Beta::new(4.5, 1.5)?,
+                        observed: Beta::new(4.5, 1.5)?,
+                        inhivitive: Beta::new(4.5, 1.5)?,
+                    },
                 };
-
-                let infos = info_types
-                    .iter()
-                    .enumerate()
-                    .map(|(id, t)| Info::new(id, *t, t.into()))
-                    .collect::<Vec<_>>();
 
                 let x0 = -2.0;
                 let x1 = -50.0;
@@ -210,10 +221,10 @@ macro_rules! impl_executor {
                 let mut agents = Vec::with_capacity(graph.node_count());
                 for _ in 0..agents.capacity() {
                     agents.push(Agent::new(
-                        AgentOpinion::new(),
-                        AgentStaticOpinion::<$ft>::new(),
-                        FriendOpinion::new(),
-                        FriendStaticOpinion::<$ft>::new(),
+                        Opinions::new(),
+                        StaticOpinions::<$ft>::new(),
+                        FriendOpinions::new(),
+                        FriendStaticOpinions::<$ft>::new(),
                         CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
                         selfish.clone(),
                         sharing.clone(),
@@ -226,7 +237,6 @@ macro_rules! impl_executor {
                     stat: Stat::default(),
                     seed_state,
                     agents,
-                    info_types,
                     infos,
                     graph,
                     constants,
@@ -265,7 +275,7 @@ where
         println!("started.");
         for num_iter in 0..iteration_count {
             for a in &mut self.agents {
-                a.reset_with(&self.constants, &self.info_types, &mut rng);
+                a.reset_with(&self.constants, &self.infos, &mut rng);
             }
             for info in &mut self.infos {
                 info.reset();
@@ -323,9 +333,9 @@ where
                     *num_receipt += 1;
 
                     let b = if r.force {
-                        agent.read_info_trustfully(info, receipt_prob, &self.constants)
+                        agent.read_info_trustfully(info, receipt_prob, &self.constants.base_rates)
                     } else {
-                        agent.read_info(rng, info, receipt_prob, &self.constants)?
+                        agent.read_info(rng, info, receipt_prob, &self.constants.base_rates)?
                     };
 
                     debug!(
@@ -385,15 +395,17 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        agent::{AgentStaticOpinion, FriendStaticOpinion},
-        extract_scenario, Strategy,
+        agent::{Agent, Constants},
+        cpt::{LevelSet, CPT},
+        extract_scenario,
+        info::TrustDists,
+        info::{Info, InfoType},
+        opinion::{
+            FriendOpinions, FriendStaticOpinions, GlobalBaseRates, Opinions, StaticOpinions,
+        },
+        Strategy,
     };
 
-    use super::{
-        agent::{Agent, AgentOpinion, Constants, FriendOpinion},
-        cpt::{LevelSet, CPT},
-        info::{Info, InfoType},
-    };
     use rand_distr::Beta;
     use serde_json::json;
     use std::ops::Deref;
@@ -402,28 +414,34 @@ mod tests {
     #[test]
     fn test_agent() {
         let constants = Constants {
-            br_s: [0.999, 0.001],
-            br_fs: [0.999, 0.001],
-            br_psi: [0.999, 0.001],
-            br_ppsi: [0.999, 0.001],
-            br_pa: [0.999, 0.001],
-            br_fa: [0.999, 0.001],
-            br_fpa: [0.999, 0.001],
-            br_phi: [0.999, 0.001],
-            br_fpsi: [0.999, 0.001],
-            br_fppsi: [0.999, 0.001],
-            br_fphi: [0.999, 0.001],
-            br_theta: [0.999, 0.0005, 0.0005],
-            br_ptheta: [0.999, 0.0005, 0.0005],
-            br_ftheta: [0.999, 0.0005, 0.0005],
-            br_fptheta: [0.999, 0.0005, 0.0005],
+            base_rates: GlobalBaseRates {
+                s: [0.999, 0.001],
+                fs: [0.999, 0.001],
+                psi: [0.999, 0.001],
+                ppsi: [0.999, 0.001],
+                pa: [0.999, 0.001],
+                fa: [0.999, 0.001],
+                fpa: [0.999, 0.001],
+                phi: [0.999, 0.001],
+                fpsi: [0.999, 0.001],
+                fppsi: [0.999, 0.001],
+                fphi: [0.999, 0.001],
+                theta: [0.999, 0.0005, 0.0005],
+                ptheta: [0.999, 0.0005, 0.0005],
+                ftheta: [0.999, 0.0005, 0.0005],
+                fptheta: [0.999, 0.0005, 0.0005],
+            },
             read_dist: Beta::new(7.0, 3.0).unwrap(),
             fclose_dist: Beta::new(9.0, 1.0).unwrap(),
             fread_dist: Beta::new(5.0, 5.0).unwrap(),
             pi_dist: Beta::new(0.5 * 10.0, (1.0 - 0.5) * 10.0).unwrap(),
             pi_prob: 0.5,
-            misinfo_trust_dist: Beta::new(1.5, 4.5).unwrap(),
-            correction_trust_dist: Beta::new(4.5, 1.5).unwrap(),
+            trust_dists: TrustDists {
+                misinfo: Beta::new(1.5, 4.5).unwrap(),
+                corrective: Beta::new(4.5, 1.5).unwrap(),
+                observed: Beta::new(4.5, 1.5).unwrap(),
+                inhivitive: Beta::new(4.5, 1.5).unwrap(),
+            },
         };
 
         let info_types = [InfoType::Misinfo];
@@ -439,10 +457,10 @@ mod tests {
         ];
 
         let mut a = Agent::new(
-            AgentOpinion::new(),
-            AgentStaticOpinion::<f32>::new(),
-            FriendOpinion::new(),
-            FriendStaticOpinion::<f32>::new(),
+            Opinions::new(),
+            StaticOpinions::<f32>::new(),
+            FriendOpinions::new(),
+            FriendStaticOpinions::<f32>::new(),
             CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
             [
                 LevelSet::<_, f32>::new(&selfish_outcome_maps[0]),
@@ -455,12 +473,12 @@ mod tests {
             1,
         );
 
-        a.reset(0.5, 0.5, 0.5, 0.0, |_| 0.90, &constants, &info_types);
+        a.reset(0.5, 0.5, 0.5, 0.0, |_| 0.90, &constants.base_rates, &infos);
 
         let receipt_prob = 0.0;
         println!(
             "{:?}",
-            a.read_info_trustfully(&infos[0], receipt_prob, &constants)
+            a.read_info_trustfully(&infos[0], receipt_prob, &constants.base_rates)
         );
     }
 
@@ -486,7 +504,7 @@ mod tests {
         );
         let s: Strategy<f32> = serde_json::from_value(v).unwrap();
         println!("{:?}", s);
-        let (is, sc) = extract_scenario(s.scenario);
+        let (is, sc) = extract_scenario::<f32>(s.scenario);
         println!("{:?}", is);
         println!("{:?}", sc);
     }

@@ -1,14 +1,18 @@
 use std::fmt::Display;
 
+use approx::UlpsEq;
 use num_traits::Float;
+use rand::Rng;
+use rand_distr::{Beta, Distribution, Open01};
 use subjective_logic::mul::Simplex;
 
-use crate::opinion::{A, PHI, PSI, S, THETA};
+use crate::opinion::{PHI, PSI, P_A, S, THETA};
 
+#[derive(Debug)]
 pub struct InfoContent<V: Float> {
     pub psi: Simplex<V, PSI>,
     pub s: Simplex<V, S>,
-    pub pa: Simplex<V, A>,
+    pub pa: Simplex<V, P_A>,
     pub phi: Simplex<V, PHI>,
     pub cond_theta_phi: [Simplex<V, THETA>; PHI],
 }
@@ -17,7 +21,7 @@ impl<V: Float> InfoContent<V> {
     pub fn new(
         psi: Simplex<V, PSI>,
         s: Simplex<V, S>,
-        pa: Simplex<V, A>,
+        pa: Simplex<V, P_A>,
         phi: Simplex<V, PHI>,
         cond_theta_phi: [Simplex<V, THETA>; PHI],
     ) -> Self {
@@ -31,6 +35,7 @@ impl<V: Float> InfoContent<V> {
     }
 }
 
+#[derive(Debug)]
 pub struct Info<V: Float> {
     pub id: usize,
     pub info_type: InfoType,
@@ -65,55 +70,84 @@ impl<V: Float> Info<V> {
 #[derive(Debug, serde::Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Copy)]
 pub enum InfoType {
     Misinfo,
-    Correction,
+    Corrective,
+    Observed,
+    Inhivitive,
 }
 
 impl Display for InfoType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InfoType::Misinfo => write!(f, "misinfo"),
-            InfoType::Correction => write!(f, "correction"),
+            InfoType::Corrective => write!(f, "correction"),
+            InfoType::Observed => write!(f, "observed"),
+            InfoType::Inhivitive => write!(f, "inhivitive"),
         }
     }
 }
 
+pub trait ToInfoContent<V: Float> {
+    fn psi(self) -> Simplex<V, PSI>;
+    fn s(self) -> Simplex<V, S>;
+    fn pa(self) -> Simplex<V, P_A>;
+    fn phi(self) -> Simplex<V, PHI>;
+    fn cond_theta_phi(self) -> [Simplex<V, THETA>; PHI];
+}
+
 macro_rules! impl_info_content {
     ($ft: ty) => {
-        impl From<&InfoType> for InfoContent<$ft> {
-            fn from(value: &InfoType) -> Self {
-                match value {
-                    InfoType::Misinfo => InfoContent::new(
-                        Simplex::<$ft, PSI>::new([0.0, 0.99], 0.01),
-                        Simplex::<$ft, PSI>::new([0.0, 0.0], 1.0),
-                        Simplex::<$ft, A>::new([0.0, 0.0], 1.0),
-                        Simplex::<$ft, PHI>::new([0.0, 0.0], 1.0),
-                        [
-                            Simplex::<$ft, THETA>::vacuous(),
-                            Simplex::<$ft, THETA>::vacuous(),
-                        ],
-                    ),
-                    InfoType::Correction => InfoContent::new(
-                        Simplex::<$ft, PSI>::new([0.99, 0.0], 0.01),
-                        Simplex::<$ft, PSI>::new([0.0, 1.0], 0.0),
-                        Simplex::<$ft, A>::new([0.0, 0.0], 1.0),
-                        Simplex::<$ft, PHI>::new([0.0, 0.0], 1.0),
-                        [
-                            Simplex::<$ft, THETA>::vacuous(),
-                            Simplex::<$ft, THETA>::vacuous(),
-                        ],
-                    ),
+        impl ToInfoContent<$ft> for &InfoType {
+            fn psi(self) -> Simplex<$ft, PSI> {
+                match self {
+                    InfoType::Misinfo => Simplex::new([0.0, 0.99], 0.01),
+                    InfoType::Corrective => Simplex::new([0.99, 0.0], 0.01),
+                    _ => Simplex::vacuous(),
                 }
             }
-        }
-
-        impl From<InfoType> for InfoContent<$ft> {
-            fn from(value: InfoType) -> Self {
-                (&value).into()
+            fn s(self) -> Simplex<$ft, S> {
+                match self {
+                    InfoType::Corrective => Simplex::new([0.0, 1.0], 0.0),
+                    _ => Simplex::vacuous(),
+                }
+            }
+            fn pa(self) -> Simplex<$ft, P_A> {
+                Simplex::vacuous()
+            }
+            fn phi(self) -> Simplex<$ft, PHI> {
+                Simplex::vacuous()
+            }
+            fn cond_theta_phi(self) -> [Simplex<$ft, THETA>; PHI] {
+                [Simplex::vacuous(), Simplex::vacuous()]
             }
         }
     };
 }
 
+impl<V> From<&InfoType> for InfoContent<V>
+where
+    for<'a> &'a InfoType: ToInfoContent<V>,
+    V: Float + UlpsEq,
+{
+    fn from(value: &InfoType) -> Self {
+        InfoContent::new(
+            value.psi(),
+            value.s(),
+            value.pa(),
+            value.phi(),
+            value.cond_theta_phi(),
+        )
+    }
+}
+
+impl<V> From<InfoType> for InfoContent<V>
+where
+    for<'a> &'a InfoType: ToInfoContent<V>,
+    V: Float + UlpsEq,
+{
+    fn from(value: InfoType) -> Self {
+        (&value).into()
+    }
+}
 impl_info_content!(f32);
 impl_info_content!(f64);
 
@@ -124,5 +158,35 @@ mod tests {
     #[test]
     fn test_info_type() {
         println!("{}", InfoType::Misinfo);
+    }
+}
+
+pub struct TrustDists<V>
+where
+    V: Float,
+    Open01: Distribution<V>,
+{
+    pub misinfo: Beta<V>,
+    pub corrective: Beta<V>,
+    pub observed: Beta<V>,
+    pub inhivitive: Beta<V>,
+}
+
+impl<V> TrustDists<V>
+where
+    V: Float,
+    Open01: Distribution<V>,
+{
+    pub fn gen_map<R: Rng>(&self, rng: &mut R) -> impl Fn(&Info<V>) -> V {
+        let misinfo = self.misinfo.sample(rng);
+        let corrective = self.corrective.sample(rng);
+        let observed = self.observed.sample(rng);
+        let inhivitive = self.inhivitive.sample(rng);
+        move |info: &Info<V>| match info.info_type {
+            InfoType::Misinfo => misinfo,
+            InfoType::Corrective => corrective,
+            InfoType::Observed => observed,
+            InfoType::Inhivitive => inhivitive,
+        }
     }
 }
