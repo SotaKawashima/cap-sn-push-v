@@ -30,6 +30,7 @@ pub const FP_THETA: usize = P_THETA;
 pub const FP_PSI: usize = P_PSI;
 pub const FP_A: usize = P_A;
 
+#[derive(Debug, serde::Deserialize)]
 pub struct GlobalBaseRates<V> {
     pub psi: [V; PSI],
     pub ppsi: [V; P_PSI],

@@ -162,11 +162,12 @@ dependencies = [
 
 [[package]]
 name = "cap-sn"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "approx",
  "arrow2",
  "clap",
+ "either",
  "env_logger",
  "graph-lib",
  "log",
@@ -176,6 +177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subjective-logic",
+ "thiserror",
 ]
 
 [[package]]

@@ -1,20 +1,28 @@
 mod agent;
 mod cpt;
+mod dist;
 mod info;
 mod opinion;
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::iter::Sum;
-use std::ops::Deref;
 
-use agent::{Agent, Constants};
 use approx::UlpsEq;
 use arrow2::array::{PrimitiveArray, Utf8Array};
 use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Field, Schema};
 use arrow2::io::ipc::write::{Compression, FileWriter, WriteOptions};
-use cpt::{LevelSet, CPT};
+use dist::DistParam;
+use log::debug;
+use num_traits::{Float, FromPrimitive, NumAssign};
+use rand::Rng;
+use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
+use rand_distr::uniform::SampleUniform;
+use rand_distr::{Distribution, Open01, Standard};
+
+use agent::{Agent, Constants};
+use cpt::CptParams;
 use info::{Info, InfoType, ToInfoContent, TrustDists};
 use opinion::{
     FriendOpinions, FriendStaticOpinions, GlobalBaseRates, Opinions, PluralIgnorance,
@@ -23,29 +31,40 @@ use opinion::{
 
 use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, Graph};
-use log::debug;
-use num_traits::{Float, FromPrimitive, NumAssign};
-use rand::Rng;
-use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
-use rand_distr::{Beta, Distribution, Open01, Standard};
-use subjective_logic::harr2;
 
 #[derive(serde::Deserialize, Debug)]
-struct Strategy<V: Float> {
+struct Scenario<V: Float> {
+    events: Vec<Event>,
+    base_rates: GlobalBaseRates<V>,
     /// probability whether people has plural ignorance
     pi_prob: V,
-    scenario: Vec<Event>,
+    read_dist: DistParam<V>,
+    farrival_dist: DistParam<V>,
+    fread_dist: DistParam<V>,
+    pi_dist: DistParam<V>,
+    misinfo_trust: DistParam<V>,
+    corrective_trust: DistParam<V>,
+    observed_trust: DistParam<V>,
+    inhibitive_trust: DistParam<V>,
+    x0_dist: DistParam<V>,
+    x1_dist: DistParam<V>,
+    y_dist: DistParam<V>,
+    alpha: DistParam<V>,
+    beta: DistParam<V>,
+    lambda: DistParam<V>,
+    gamma: DistParam<V>,
+    delta: DistParam<V>,
 }
 
-fn extract_scenario<V>(
-    scenario: Vec<Event>,
-) -> (Vec<Info<V>>, BTreeMap<u32, BTreeMap<usize, usize>>)
+/// events: time -> agent_id -> info_id
+fn extract_events<V>(events: Vec<Event>) -> (Vec<Info<V>>, BTreeMap<u32, BTreeMap<usize, usize>>)
 where
     V: Float + UlpsEq,
     for<'a> &'a InfoType: ToInfoContent<V>,
 {
-    let mut info_types = Vec::new();
-    let scenario = scenario
+    let mut infos = Vec::new();
+    let mut info_id = 0;
+    let scenario = events
         .into_iter()
         .map(|Event { time, informers }| {
             (
@@ -57,8 +76,9 @@ where
                              agent_idx,
                              info_type,
                          }| {
-                            let info_id = info_types.len();
-                            info_types.push(info_type);
+                            let info = Info::new(info_id, info_type, info_type.into());
+                            info_id += 1;
+                            infos.push(info);
                             (agent_idx, info_id)
                         },
                     )
@@ -66,12 +86,6 @@ where
             )
         })
         .collect();
-
-    let infos = info_types
-        .iter()
-        .enumerate()
-        .map(|(id, t)| Info::new(id, *t, t.into()))
-        .collect::<Vec<_>>();
 
     (infos, scenario)
 }
@@ -143,10 +157,11 @@ impl Stat {
 
 pub struct Executor<V>
 where
-    V: Float,
+    V: Float + SampleUniform,
     Open01: Distribution<V>,
+    Standard: Distribution<V>,
 {
-    scenario: BTreeMap<u32, BTreeMap<usize, usize>>,
+    events: BTreeMap<u32, BTreeMap<usize, usize>>,
     stat: Stat,
     seed_state: u64,
     agents: Vec<Agent<V>>,
@@ -160,59 +175,36 @@ macro_rules! impl_executor {
         impl Executor<$ft> {
             pub fn try_new<R: Read>(
                 reader: R,
-                strategy: &str,
+                scenario: &str,
                 seed_state: u64,
             ) -> Result<Self, Box<dyn std::error::Error>> {
-                let Strategy { pi_prob, scenario } = serde_json::from_str(strategy)?;
-                let (infos, scenario) = extract_scenario(scenario);
+                let scenario: Scenario<$ft> = serde_json::from_str(scenario)?;
+                let (infos, events) = extract_events(scenario.events);
 
                 let constants = Constants::<$ft> {
-                    base_rates: GlobalBaseRates {
-                        s: [0.999, 0.001],
-                        fs: [0.99, 0.01],
-                        psi: [0.999, 0.001],
-                        ppsi: [0.999, 0.001],
-                        pa: [0.999, 0.001],
-                        fa: [0.999, 0.001],
-                        fpa: [0.999, 0.001],
-                        phi: [0.999, 0.001],
-                        fpsi: [0.999, 0.001],
-                        fppsi: [0.999, 0.001],
-                        fphi: [0.999, 0.001],
-                        theta: [0.999, 0.0005, 0.0005],
-                        ptheta: [0.999, 0.0005, 0.0005],
-                        ftheta: [0.999, 0.0005, 0.0005],
-                        fptheta: [0.999, 0.0005, 0.0005],
-                    },
-                    read_dist: Beta::new(7.0, 3.0)?,
-                    fclose_dist: Beta::new(9.0, 1.0)?,
-                    fread_dist: Beta::new(5.0, 5.0)?,
-                    pi_dist: Beta::new(19.0, 1.0)?,
-                    pi_prob,
+                    base_rates: scenario.base_rates,
+                    read_dist: scenario.read_dist.try_into()?,
+                    farrival_dist: scenario.farrival_dist.try_into()?,
+                    fread_dist: scenario.fread_dist.try_into()?,
+                    pi_dist: scenario.pi_dist.try_into()?,
+                    pi_prob: scenario.pi_prob,
                     trust_dists: TrustDists {
-                        misinfo: Beta::new(1.5, 4.5)?,
-                        corrective: Beta::new(4.5, 1.5)?,
-                        observed: Beta::new(4.5, 1.5)?,
-                        inhivitive: Beta::new(4.5, 1.5)?,
+                        misinfo: scenario.misinfo_trust.try_into()?,
+                        corrective: scenario.corrective_trust.try_into()?,
+                        observed: scenario.observed_trust.try_into()?,
+                        inhibitive: scenario.inhibitive_trust.try_into()?,
+                    },
+                    cpt_params: CptParams {
+                        x0_dist: scenario.x0_dist.try_into()?,
+                        x1_dist: scenario.x1_dist.try_into()?,
+                        y_dist: scenario.y_dist.try_into()?,
+                        alpha: scenario.alpha.try_into()?,
+                        beta: scenario.beta.try_into()?,
+                        lambda: scenario.lambda.try_into()?,
+                        gamma: scenario.gamma.try_into()?,
+                        delta: scenario.delta.try_into()?,
                     },
                 };
-
-                let x0 = -2.0;
-                let x1 = -50.0;
-                let y = -0.001;
-                let selfish_outcome_maps = [[0.0, x1, 0.0], [x0, x0, x0]];
-                let sharing_outcome_maps = [
-                    harr2![[0.0, x1, 0.0], [x0, x0, x0]],
-                    harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]],
-                ];
-                let selfish = [
-                    LevelSet::<_, $ft>::new(&selfish_outcome_maps[0]),
-                    LevelSet::<_, $ft>::new(&selfish_outcome_maps[1]),
-                ];
-                let sharing = [
-                    LevelSet::<_, $ft>::new(sharing_outcome_maps[0].deref()),
-                    LevelSet::<_, $ft>::new(sharing_outcome_maps[1].deref()),
-                ];
 
                 let graph: DiGraphB = ParseBuilder::new(reader, DataFormat::EdgeList)
                     .parse()
@@ -225,15 +217,12 @@ macro_rules! impl_executor {
                         StaticOpinions::<$ft>::new(),
                         FriendOpinions::new(),
                         FriendStaticOpinions::<$ft>::new(),
-                        CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
-                        selfish.clone(),
-                        sharing.clone(),
                         infos.len(),
                     ));
                 }
 
                 Ok(Self {
-                    scenario,
+                    events,
                     stat: Stat::default(),
                     seed_state,
                     agents,
@@ -258,6 +247,7 @@ where
         + Default
         + Sum
         + PluralIgnorance
+        + SampleUniform
         + std::fmt::Debug,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
@@ -300,13 +290,13 @@ where
         R: Rng,
     {
         let mut received = Vec::new();
-        let mut scenario = self.scenario.clone();
+        let mut events = self.events.clone();
         let mut t = 0;
         let mut num_view_map = BTreeMap::<InfoType, u32>::new();
         let mut num_sharing_map = BTreeMap::<InfoType, u32>::new();
         let mut num_receipt_map = BTreeMap::<InfoType, u32>::new();
-        while !received.is_empty() || !scenario.is_empty() {
-            if let Some(informers) = scenario.remove(&t) {
+        while !received.is_empty() || !events.is_empty() {
+            if let Some(informers) = events.remove(&t) {
                 for (agent_idx, info_id) in informers {
                     received.push(Receipt {
                         agent_idx,
@@ -396,20 +386,18 @@ where
 mod tests {
     use crate::{
         agent::{Agent, Constants},
-        cpt::{LevelSet, CPT},
-        extract_scenario,
+        cpt::CptParams,
+        extract_events,
         info::TrustDists,
         info::{Info, InfoType},
         opinion::{
             FriendOpinions, FriendStaticOpinions, GlobalBaseRates, Opinions, StaticOpinions,
         },
-        Strategy,
+        Scenario,
     };
 
-    use rand_distr::Beta;
+    use either::Either::Left;
     use serde_json::json;
-    use std::ops::Deref;
-    use subjective_logic::harr2;
 
     #[test]
     fn test_agent() {
@@ -431,48 +419,42 @@ mod tests {
                 ftheta: [0.999, 0.0005, 0.0005],
                 fptheta: [0.999, 0.0005, 0.0005],
             },
-            read_dist: Beta::new(7.0, 3.0).unwrap(),
-            fclose_dist: Beta::new(9.0, 1.0).unwrap(),
-            fread_dist: Beta::new(5.0, 5.0).unwrap(),
-            pi_dist: Beta::new(0.5 * 10.0, (1.0 - 0.5) * 10.0).unwrap(),
+            read_dist: Left(0.5),
+            farrival_dist: Left(0.5),
+            fread_dist: Left(0.5),
+            pi_dist: Left(0.5),
             pi_prob: 0.5,
             trust_dists: TrustDists {
-                misinfo: Beta::new(1.5, 4.5).unwrap(),
-                corrective: Beta::new(4.5, 1.5).unwrap(),
-                observed: Beta::new(4.5, 1.5).unwrap(),
-                inhivitive: Beta::new(4.5, 1.5).unwrap(),
+                misinfo: Left(0.5),
+                corrective: Left(0.5),
+                observed: Left(0.5),
+                inhibitive: Left(0.5),
+            },
+            cpt_params: CptParams {
+                x0_dist: Left(0.5),
+                x1_dist: Left(0.5),
+                y_dist: Left(0.5),
+                alpha: Left(0.88),
+                beta: Left(0.88),
+                lambda: Left(2.25),
+                gamma: Left(0.61),
+                delta: Left(0.69),
             },
         };
 
         let info_types = [InfoType::Misinfo];
         let infos = info_types.map(|t| Info::new(0, t, t.into()));
 
-        let x0 = -0.1;
-        let x1 = -2.0;
-        let y = -0.001;
-        let selfish_outcome_maps = [[0.0, x1, 0.0], [x0, x0, x0]];
-        let sharing_outcome_maps = [
-            harr2![[0.0, x1, 0.0], [x0, x0, x0]],
-            harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]],
-        ];
-
         let mut a = Agent::new(
             Opinions::new(),
             StaticOpinions::<f32>::new(),
             FriendOpinions::new(),
             FriendStaticOpinions::<f32>::new(),
-            CPT::new(0.88, 0.88, 2.25, 0.61, 0.69),
-            [
-                LevelSet::<_, f32>::new(&selfish_outcome_maps[0]),
-                LevelSet::<_, f32>::new(&selfish_outcome_maps[1]),
-            ],
-            [
-                LevelSet::<_, f32>::new(sharing_outcome_maps[0].deref()),
-                LevelSet::<_, f32>::new(sharing_outcome_maps[1].deref()),
-            ],
             1,
         );
 
+        a.prospect.reset(-0.1, -2.0, -0.001);
+        a.cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
         a.reset(0.5, 0.5, 0.5, 0.0, |_| 0.90, &constants.base_rates, &infos);
 
         let receipt_prob = 0.0;
@@ -483,11 +465,10 @@ mod tests {
     }
 
     #[test]
-    fn test_strategy() {
+    fn test_scenario() {
         let v = json!(
             {
-                "pi_prob": 1.0,
-                "scenario": [
+                "events": [
                     {
                         "time": 0,
                         "informers": [
@@ -499,12 +480,46 @@ mod tests {
                         "time": 1,
                         "informers": [{"agent_idx": 2, "info_type": "Misinfo"}]
                     },
-                ]
+                ],
+                "base_rates": {
+                    "s": [0.999, 0.001],
+                    "fs": [0.99, 0.01],
+                    "psi": [0.999, 0.001],
+                    "ppsi": [0.999, 0.001],
+                    "pa": [0.999, 0.001],
+                    "fa": [0.999, 0.001],
+                    "fpa": [0.999, 0.001],
+                    "phi": [0.999, 0.001],
+                    "fpsi": [0.999, 0.001],
+                    "fppsi": [0.999, 0.001],
+                    "fphi": [0.999, 0.001],
+                    "theta": [0.999, 0.0005, 0.0005],
+                    "ptheta": [0.999, 0.0005, 0.0005],
+                    "ftheta": [0.999, 0.0005, 0.0005],
+                    "fptheta": [0.999, 0.0005, 0.0005],
+                },
+                "pi_prob": 1.0,
+                "read_dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } },
+                "farrival_dist": { "Beta": {"alpha": 3.0, "beta": 3.0}},
+                "fread_dist": {"Beta": {"alpha": 3.0, "beta": 3.0}},
+                "pi_dist": {"Fixed": {"value": 0.5}},
+                "misinfo_trust": {"Beta": { "alpha": 3.0, "beta": 3.0 }},
+                "corrective_trust": {"Beta":{ "alpha": 3.0, "beta": 3.0 }},
+                "observed_trust": "Standard",
+                "inhibitive_trust": {"Uniform": { "low": 0.5, "high": 1.0 }},
+                "x0_dist": {"Fixed": {"value": -2.0}},
+                "x1_dist": {"Fixed": {"value": -50.0}},
+                "y_dist": {"Fixed": {"value": -0.001}},
+                "alpha":  { "Fixed": { "value": 0.88 }},
+                "beta":   { "Fixed": { "value": 0.88 }},
+                "lambda": { "Fixed": { "value": 2.25 }},
+                "gamma":  { "Fixed": { "value": 0.61 }},
+                "delta":  { "Fixed": { "value": 0.69 }},
             }
         );
-        let s: Strategy<f32> = serde_json::from_value(v).unwrap();
+        let s: Scenario<f32> = serde_json::from_value(v).unwrap();
         println!("{:?}", s);
-        let (is, sc) = extract_scenario::<f32>(s.scenario);
+        let (is, sc) = extract_events::<f32>(s.events);
         println!("{:?}", is);
         println!("{:?}", sc);
     }

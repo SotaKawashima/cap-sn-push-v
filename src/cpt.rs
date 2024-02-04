@@ -1,8 +1,16 @@
-use std::{iter::Sum, ops::AddAssign};
+use std::{
+    iter::Sum,
+    ops::{AddAssign, Deref},
+};
 
 use approx::{ulps_eq, UlpsEq};
+use either::Either;
 use num_traits::Float;
-use subjective_logic::mul::IndexedContainer;
+use rand::Rng;
+use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
+use subjective_logic::{harr2, mul::IndexedContainer};
+
+use crate::dist::{sample, Dist};
 
 #[derive(Clone, Default, Debug)]
 pub struct CPT<V: Float> {
@@ -13,15 +21,31 @@ pub struct CPT<V: Float> {
     delta: V,
 }
 
-impl<V: Float + UlpsEq + AddAssign + Sum> CPT<V> {
-    pub fn new(alpha: V, beta: V, lambda: V, gamma: V, delta: V) -> Self {
-        Self {
-            alpha,
-            beta,
-            lambda,
-            gamma,
-            delta,
-        }
+impl<V> CPT<V>
+where
+    V: Float + UlpsEq + AddAssign + Sum,
+{
+    pub fn reset(&mut self, alpha: V, beta: V, lambda: V, gamma: V, delta: V) {
+        self.alpha = alpha;
+        self.beta = beta;
+        self.lambda = lambda;
+        self.gamma = gamma;
+        self.delta = delta;
+    }
+
+    pub fn reset_with(&mut self, params: &CptParams<V>, rng: &mut impl Rng)
+    where
+        V: SampleUniform,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+    {
+        self.reset(
+            sample(&params.alpha, rng),
+            sample(&params.beta, rng),
+            sample(&params.lambda, rng),
+            sample(&params.gamma, rng),
+            sample(&params.delta, rng),
+        );
     }
 
     fn w(p: V, e: V) -> V {
@@ -98,7 +122,7 @@ impl<V: Float + UlpsEq + AddAssign + Sum> CPT<V> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct LevelSet<Idx, V> {
     positive: Vec<(V, Vec<Idx>)>,
     negative: Vec<(V, Vec<Idx>)>,
@@ -147,6 +171,64 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
     }
 }
 
+pub struct CptParams<V>
+where
+    V: Float + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+{
+    pub x0_dist: Either<V, Dist<V>>,
+    pub x1_dist: Either<V, Dist<V>>,
+    pub y_dist: Either<V, Dist<V>>,
+    pub alpha: Either<V, Dist<V>>,
+    pub beta: Either<V, Dist<V>>,
+    pub lambda: Either<V, Dist<V>>,
+    pub gamma: Either<V, Dist<V>>,
+    pub delta: Either<V, Dist<V>>,
+}
+
+#[derive(Default)]
+pub struct Prospect<V: Float> {
+    pub selfish: [LevelSet<usize, V>; 2],
+    pub sharing: [LevelSet<[usize; 2], V>; 2],
+}
+
+impl<V> Prospect<V>
+where
+    V: Float,
+{
+    pub fn reset(&mut self, x0: V, x1: V, y: V) {
+        let selfish_outcome_maps = [[V::zero(), x1, V::zero()], [x0, x0, x0]];
+        let sharing_outcome_maps = [
+            harr2![[V::zero(), x1, V::zero()], [x0, x0, x0]],
+            harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]],
+        ];
+        let selfish = [
+            LevelSet::new(&selfish_outcome_maps[0]),
+            LevelSet::new(&selfish_outcome_maps[1]),
+        ];
+        let sharing = [
+            LevelSet::new(sharing_outcome_maps[0].deref()),
+            LevelSet::new(sharing_outcome_maps[1].deref()),
+        ];
+
+        self.selfish = selfish;
+        self.sharing = sharing;
+    }
+
+    pub fn reset_with(&mut self, params: &CptParams<V>, rng: &mut impl Rng)
+    where
+        V: SampleUniform,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+    {
+        let x0 = sample(&params.x0_dist, rng);
+        let x1 = sample(&params.x1_dist, rng);
+        let y = sample(&params.y_dist, rng);
+        self.reset(x0, x1, y);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::cpt::{LevelSet, CPT};
@@ -177,7 +259,13 @@ mod tests {
     fn test_cpt() {
         let outcome = [6.0, 2.0, 4.0, -3.0, -1.0, -5.0];
         let prob = [1.0 / 6.0; 6];
-        let cpt = CPT::new(0.88, 0.88, 2.25, 0.61, 0.69);
+        let cpt = CPT {
+            alpha: 0.88,
+            beta: 0.88,
+            lambda: 2.25,
+            gamma: 0.61,
+            delta: 0.69,
+        };
         let ls = LevelSet::<_, f32>::new(&outcome);
         let a = cpt.valuate(&ls, &prob);
         let b = v(2.0) * (wp(1.0 / 2.0) - wp(1.0 / 3.0))
@@ -210,7 +298,13 @@ mod tests {
             [1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
             [1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0]
         ];
-        let cpt = CPT::new(0.88, 0.88, 2.25, 0.61, 0.69);
+        let cpt = CPT {
+            alpha: 0.88,
+            beta: 0.88,
+            lambda: 2.25,
+            gamma: 0.61,
+            delta: 0.69,
+        };
         let ls = LevelSet::<_, f32>::new(outcome.deref());
         let a = cpt.valuate(&ls, &prob);
         let b = v(2.0) * (wp(1.0 / 2.0) - wp(1.0 / 3.0))
@@ -289,7 +383,13 @@ mod tests {
         let y = -0.01;
         let sharing_outcome_maps = harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]];
         let level_sets = LevelSet::<_, f32>::new(sharing_outcome_maps.deref());
-        let cpt = CPT::new(0.88, 0.88, 2.25, 0.61, 0.69);
+        let cpt = CPT {
+            alpha: 0.88,
+            beta: 0.88,
+            lambda: 2.25,
+            gamma: 0.61,
+            delta: 0.69,
+        };
         let a = p.into_iter().sum::<f32>();
         println!("{}, {}", a, relative_eq!(a, 1.0));
         println!("{:?}", level_sets);

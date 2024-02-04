@@ -1,12 +1,14 @@
 use approx::UlpsEq;
+use either::Either;
 use log::debug;
 use num_traits::{Float, NumAssign};
 use rand::Rng;
-use rand_distr::{Beta, Distribution, Open01, Standard};
+use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use std::{array, iter::Sum};
 
 use crate::{
-    cpt::{LevelSet, CPT},
+    cpt::{CptParams, Prospect, CPT},
+    dist::{sample, Dist},
     info::{Info, TrustDists},
     opinion::{
         compute_opinions, FriendOpinions, FriendStaticOpinions, GlobalBaseRates, Opinions,
@@ -14,28 +16,20 @@ use crate::{
     },
 };
 
-pub struct Constants<V: Float>
+pub struct Constants<V>
 where
+    V: Float + SampleUniform,
     Open01: Distribution<V>,
+    Standard: Distribution<V>,
 {
     pub base_rates: GlobalBaseRates<V>,
-    pub read_dist: Beta<V>,
-    pub fclose_dist: Beta<V>,
-    pub fread_dist: Beta<V>,
+    pub read_dist: Either<V, Dist<V>>,
+    pub farrival_dist: Either<V, Dist<V>>,
+    pub fread_dist: Either<V, Dist<V>>,
+    pub pi_dist: Either<V, Dist<V>>,
     pub pi_prob: V,
-    pub pi_dist: Beta<V>,
     pub trust_dists: TrustDists<V>,
-}
-
-#[derive(Debug)]
-pub struct Behavior {
-    pub selfish: bool,
-    pub sharing: bool,
-}
-
-pub struct Prospect<V: Float> {
-    selfish: [LevelSet<usize, V>; 2],
-    sharing: [LevelSet<[usize; 2], V>; 2],
+    pub cpt_params: CptParams<V>,
 }
 
 #[derive(Clone, Default)]
@@ -44,9 +38,15 @@ pub struct ParamsForInfo<V: Float> {
     shared: bool,
 }
 
+#[derive(Debug)]
+pub struct Behavior {
+    pub selfish: bool,
+    pub sharing: bool,
+}
+
 pub struct Agent<V: Float> {
-    cpt: CPT<V>,
-    prospect: Prospect<V>,
+    pub cpt: CPT<V>,
+    pub prospect: Prospect<V>,
     op: Opinions<V>,
     so: StaticOpinions<V>,
     fop: FriendOpinions<V>,
@@ -60,7 +60,14 @@ pub struct Agent<V: Float> {
 
 impl<V> Agent<V>
 where
-    V: Float + UlpsEq + NumAssign + Sum + Default + PluralIgnorance + std::fmt::Debug,
+    V: Float
+        + UlpsEq
+        + NumAssign
+        + Sum
+        + Default
+        + PluralIgnorance
+        + std::fmt::Debug
+        + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
@@ -69,14 +76,11 @@ where
         so: StaticOpinions<V>,
         fop: FriendOpinions<V>,
         fso: FriendStaticOpinions<V>,
-        cpt: CPT<V>,
-        selfish: [LevelSet<usize, V>; 2],
-        sharing: [LevelSet<[usize; 2], V>; 2],
         info_count: usize,
     ) -> Self {
         Self {
-            cpt,
-            prospect: Prospect { selfish, sharing },
+            cpt: Default::default(),
+            prospect: Default::default(),
             op,
             so,
             fop,
@@ -119,13 +123,15 @@ where
     }
 
     pub fn reset_with<R: Rng>(&mut self, constants: &Constants<V>, infos: &[Info<V>], rng: &mut R) {
-        let r = rng.gen::<V>();
-        let s = constants.pi_dist.sample(rng);
+        self.cpt.reset_with(&constants.cpt_params, rng);
+        self.prospect.reset_with(&constants.cpt_params, rng);
 
+        let r = rng.gen::<V>();
+        let s = sample(&constants.pi_dist, rng);
         self.reset(
-            constants.read_dist.sample(rng),
-            constants.fclose_dist.sample(rng),
-            constants.fread_dist.sample(rng),
+            sample(&constants.read_dist, rng),
+            sample(&constants.farrival_dist, rng),
+            sample(&constants.fread_dist, rng),
             if constants.pi_prob > r { s } else { V::zero() },
             constants.trust_dists.gen_map(rng),
             &constants.base_rates,
@@ -168,87 +174,6 @@ where
         trust: V,
         base_rates: &GlobalBaseRates<V>,
     ) -> Behavior {
-        // debug!("b_PA|PTH_1:{:?}", self.so.cond_pa[1].belief);
-
-        // FuseOp::Wgh.fuse_assign(&mut self.op.s, &info.content.s.discount(trust));
-        // FuseOp::Wgh.fuse_assign(&mut self.op.psi, &info.content.psi.discount(trust));
-        // FuseOp::Wgh.fuse_assign(&mut self.op.phi, &info.content.phi.discount(trust));
-        // for i in 0..info.content.cond_theta_phi.len() {
-        //     FuseOp::Wgh.fuse_assign(
-        //         &mut self.fop.cond_ftheta_fphi[i],
-        //         &info.content.cond_theta_phi[i].discount(trust),
-        //     )
-        // }
-
-        // let pa = {
-        //     let mut pa = self
-        //         .op
-        //         .s
-        //         .deduce(&self.so.cond_ppsi)
-        //         .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi))
-        //         .deduce(&self.so.cond_ptheta)
-        //         .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
-        //         .deduce(&self.so.cond_pa)
-        //         .unwrap_or_else(|| Opinion::vacuous_with(base_rates.pa));
-
-        //     // an opinion of PA is computed by using aleatory cummulative fusion.
-        //     FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(trust));
-        //     pa
-        // };
-
-        // debug!(" P_PA  :{:?}", pa.projection());
-
-        // // compute friends opinions
-        // let fpsi_ded = self
-        //     .op
-        //     .s
-        //     .deduce(&self.so.cond_fpsi)
-        //     .unwrap_or_else(|| Opinion::vacuous_with(base_rates.fpsi));
-        // let (fop, fa) = self.fop.compute_new_friend_op(
-        //     &self.fso,
-        //     info,
-        //     &fpsi_ded,
-        //     receipt_prob * self.friend_read_prob * trust,
-        //     base_rates,
-        // );
-        // self.fop.update(fop);
-
-        // let theta_ded_2 = self
-        //     .op
-        //     .phi
-        //     .deduce(&self.op.cond_theta_phi)
-        //     .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
-
-        // let theta = {
-        //     let mut theta_ded_1 = Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), fa.as_ref())
-        //         .deduce(&self.so.cond_theta)
-        //         .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
-        //     FuseOp::Wgh.fuse_assign(&mut theta_ded_1, &theta_ded_2);
-        //     theta_ded_1
-        // };
-
-        // // predict new friends' opinions in case of sharing
-        // let (pred_fop, pred_fa) = self.fop.compute_new_friend_op(
-        //     &self.fso,
-        //     info,
-        //     &fpsi_ded,
-        //     self.friend_arrival_prob * self.friend_read_prob * trust,
-        //     base_rates,
-        // );
-        // let pred_theta = {
-        //     let mut pred_theta_ded_1 =
-        //         Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), pred_fa.as_ref())
-        //             .deduce(&self.so.cond_theta)
-        //             .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
-        //     FuseOp::Wgh.fuse_assign(&mut pred_theta_ded_1, &theta_ded_2);
-        //     pred_theta_ded_1
-        // };
-
-        // debug!(" P_FA  :{:?}", fa.projection());
-        // debug!("~P_FA  :{:?}", pred_fa.projection());
-        // debug!(" P_TH  :{:?}", theta.projection());
-        // debug!("~P_TH  :{:?}", pred_theta.projection());
-
         let mut temp = compute_opinions(
             &mut self.op,
             &mut self.fop,

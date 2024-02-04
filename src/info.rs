@@ -1,12 +1,16 @@
 use std::fmt::Display;
 
 use approx::UlpsEq;
+use either::Either;
 use num_traits::Float;
 use rand::Rng;
-use rand_distr::{Beta, Distribution, Open01};
+use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use subjective_logic::mul::Simplex;
 
-use crate::opinion::{PHI, PSI, P_A, S, THETA};
+use crate::{
+    dist::{sample, Dist},
+    opinion::{PHI, PSI, P_A, S, THETA},
+};
 
 #[derive(Debug)]
 pub struct InfoContent<V: Float> {
@@ -72,7 +76,7 @@ pub enum InfoType {
     Misinfo,
     Corrective,
     Observed,
-    Inhivitive,
+    Inhibitive,
 }
 
 impl Display for InfoType {
@@ -81,7 +85,7 @@ impl Display for InfoType {
             InfoType::Misinfo => write!(f, "misinfo"),
             InfoType::Corrective => write!(f, "correction"),
             InfoType::Observed => write!(f, "observed"),
-            InfoType::Inhivitive => write!(f, "inhivitive"),
+            InfoType::Inhibitive => write!(f, "inhivitive"),
         }
     }
 }
@@ -163,30 +167,33 @@ mod tests {
 
 pub struct TrustDists<V>
 where
-    V: Float,
+    V: Float + SampleUniform,
     Open01: Distribution<V>,
+    Standard: Distribution<V>,
 {
-    pub misinfo: Beta<V>,
-    pub corrective: Beta<V>,
-    pub observed: Beta<V>,
-    pub inhivitive: Beta<V>,
+    pub misinfo: Either<V, Dist<V>>,
+    pub corrective: Either<V, Dist<V>>,
+    pub observed: Either<V, Dist<V>>,
+    pub inhibitive: Either<V, Dist<V>>,
 }
 
 impl<V> TrustDists<V>
 where
-    V: Float,
+    V: Float + SampleUniform,
     Open01: Distribution<V>,
+    Standard: Distribution<V>,
 {
     pub fn gen_map<R: Rng>(&self, rng: &mut R) -> impl Fn(&Info<V>) -> V {
-        let misinfo = self.misinfo.sample(rng);
-        let corrective = self.corrective.sample(rng);
-        let observed = self.observed.sample(rng);
-        let inhivitive = self.inhivitive.sample(rng);
+        let misinfo = sample(&self.misinfo, rng);
+        let corrective = sample(&self.corrective, rng);
+        let observed = sample(&self.observed, rng);
+        let inhibitive = sample(&self.inhibitive, rng);
+
         move |info: &Info<V>| match info.info_type {
             InfoType::Misinfo => misinfo,
             InfoType::Corrective => corrective,
             InfoType::Observed => observed,
-            InfoType::Inhivitive => inhivitive,
+            InfoType::Inhibitive => inhibitive,
         }
     }
 }
