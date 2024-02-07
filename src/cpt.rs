@@ -8,9 +8,10 @@ use either::Either;
 use num_traits::Float;
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
+use serde_with::{serde_as, TryFromInto};
 use subjective_logic::{harr2, mul::IndexedContainer};
 
-use crate::dist::{sample, Dist};
+use crate::dist::{sample, Dist, DistParam};
 
 #[derive(Clone, Default, Debug)]
 pub struct CPT<V: Float> {
@@ -171,19 +172,30 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
     }
 }
 
+#[serde_as]
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
 pub struct CptParams<V>
 where
     V: Float + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub x0_dist: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub x1_dist: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub y_dist: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub alpha: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub beta: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub lambda: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub gamma: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub delta: Either<V, Dist<V>>,
 }
 

@@ -19,6 +19,26 @@ pub enum DistParamError {
     Beta(#[from] rand_distr::BetaError),
 }
 
+impl<V> TryFrom<DistParam<V>> for Either<V, Dist<V>>
+where
+    V: Float + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+{
+    type Error = rand_distr::BetaError;
+
+    fn try_from(value: DistParam<V>) -> Result<Self, Self::Error> {
+        match value {
+            DistParam::Fixed { value } => Ok(Left(value)),
+            DistParam::Beta { alpha, beta } => {
+                Beta::new(alpha, beta).map(|dist| Right(Dist::Beta(dist)))
+            }
+            DistParam::Standard => Ok(Right(Dist::Standard(Standard))),
+            DistParam::Uniform { low, high } => Ok(Right(Dist::Uniform(Uniform::new(low, high)))),
+        }
+    }
+}
+
 pub enum Dist<V>
 where
     V: Float + SampleUniform,
@@ -45,26 +65,6 @@ where
     }
 }
 
-impl<V> TryFrom<DistParam<V>> for Either<V, Dist<V>>
-where
-    V: Float + SampleUniform,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-{
-    type Error = rand_distr::BetaError;
-
-    fn try_from(value: DistParam<V>) -> Result<Self, Self::Error> {
-        match value {
-            DistParam::Fixed { value } => Ok(Left(value)),
-            DistParam::Beta { alpha, beta } => {
-                Beta::new(alpha, beta).map(|dist| Right(Dist::Beta(dist)))
-            }
-            DistParam::Standard => Ok(Right(Dist::Standard(Standard))),
-            DistParam::Uniform { low, high } => Ok(Right(Dist::Uniform(Uniform::new(low, high)))),
-        }
-    }
-}
-
 pub fn sample<V>(dist: &Either<V, Dist<V>>, rng: &mut impl Rng) -> V
 where
     V: Float + SampleUniform,
@@ -72,7 +72,6 @@ where
     Standard: Distribution<V>,
 {
     dist.as_ref()
-        .map_left(|v| *v)
-        .map_right(|dist| dist.sample(rng))
+        .map_either(Clone::clone, |dist| dist.sample(rng))
         .into_inner()
 }

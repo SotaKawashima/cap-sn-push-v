@@ -1,19 +1,22 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::AddAssign};
 
 use approx::UlpsEq;
 use either::Either;
 use num_traits::Float;
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
+use serde::Deserialize;
+use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::Simplex;
 
 use crate::{
-    dist::{sample, Dist},
+    dist::{Dist, DistParam},
     opinion::{PHI, PSI, P_A, S, THETA},
 };
 
 #[derive(Debug)]
 pub struct InfoContent<V: Float> {
+    pub label: InfoLabel,
     pub psi: Simplex<V, PSI>,
     pub s: Simplex<V, S>,
     pub pa: Simplex<V, P_A>,
@@ -23,6 +26,7 @@ pub struct InfoContent<V: Float> {
 
 impl<V: Float> InfoContent<V> {
     pub fn new(
+        label: InfoLabel,
         psi: Simplex<V, PSI>,
         s: Simplex<V, S>,
         pa: Simplex<V, P_A>,
@@ -30,6 +34,7 @@ impl<V: Float> InfoContent<V> {
         cond_theta_phi: [Simplex<V, THETA>; PHI],
     ) -> Self {
         Self {
+            label,
             psi,
             s,
             pa,
@@ -40,22 +45,20 @@ impl<V: Float> InfoContent<V> {
 }
 
 #[derive(Debug)]
-pub struct Info<V: Float> {
-    pub id: usize,
-    pub info_type: InfoType,
-    pub content: InfoContent<V>,
+pub struct Info<'a, V: Float> {
+    pub idx: usize,
     pub num_shared: usize,
+    pub content: &'a InfoContent<V>,
 }
 
-impl<V: Float> Info<V> {
+impl<'a, V: Float> Info<'a, V> {
     pub fn reset(&mut self) {
         self.num_shared = 0;
     }
 
-    pub fn new(id: usize, info_type: InfoType, content: InfoContent<V>) -> Self {
+    pub fn new(idx: usize, content: &'a InfoContent<V>) -> Self {
         Self {
-            id,
-            info_type,
+            idx,
             content,
             num_shared: Default::default(),
         }
@@ -71,109 +74,125 @@ impl<V: Float> Info<V> {
     }
 }
 
-#[derive(Debug, serde::Deserialize, Clone, PartialEq, PartialOrd, Eq, Ord, Copy)]
-pub enum InfoType {
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+#[serde(bound(deserialize = "V: Deserialize<'de>"))]
+pub enum InfoObject<V>
+where
+    V: Float + UlpsEq + AddAssign,
+{
+    Misinfo {
+        #[serde_as(as = "TryFromInto<([V; PSI], V)>")]
+        psi: Simplex<V, PSI>,
+    },
+    Corrective {
+        #[serde_as(as = "TryFromInto<([V; PSI], V)>")]
+        psi: Simplex<V, PSI>,
+        #[serde_as(as = "TryFromInto<([V; S], V)>")]
+        s: Simplex<V, S>,
+    },
+    Observed {
+        #[serde_as(as = "TryFromInto<([V; P_A], V)>")]
+        pa: Simplex<V, P_A>,
+    },
+    Inhibitive {
+        #[serde_as(as = "TryFromInto<([V; PHI], V)>")]
+        phi: Simplex<V, PSI>,
+        #[serde_as(as = "[TryFromInto<([V; THETA], V)>; 2]")]
+        cond_theta_phi: [Simplex<V, THETA>; PHI],
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Copy)]
+pub enum InfoLabel {
     Misinfo,
     Corrective,
     Observed,
     Inhibitive,
 }
 
-impl Display for InfoType {
+impl Display for InfoLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InfoType::Misinfo => write!(f, "misinfo"),
-            InfoType::Corrective => write!(f, "correction"),
-            InfoType::Observed => write!(f, "observed"),
-            InfoType::Inhibitive => write!(f, "inhivitive"),
+            InfoLabel::Misinfo => write!(f, "misinfo"),
+            InfoLabel::Corrective => write!(f, "correction"),
+            InfoLabel::Observed => write!(f, "observed"),
+            InfoLabel::Inhibitive => write!(f, "inhivitive"),
         }
     }
 }
 
-pub trait ToInfoContent<V: Float> {
-    fn psi(self) -> Simplex<V, PSI>;
-    fn s(self) -> Simplex<V, S>;
-    fn pa(self) -> Simplex<V, P_A>;
-    fn phi(self) -> Simplex<V, PHI>;
-    fn cond_theta_phi(self) -> [Simplex<V, THETA>; PHI];
-}
-
-macro_rules! impl_info_content {
-    ($ft: ty) => {
-        impl ToInfoContent<$ft> for &InfoType {
-            fn psi(self) -> Simplex<$ft, PSI> {
-                match self {
-                    InfoType::Misinfo => Simplex::new([0.0, 0.99], 0.01),
-                    InfoType::Corrective => Simplex::new([0.99, 0.0], 0.01),
-                    _ => Simplex::vacuous(),
-                }
-            }
-            fn s(self) -> Simplex<$ft, S> {
-                match self {
-                    InfoType::Corrective => Simplex::new([0.0, 1.0], 0.0),
-                    _ => Simplex::vacuous(),
-                }
-            }
-            fn pa(self) -> Simplex<$ft, P_A> {
-                Simplex::vacuous()
-            }
-            fn phi(self) -> Simplex<$ft, PHI> {
-                Simplex::vacuous()
-            }
-            fn cond_theta_phi(self) -> [Simplex<$ft, THETA>; PHI] {
-                [Simplex::vacuous(), Simplex::vacuous()]
-            }
+impl<V> From<InfoObject<V>> for InfoContent<V>
+where
+    V: Float + UlpsEq + AddAssign,
+{
+    fn from(value: InfoObject<V>) -> Self {
+        match value {
+            InfoObject::Misinfo { psi } => InfoContent::new(
+                InfoLabel::Misinfo,
+                psi,
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                [Simplex::vacuous(), Simplex::vacuous()],
+            ),
+            InfoObject::Corrective { psi, s } => InfoContent::new(
+                InfoLabel::Corrective,
+                psi,
+                s,
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                [Simplex::vacuous(), Simplex::vacuous()],
+            ),
+            InfoObject::Observed { pa } => InfoContent::new(
+                InfoLabel::Observed,
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                pa,
+                Simplex::vacuous(),
+                [Simplex::vacuous(), Simplex::vacuous()],
+            ),
+            InfoObject::Inhibitive {
+                phi,
+                cond_theta_phi,
+            } => InfoContent::new(
+                InfoLabel::Inhibitive,
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                Simplex::vacuous(),
+                phi,
+                cond_theta_phi,
+            ),
         }
-    };
-}
-
-impl<V> From<&InfoType> for InfoContent<V>
-where
-    for<'a> &'a InfoType: ToInfoContent<V>,
-    V: Float + UlpsEq,
-{
-    fn from(value: &InfoType) -> Self {
-        InfoContent::new(
-            value.psi(),
-            value.s(),
-            value.pa(),
-            value.phi(),
-            value.cond_theta_phi(),
-        )
     }
 }
-
-impl<V> From<InfoType> for InfoContent<V>
-where
-    for<'a> &'a InfoType: ToInfoContent<V>,
-    V: Float + UlpsEq,
-{
-    fn from(value: InfoType) -> Self {
-        (&value).into()
-    }
-}
-impl_info_content!(f32);
-impl_info_content!(f64);
 
 #[cfg(test)]
 mod tests {
-    use super::InfoType;
+    use super::InfoLabel;
 
     #[test]
     fn test_info_type() {
-        println!("{}", InfoType::Misinfo);
+        println!("{}", InfoLabel::Misinfo);
     }
 }
 
+#[serde_as]
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
 pub struct TrustDists<V>
 where
     V: Float + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub misinfo: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub corrective: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub observed: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<DistParam<V>>")]
     pub inhibitive: Either<V, Dist<V>>,
 }
 
@@ -183,17 +202,38 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    pub fn gen_map<R: Rng>(&self, rng: &mut R) -> impl Fn(&Info<V>) -> V {
-        let misinfo = sample(&self.misinfo, rng);
-        let corrective = sample(&self.corrective, rng);
-        let observed = sample(&self.observed, rng);
-        let inhibitive = sample(&self.inhibitive, rng);
+    pub fn gen_map<R: Rng>(&self, rng: &mut R) -> impl Fn(&Info<V>) -> V
+    where
+        V: SampleUniform,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+    {
+        let misinfo = self
+            .misinfo
+            .as_ref()
+            .map_either(Clone::clone, |dist| dist.sample(rng))
+            .into_inner();
+        let corrective = self
+            .corrective
+            .as_ref()
+            .map_either(Clone::clone, |dist| dist.sample(rng))
+            .into_inner();
+        let observed = self
+            .observed
+            .as_ref()
+            .map_either(Clone::clone, |dist| dist.sample(rng))
+            .into_inner();
+        let inhibitive = self
+            .inhibitive
+            .as_ref()
+            .map_either(Clone::clone, |dist| dist.sample(rng))
+            .into_inner();
 
-        move |info: &Info<V>| match info.info_type {
-            InfoType::Misinfo => misinfo,
-            InfoType::Corrective => corrective,
-            InfoType::Observed => observed,
-            InfoType::Inhibitive => inhibitive,
+        move |info: &Info<V>| match info.content.label {
+            InfoLabel::Misinfo => misinfo,
+            InfoLabel::Corrective => corrective,
+            InfoLabel::Observed => observed,
+            InfoLabel::Inhibitive => inhibitive,
         }
     }
 }
