@@ -47,7 +47,7 @@ pub struct GlobalBaseRates<V> {
 }
 
 #[serde_as]
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Clone)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
 pub struct InitialOpinions<V: Float + AddAssign + UlpsEq> {
     #[serde_as(as = "TryFromInto<([V; THETA], V)>")]
@@ -122,38 +122,75 @@ pub struct Opinions<V> {
     pub cond_theta: HigherArr3<Simplex<V, THETA>, P_A, PSI, F_A>,
 }
 
-impl<V> Opinions<V>
-where
+pub fn reset_opinions<V>(
+    op: &mut Opinions<V>,
+    fop: &mut FriendOpinions<V>,
+    pi_rate: V,
+    initial_opinions: InitialOpinions<V>,
+    base_rates: &GlobalBaseRates<V>,
+) where
     V: Float + UlpsEq + NumAssign + Default,
 {
-    pub fn reset(
-        &mut self,
-        pi_rate: V,
-        initial_opinions: &InitialOpinions<V>,
-        base_rates: &GlobalBaseRates<V>,
-    ) {
-        self.theta.simplex = initial_opinions.theta.clone();
-        self.theta.base_rate = base_rates.theta;
-        self.psi.simplex = initial_opinions.psi.clone();
-        self.psi.base_rate = base_rates.psi;
-        self.phi.simplex = initial_opinions.phi.clone();
-        self.phi.base_rate = base_rates.phi;
-        self.s.simplex = initial_opinions.s.clone();
-        self.s.base_rate = base_rates.s;
+    let InitialOpinions {
+        theta,
+        psi,
+        phi,
+        s,
+        cond_theta_phi,
+        fs,
+        fphi,
+        cond_ftheta_fphi,
+        cond_ppsi,
+        cond_ptheta,
+        cond_pa,
+        cond_fpsi,
+        cond_theta,
+        cond_fptheta,
+        cond_fpa,
+        cond_ftheta,
+        cond_fa,
+        cond_fppsi,
+    } = initial_opinions;
 
-        self.cond_theta_phi = initial_opinions.cond_theta_phi.clone();
-        self.cond_ptheta = initial_opinions.cond_ptheta.clone();
-        self.cond_fpsi = initial_opinions.cond_fpsi.clone();
-        self.cond_theta = initial_opinions.cond_theta.clone();
+    op.theta.simplex = theta;
+    op.theta.base_rate = base_rates.theta;
+    op.psi.simplex = psi;
+    op.psi.base_rate = base_rates.psi;
+    op.phi.simplex = phi;
+    op.phi.base_rate = base_rates.phi;
+    op.s.simplex = s;
+    op.s.base_rate = base_rates.s;
 
-        self.cond_pa[0] = initial_opinions.cond_pa[0].clone();
-        self.cond_pa[2] = initial_opinions.cond_pa[2].clone();
-        let u = initial_opinions.cond_pa[1].uncertainty;
-        let b1 = pi_rate * initial_opinions.cond_fpa[1].belief[1];
-        self.cond_pa[1].belief[0] = V::one() - u - b1;
-        self.cond_pa[1].belief[1] = b1;
-        self.cond_pa[1].uncertainty = u;
-    }
+    op.cond_theta_phi = cond_theta_phi;
+    op.cond_ppsi = cond_ppsi;
+    op.cond_ptheta = cond_ptheta;
+    op.cond_fpsi = cond_fpsi;
+    op.cond_theta = cond_theta;
+
+    op.cond_pa = cond_pa;
+    let u = op.cond_pa[1].uncertainty;
+    let b1 = pi_rate * op.cond_pa[1].belief[1];
+    op.cond_pa[1].belief[0] = V::one() - u - b1;
+    op.cond_pa[1].belief[1] = b1;
+    op.cond_pa[1].uncertainty = u;
+
+    fop.fs.simplex = fs;
+    fop.fs.base_rate = base_rates.fs;
+    fop.fphi.simplex = fphi;
+    fop.fphi.base_rate = base_rates.fphi;
+    fop.cond_ftheta_fphi = cond_ftheta_fphi;
+
+    fop.cond_fptheta = cond_fptheta;
+    fop.cond_ftheta = cond_ftheta;
+    fop.cond_fa = cond_fa;
+    fop.cond_fppsi = cond_fppsi;
+
+    fop.cond_fpa = cond_fpa;
+    let u = fop.cond_fpa[1].uncertainty;
+    let b1 = pi_rate * fop.cond_fpa[1].belief[1];
+    fop.cond_fpa[1].belief[0] = V::one() - u - b1;
+    fop.cond_fpa[1].belief[1] = b1;
+    fop.cond_fpa[1].uncertainty = u;
 }
 
 #[derive(Debug)]
@@ -183,34 +220,6 @@ pub struct FriendOpinions<V: Float> {
 }
 
 impl<V: Float> FriendOpinions<V> {
-    pub fn reset(
-        &mut self,
-        pi_rate: V,
-        initial_opinions: &InitialOpinions<V>,
-        base_rates: &GlobalBaseRates<V>,
-    ) where
-        V: UlpsEq + NumAssign + Default,
-    {
-        self.fs.simplex = initial_opinions.fs.clone();
-        self.fs.base_rate = base_rates.fs.clone();
-        self.fphi.simplex = initial_opinions.fphi.clone();
-        self.fphi.base_rate = base_rates.fphi;
-        self.cond_ftheta_fphi = initial_opinions.cond_ftheta_fphi.clone();
-
-        self.cond_fptheta = initial_opinions.cond_fptheta.clone();
-        self.cond_ftheta = initial_opinions.cond_ftheta.clone();
-        self.cond_fa = initial_opinions.cond_fa.clone();
-        self.cond_fppsi = initial_opinions.cond_fppsi.clone();
-
-        self.cond_fpa[0] = initial_opinions.cond_fpa[0].clone();
-        self.cond_fpa[2] = initial_opinions.cond_fpa[2].clone();
-        let u = initial_opinions.cond_fpa[1].uncertainty;
-        let b1 = pi_rate * initial_opinions.cond_fpa[1].belief[1];
-        self.cond_fpa[1].belief[0] = V::one() - u - b1;
-        self.cond_fpa[1].belief[1] = b1;
-        self.cond_fpa[1].uncertainty = u;
-    }
-
     pub fn compute_new_friend_op(
         &self,
         info: &Info<V>,
@@ -317,13 +326,15 @@ where
     }
 
     let pa = {
-        let mut pa =
+        let a =
             op.s.deduce(&op.cond_ppsi)
-                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi))
-                .deduce(&op.cond_ptheta)
-                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
-                .deduce(&op.cond_pa)
-                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.pa));
+                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi));
+        debug!(" S  :{:?}", op.cond_ppsi);
+        let mut pa = a
+            .deduce(&op.cond_ptheta)
+            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
+            .deduce(&op.cond_pa)
+            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.pa));
 
         // an opinion of PA is computed by using aleatory cummulative fusion.
         FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(trust));

@@ -86,9 +86,6 @@ where
             for a in &mut self.agents {
                 a.reset_with(&self.config.scenario.agent_params, &mut rng);
             }
-            // for info in &mut self.scenario.infos {
-            //     info.reset();
-            // }
             Self::run_loop(
                 self.config.scenario.event_table.clone(),
                 &self.config.scenario.info_contents,
@@ -241,10 +238,8 @@ impl Stat {
         writer: W,
         compression: Option<Compression>,
     ) -> arrow2::error::Result<()> {
-        let metadata = BTreeMap::from_iter([
-            ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-            ("graph".to_string(), "filmtrust".to_string()),
-        ]);
+        let metadata =
+            BTreeMap::from_iter([("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]);
         let schema = Schema {
             fields: vec![
                 Field::new("num_iter", DataType::UInt32, false),
@@ -400,7 +395,6 @@ mod tests {
             },
         };
 
-        // let info_types = [InfoType::Misinfo];
         let info_contents = [InfoContent::<f32>::from(InfoObject::Misinfo {
             psi: Simplex::new([0.00, 0.99], 0.01),
         })];
@@ -414,7 +408,7 @@ mod tests {
             0.5,
             0.5,
             0.0,
-            &agent_params.initial_opinions,
+            agent_params.initial_opinions.clone(),
             &agent_params.base_rates,
         );
 
@@ -431,7 +425,7 @@ mod tests {
             {
                 "name": "test-senario",
                 "output": {
-                    "location": "test/",
+                    "location": "./test/",
                 },
                 "runtime": {
                     "graph": {

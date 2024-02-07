@@ -11,7 +11,10 @@ use crate::{
     cpt::{CptParams, Prospect, CPT},
     dist::{sample, Dist, DistParam},
     info::{Info, TrustDists},
-    opinion::{compute_opinions, FriendOpinions, GlobalBaseRates, InitialOpinions, Opinions},
+    opinion::{
+        compute_opinions, reset_opinions, FriendOpinions, GlobalBaseRates, InitialOpinions,
+        Opinions,
+    },
 };
 
 #[serde_as]
@@ -84,25 +87,23 @@ where
         friend_arrival_prob: V,
         friend_read_prob: V,
         pi_rate: V,
-        initial_opinions: &InitialOpinions<V>,
+        initial_opinions: InitialOpinions<V>,
         base_rates: &GlobalBaseRates<V>,
     ) {
         self.read_prob = read_prob;
         self.friend_arrival_prob = friend_arrival_prob;
         self.friend_read_prob = friend_read_prob;
 
-        // let (op, fop) = initial_opinions.convert();
-        self.op.reset(pi_rate, initial_opinions, base_rates);
-        self.fop.reset(pi_rate, initial_opinions, base_rates);
+        reset_opinions(
+            &mut self.op,
+            &mut self.fop,
+            pi_rate,
+            initial_opinions,
+            base_rates,
+        );
 
         self.info_trust_map.clear();
         self.info_shared.clear();
-        // for info in infos {
-        //     self.params_for_info.push(ParamsForInfo {
-        //         trust: trust_map(info),
-        //         shared: false,
-        //     });
-        // }
         self.done_selfish = false;
     }
 
@@ -121,7 +122,7 @@ where
             } else {
                 V::zero()
             },
-            &agent_params.initial_opinions,
+            agent_params.initial_opinions.clone(),
             &agent_params.base_rates,
         );
     }

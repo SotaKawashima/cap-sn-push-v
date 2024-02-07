@@ -1,0 +1,147 @@
+name = "test-senario"
+output = { location = "./test/" }
+
+[runtime]
+graph = { directed = false, location = { LocalFile = "./test/graph.txt" } }
+seed_state = 0
+iteration_count = 1
+
+[scenario.agent_params.initial_opinions]
+theta = [[0.0, 0.0, 0.0], 1.0]
+psi = [[0.0, 0.0], 1.0]
+phi = [[0.0, 0.0], 1.0]
+s = [[0.0, 0.0], 1.0]
+cond_theta_phi = [
+    [[0.0, 0.0, 0.0], 1.0],
+    [[0.0, 0.0, 0.0], 1.0],
+]
+fs = [[0.0, 0.0], 1.0]
+fphi = [[0.0, 0.0], 1.0]
+cond_ftheta_fphi = [
+    [[0.0, 0.0, 0.0], 1.0],
+    [[0.0, 0.0, 0.0], 1.0],
+]
+cond_pa = [
+    [[0.90, 0.00], 0.10],
+    [[0.00, 0.99], 0.01],
+    [[0.90, 0.00], 0.10],
+]
+cond_theta = [
+    [
+        [
+            [[0.95, 0.00, 0.00], 0.05],
+            [[0.95, 0.00, 0.00], 0.05],
+        ],
+        [
+            [[0.00, 0.45, 0.45], 0.10],
+            [[0.00, 0.45, 0.45], 0.10],
+        ],
+    ],
+    [
+        [
+            [[0.00, 0.475, 0.475], 0.05],
+            [[0.00, 0.475, 0.475], 0.05],
+        ],
+        [
+            [[0.00, 0.495, 0.495], 0.01],
+            [[0.00, 0.495, 0.495], 0.01],
+        ],
+    ],
+]
+cond_ptheta = [
+    [[0.99, 0.00, 0.00], 0.01],
+    [[0.00, 0.495, 0.495], 0.01],
+]
+cond_ppsi = [
+    [[0.99, 0.00], 0.01],
+    [[0.25, 0.65], 0.10],
+]
+cond_fpsi = [
+    [[0.99, 0.00], 0.01],
+    [[0.70, 0.20], 0.10],
+]
+cond_fa = [
+    [[0.95, 0.00], 0.05],
+    [[0.00, 0.95], 0.05],
+    [[0.95, 0.00], 0.05],
+]
+cond_fpa = [
+    [[0.90, 0.00], 0.10],
+    [[0.00, 0.99], 0.01],
+    [[0.90, 0.00], 0.10],
+]
+cond_ftheta = [
+    [
+        [[0.95, 0.00, 0.00], 0.05],
+        [[0.00, 0.45, 0.45], 0.10],
+    ],
+    [
+        [[0.00, 0.475, 0.475], 0.05],
+        [[0.00, 0.495, 0.495], 0.01],
+    ],
+]
+cond_fptheta = [
+    [[0.99, 0.000, 0.000], 0.01],
+    [[0.00, 0.495, 0.495], 0.01],
+]
+cond_fppsi = [
+    [[0.99, 0.00], 0.01],
+    [[0.25, 0.65], 0.10],
+]
+
+[scenario.agent_params.base_rates]
+s = [0.999, 0.001]
+fs = [0.99, 0.01]
+psi = [0.999, 0.001]
+ppsi = [0.999, 0.001]
+pa = [0.999, 0.001]
+fa = [0.999, 0.001]
+fpa = [0.999, 0.001]
+phi = [0.999, 0.001]
+fpsi = [0.999, 0.001]
+fppsi = [0.999, 0.001]
+fphi = [0.999, 0.001]
+theta = [0.999, 0.0005, 0.0005]
+ptheta = [0.999, 0.0005, 0.0005]
+ftheta = [0.999, 0.0005, 0.0005]
+fptheta = [0.999, 0.0005, 0.0005]
+
+[scenario.agent_params]
+pi_prob = 1.0
+read_dist = { Beta = { alpha = 7.0, beta = 3.0 } }
+farrival_dist = { Beta = { alpha = 9.0, beta = 1.0 } }
+fread_dist = { Beta = { alpha = 5.0, beta = 5.0 } }
+pi_dist = { Beta = { alpha = 19.0, beta = 1.0 } }
+
+[scenario.agent_params.trust_dists]
+misinfo = { Beta = { alpha = 1.5, beta = 4.5 } }
+corrective = { Beta = { alpha = 4.5, beta = 1.5 } }
+observed = "Standard"
+inhibitive = { Uniform = { low = 0.5, high = 1.0 } }
+
+[scenario.agent_params.cpt_params]
+x0_dist = { Fixed = { value = -2.0 } }
+x1_dist = { Fixed = { value = -50.0 } }
+y_dist = { Fixed = { value = -0.001 } }
+alpha = { Fixed = { value = 0.88 } }
+beta = { Fixed = { value = 0.88 } }
+lambda = { Fixed = { value = 2.25 } }
+gamma = { Fixed = { value = 0.61 } }
+delta = { Fixed = { value = 0.69 } }
+
+[scenario]
+info_contents = [
+    # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
+    { Corrective = { psi = [[0.99, 0.00], 0.01], s = [[0.0, 1.0], 0.0] } },
+]
+
+[[scenario.event_table]]
+time = 0
+informs = [
+    { agent_idx = 0, info_content_idx = 0 },
+    # { agent_idx = 1, info_content_idx = 0 },
+]
+
+# [[scenario.event_table]]
+# time = 1
+# informs = [{ agent_idx = 2, info_content_idx = 1 }]
