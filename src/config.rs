@@ -66,8 +66,8 @@ pub struct Runtime {
     #[serde_as(as = "TryFromInto<GraphInfo>")]
     pub graph: GraphB,
     pub seed_state: u64,
-    pub iteration_count: u32,
     pub num_parallel: u32,
+    pub iteration_count: u32,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -204,8 +204,8 @@ mod tests {
                         },
                     },
                     "seed_state": 0,
-                    "iteration_count": 1,
                     "num_parallel": 1,
+                    "iteration_count": 1,
                 },
                 "scenario": {
                     "agent_params": {
@@ -365,8 +365,8 @@ mod tests {
             [runtime]
             graph = { directed = false, location = { LocalFile = "./test/graph.txt" } }
             seed_state = 0
-            iteration_count = 1
             num_parallel = 1
+            iteration_count = 1
 
             [scenario.agent_params.initial_opinions]
             theta = [[0.0, 0.0, 0.0], 1.0]
