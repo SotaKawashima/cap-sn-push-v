@@ -1,6 +1,6 @@
 use std::{fs, io, path::PathBuf};
 
-use cap_sn::{config::ConfigFormat, Executor};
+use cap_sn::{config::ConfigFormat, Runner};
 use clap::Parser;
 
 #[derive(clap::Parser)]
@@ -56,6 +56,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let args = Cli::parse();
-    let mut executor = Executor::<f32>::try_new(args.config.try_into()?)?;
-    executor.exec()
+    let mut executor = Runner::<f32>::try_new(args.config.try_into()?)?;
+    executor.run()
 }

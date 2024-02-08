@@ -195,6 +195,7 @@ dependencies = [
  "num-traits",
  "rand",
  "rand_distr",
+ "rayon",
  "serde",
  "serde_json",
  "serde_with",

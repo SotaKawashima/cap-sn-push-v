@@ -5,6 +5,7 @@ output = { location = "./test/" }
 graph = { directed = false, location = { LocalFile = "./test/graph.txt" } }
 seed_state = 0
 iteration_count = 1
+num_parallel = 1
 
 [scenario.agent_params.initial_opinions]
 theta = [[0.0, 0.0, 0.0], 1.0]

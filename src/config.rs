@@ -67,6 +67,7 @@ pub struct Runtime {
     pub graph: GraphB,
     pub seed_state: u64,
     pub iteration_count: u32,
+    pub num_parallel: u32,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -179,5 +180,343 @@ where
             ConfigFormat::JSON(s) => Ok(serde_json::from_str(&s)?),
             ConfigFormat::TOML(s) => Ok(toml::from_str(&s)?),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use serde_json::json;
+
+    #[test]
+    fn test_json_config() {
+        let v = json!(
+            {
+                "name": "test-senario",
+                "output": {
+                    "location": "./test/",
+                },
+                "runtime": {
+                    "graph": {
+                        "directed": true,
+                        "location": {
+                            "LocalFile": "./test/graph.txt",
+                        },
+                    },
+                    "seed_state": 0,
+                    "iteration_count": 1,
+                    "num_parallel": 1,
+                },
+                "scenario": {
+                    "agent_params": {
+                        "initial_opinions": {
+                            "theta": [[0.0, 0.0, 0.0], 1.0],
+                            "psi":   [[0.0, 0.0], 1.0],
+                            "phi":   [[0.0, 0.0], 1.0],
+                            "s":     [[0.0, 0.0], 1.0],
+                            "cond_theta_phi": [[[0.0, 0.0, 0.0], 1.0], [[0.0, 0.0, 0.0], 1.0]],
+                            "fs": [[0.0, 0.0], 1.0],
+                            "fphi": [[0.0, 0.0], 1.0],
+                            "cond_ftheta_fphi": [[[0.0, 0.0, 0.0], 1.0], [[0.0, 0.0, 0.0], 1.0]],
+                            "cond_pa": [
+                                [[0.90, 0.00], 0.10],
+                                [[0.00, 0.99], 0.01],
+                                [[0.90, 0.00], 0.10],
+                            ],
+                            "cond_theta": [
+                                [
+                                    [
+                                        [[0.95, 0.00, 0.00], 0.05],
+                                        [[0.95, 0.00, 0.00], 0.05],
+                                    ],
+                                    [
+                                        [[0.00, 0.45, 0.45], 0.10],
+                                        [[0.00, 0.45, 0.45], 0.10],
+                                    ],
+                                ],
+                                [
+                                    [
+                                        [[0.00, 0.475, 0.475], 0.05],
+                                        [[0.00, 0.475, 0.475], 0.05],
+                                    ],
+                                    [
+                                        [[0.00, 0.495, 0.495], 0.01],
+                                        [[0.00, 0.495, 0.495], 0.01],
+                                    ],
+                                ]
+                            ],
+                            "cond_ptheta": [
+                                [[0.99, 0.00, 0.00], 0.01],
+                                [[0.00, 0.495, 0.495], 0.01],
+                            ],
+                            "cond_ppsi": [
+                                [[0.99, 0.00], 0.01],
+                                [[0.25, 0.65], 0.10],
+                            ],
+                            "cond_fpsi": [
+                                [[0.99, 0.00], 0.01],
+                                [[0.70, 0.20], 0.10],
+                            ],
+                            "cond_fa": [
+                                [[0.95, 0.00], 0.05],
+                                [[0.00, 0.95], 0.05],
+                                [[0.95, 0.00], 0.05],
+                            ],
+                            "cond_fpa": [
+                                [[0.90, 0.00], 0.10],
+                                [[0.00, 0.99], 0.01],
+                                [[0.90, 0.00], 0.10],
+                            ],
+                            "cond_ftheta": [
+                                [
+                                    [[0.95, 0.00, 0.00], 0.05],
+                                    [[0.00, 0.45, 0.45], 0.10],
+                                ],
+                                [
+                                    [[0.00, 0.475, 0.475], 0.05],
+                                    [[0.00, 0.495, 0.495], 0.01],
+                                ]
+                            ],
+                            "cond_fptheta": [
+                                [[0.99, 0.000, 0.000], 0.01],
+                                [[0.00, 0.495, 0.495], 0.01],
+                            ],
+                            "cond_fppsi": [
+                                [[0.99, 0.00], 0.01],
+                                [[0.25, 0.65], 0.10],
+                            ],
+                        },
+                        "base_rates": {
+                            "s": [0.999, 0.001],
+                            "fs": [0.99, 0.01],
+                            "psi": [0.999, 0.001],
+                            "ppsi": [0.999, 0.001],
+                            "pa": [0.999, 0.001],
+                            "fa": [0.999, 0.001],
+                            "fpa": [0.999, 0.001],
+                            "phi": [0.999, 0.001],
+                            "fpsi": [0.999, 0.001],
+                            "fppsi": [0.999, 0.001],
+                            "fphi": [0.999, 0.001],
+                            "theta": [0.999, 0.0005, 0.0005],
+                            "ptheta": [0.999, 0.0005, 0.0005],
+                            "ftheta": [0.999, 0.0005, 0.0005],
+                            "fptheta": [0.999, 0.0005, 0.0005],
+                        },
+                        "pi_prob": 1.0,
+                        "read_dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } },
+                        "farrival_dist": { "Beta": {"alpha": 3.0, "beta": 3.0}},
+                        "fread_dist": {"Beta": {"alpha": 3.0, "beta": 3.0}},
+                        "pi_dist": {"Fixed": {"value": 0.5}},
+                        "trust_dists": {
+                            "misinfo": {"Beta": { "alpha": 3.0, "beta": 3.0 }},
+                            "corrective": {"Beta":{ "alpha": 3.0, "beta": 3.0 }},
+                            "observed": "Standard",
+                            "inhibitive": {"Uniform": { "low": 0.5, "high": 1.0 }},
+                        },
+                        "cpt_params": {
+                            "x0_dist": {"Fixed": {"value": -2.0}},
+                            "x1_dist": {"Fixed": {"value": -50.0}},
+                            "y_dist": {"Fixed": {"value": -0.001}},
+                            "alpha":  { "Fixed": { "value": 0.88 }},
+                            "beta":   { "Fixed": { "value": 0.88 }},
+                            "lambda": { "Fixed": { "value": 2.25 }},
+                            "gamma":  { "Fixed": { "value": 0.61 }},
+                            "delta":  { "Fixed": { "value": 0.69 }},
+                        }
+                    },
+                    "info_contents": [
+                        { "Misinfo": { "psi": ([0.00, 0.99], 0.01) } },
+                        { "Corrective": { "psi": ([0.99, 0.00], 0.01), "s": ([0.0, 1.0], 0.0) } }
+                    ],
+                    "event_table": [
+                        {
+                            "time": 0,
+                            "informs": [
+                                { "agent_idx": 0, "info_content_idx": 0, },
+                                { "agent_idx": 1, "info_content_idx": 0, },
+                            ],
+                        },
+                        {
+                            "time": 1,
+                            "informs": [
+                                { "agent_idx": 2, "info_content_idx": 1, },
+                            ]
+                        },
+                    ],
+                }
+            }
+        );
+        let r = serde_json::from_value::<Config<f32>>(v);
+        assert!(r.is_ok());
+        let c = r.unwrap();
+        println!("{:?}", c.output);
+        println!("{:?}", c.runtime.graph);
+        println!("{:?}", c.scenario.event_table);
+        println!("{:?}", c.scenario.info_contents);
+    }
+
+    #[test]
+    fn test_toml_config() {
+        let r = toml::from_str::<Config<f32>>(
+            r#"
+            name = "test-senario"
+
+            [runtime]
+            graph = { directed = false, location = { LocalFile = "./test/graph.txt" } }
+            seed_state = 0
+            iteration_count = 1
+            num_parallel = 1
+
+            [scenario.agent_params.initial_opinions]
+            theta = [[0.0, 0.0, 0.0], 1.0]
+            psi =   [[0.0, 0.0], 1.0]
+            phi =   [[0.0, 0.0], 1.0]
+            s =     [[0.0, 0.0], 1.0]
+            cond_theta_phi = [[[0.0, 0.0, 0.0], 1.0], [[0.0, 0.0, 0.0], 1.0]]
+            fs = [[0.0, 0.0], 1.0]
+            fphi = [[0.0, 0.0], 1.0]
+            cond_ftheta_fphi = [[[0.0, 0.0, 0.0], 1.0], [[0.0, 0.0, 0.0], 1.0]]
+            cond_pa = [
+                [[0.90, 0.00], 0.10],
+                [[0.00, 0.99], 0.01],
+                [[0.90, 0.00], 0.10],
+            ]
+            cond_theta = [
+                [
+                    [
+                        [[0.95, 0.00, 0.00], 0.05],
+                        [[0.95, 0.00, 0.00], 0.05],
+                    ],
+                    [
+                        [[0.00, 0.45, 0.45], 0.10],
+                        [[0.00, 0.45, 0.45], 0.10],
+                    ],
+                ],
+                [
+                    [
+                        [[0.00, 0.475, 0.475], 0.05],
+                        [[0.00, 0.475, 0.475], 0.05],
+                    ],
+                    [
+                        [[0.00, 0.495, 0.495], 0.01],
+                        [[0.00, 0.495, 0.495], 0.01],
+                    ],
+                ]
+            ]
+            cond_ptheta = [
+                [[0.99, 0.00, 0.00], 0.01],
+                [[0.00, 0.495, 0.495], 0.01],
+            ]
+            cond_ppsi = [
+                [[0.99, 0.00], 0.01],
+                [[0.25, 0.65], 0.10],
+            ]
+            cond_fpsi = [
+                [[0.99, 0.00], 0.01],
+                [[0.70, 0.20], 0.10],
+            ]
+            cond_fa = [
+                [[0.95, 0.00], 0.05],
+                [[0.00, 0.95], 0.05],
+                [[0.95, 0.00], 0.05],
+            ]
+            cond_fpa = [
+                [[0.90, 0.00], 0.10],
+                [[0.00, 0.99], 0.01],
+                [[0.90, 0.00], 0.10],
+            ]
+            cond_ftheta = [
+                [
+                    [[0.95, 0.00, 0.00], 0.05],
+                    [[0.00, 0.45, 0.45], 0.10],
+                ],
+                [
+                    [[0.00, 0.475, 0.475], 0.05],
+                    [[0.00, 0.495, 0.495], 0.01],
+                ]
+            ]
+            cond_fptheta = [
+                [[0.99, 0.000, 0.000], 0.01],
+                [[0.00, 0.495, 0.495], 0.01],
+            ]
+            cond_fppsi = [
+                [[0.99, 0.00], 0.01],
+                [[0.25, 0.65], 0.10],
+            ]
+
+            [scenario.agent_params.base_rates]
+            s = [0.999, 0.001]
+            fs = [0.99, 0.01]
+            psi = [0.999, 0.001]
+            ppsi = [0.999, 0.001]
+            pa = [0.999, 0.001]
+            fa = [0.999, 0.001]
+            fpa = [0.999, 0.001]
+            phi = [0.999, 0.001]
+            fpsi = [0.999, 0.001]
+            fppsi = [0.999, 0.001]
+            fphi = [0.999, 0.001]
+            theta = [0.999, 0.0005, 0.0005]
+            ptheta = [0.999, 0.0005, 0.0005]
+            ftheta = [0.999, 0.0005, 0.0005]
+            fptheta = [0.999, 0.0005, 0.0005]
+
+            [scenario.agent_params]
+            pi_prob = 1.0
+            read_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
+            farrival_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
+            fread_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
+            pi_dist = { Fixed = { value = 0.5 }}
+
+            [scenario.agent_params.trust_dists]
+            misinfo = { Beta = { alpha = 3.0, beta = 3.0 } }
+            corrective = { Beta = { alpha = 3.0, beta = 3.0 } }
+            observed =  "Standard"
+            inhibitive = { Uniform = { low = 0.5, high = 1.0 } }
+
+            [scenario.agent_params.cpt_params]
+            x0_dist = { Fixed = { value = -2.0 } }
+            x1_dist = { Fixed = { value = -50.0 } }
+            y_dist = { Fixed = { value = -0.001 } }
+            alpha =  { Fixed = { value = 0.88 } }
+            beta =   { Fixed = { value = 0.88 } }
+            lambda = { Fixed = { value = 2.25 } }
+            gamma =  { Fixed = { value = 0.61 } }
+            delta =  { Fixed = { value = 0.69 } }
+
+            [scenario]
+            info_contents = [
+                { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
+                { Corrective = { psi = [[0.99, 0.00], 0.01], s = [[0.0, 1.0], 0.0] } }
+            ]
+
+            [[scenario.event_table]]
+            time = 0
+            informs = [
+                { agent_idx = 0, info_content_idx = 0 },
+                { agent_idx = 1, info_content_idx = 0 },
+            ]
+
+            [[scenario.event_table]]
+            time = 1
+            informs = [{ agent_idx = 2, info_content_idx = 1 }]
+            "#,
+        );
+
+        assert!(r.is_ok());
+        let c = r.unwrap();
+        println!("{:?}", c.output);
+        println!("{:?}", c.runtime.graph);
+        println!("{:?}", c.scenario.agent_params.initial_opinions);
+        println!(
+            "{:?}",
+            c.scenario
+                .info_contents
+                .into_iter()
+                .map(|i| i.label)
+                .collect::<Vec<_>>()
+        );
+        println!("{:?}", c.scenario.event_table);
     }
 }
