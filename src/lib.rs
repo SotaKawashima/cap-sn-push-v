@@ -87,10 +87,10 @@ where
                     &self.config.runtime.graph,
                     &self.config.scenario.info_contents,
                     &self.config.scenario.agent_params,
+                    &self.config.scenario.event_table,
                     &mut rng,
                     n,
                     d,
-                    self.config.scenario.event_table.clone(),
                 );
                 for num_iter in 0..(self.config.runtime.iteration_count) {
                     env.execute(num_par, num_iter);
@@ -138,10 +138,10 @@ where
     graph: &'a GraphB,
     info_contents: &'a [InfoContent<V>],
     agent_params: &'a AgentParams<V>,
+    event_table: &'a EventTable,
     rng: &'a mut R,
     n: V,
     d: V,
-    event_table: EventTable,
     agents: Vec<Agent<V>>,
     stat: Stat,
 }
@@ -157,10 +157,10 @@ where
         graph: &'a GraphB,
         info_contents: &'a [InfoContent<V>],
         agent_params: &'a AgentParams<V>,
+        event_table: &'a EventTable,
         rng: &'a mut R,
         n: V,
         d: V,
-        event_table: EventTable,
     ) -> Self
     where
         V: Default + NumAssign,
@@ -195,9 +195,10 @@ where
         let mut num_view_map = BTreeMap::<InfoLabel, u32>::new();
         let mut num_sharing_map = BTreeMap::<InfoLabel, u32>::new();
         let mut num_receipt_map = BTreeMap::<InfoLabel, u32>::new();
+        let mut event_table = self.event_table.0.clone();
 
-        while !received.is_empty() || !self.event_table.0.is_empty() {
-            if let Some(informms) = self.event_table.0.remove(&t) {
+        while !received.is_empty() || !event_table.is_empty() {
+            if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
                     infos.push(Info::new(info_idx, &self.info_contents[info_content_idx]));
