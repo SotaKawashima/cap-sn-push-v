@@ -22,7 +22,6 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    pub name: String,
     #[serde(default)]
     pub output: Output,
     pub runtime: Runtime,

@@ -42,6 +42,7 @@ where
     Standard: Distribution<V>,
 {
     config: Config<V>,
+    identifier: String,
 }
 
 impl<V> Runner<V>
@@ -50,12 +51,15 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    pub fn try_new(config_data: ConfigFormat) -> Result<Self, Box<dyn std::error::Error>>
+    pub fn try_new(
+        config_data: ConfigFormat,
+        identifier: String,
+    ) -> Result<Self, Box<dyn std::error::Error>>
     where
         for<'de> V: serde::Deserialize<'de>,
     {
         let config: Config<V> = config_data.try_into()?;
-        Ok(Self { config })
+        Ok(Self { config, identifier })
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>>
@@ -65,7 +69,7 @@ where
     {
         let writer = File::create(self.config.output.location.join(format!(
             "{}_{}.arrow",
-            self.config.name, self.config.output.suffix
+            self.identifier, self.config.output.suffix
         )))?;
 
         let n = V::from_usize(self.config.runtime.graph.node_count()).unwrap();
@@ -104,8 +108,17 @@ where
     }
 
     fn write<W: Write>(&self, writer: W, stats: &[Stat]) -> arrow2::error::Result<()> {
-        let metadata =
-            BTreeMap::from_iter([("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]);
+        let metadata = BTreeMap::from_iter([
+            ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+            (
+                "num_parallel".to_string(),
+                self.config.runtime.num_parallel.to_string(),
+            ),
+            (
+                "iteration_count".to_string(),
+                self.config.runtime.iteration_count.to_string(),
+            ),
+        ]);
         let compression: Option<Compression> = if self.config.output.compress {
             Some(Compression::ZSTD)
         } else {

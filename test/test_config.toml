@@ -1,4 +1,3 @@
-name = "test-senario"
 output = { location = "./test/" }
 
 [runtime]

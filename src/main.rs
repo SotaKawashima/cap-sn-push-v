@@ -7,6 +7,8 @@ use clap::Parser;
 struct Cli {
     #[command(flatten)]
     config: InputConfig,
+    /// string to identify given configuration data
+    identifier: String,
 }
 
 #[derive(clap::Args)]
@@ -56,6 +58,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let args = Cli::parse();
-    let mut executor = Runner::<f32>::try_new(args.config.try_into()?)?;
+    let mut executor = Runner::<f32>::try_new(args.config.try_into()?, args.identifier)?;
     executor.run()
 }
