@@ -9,6 +9,9 @@ struct Cli {
     config: InputConfig,
     /// string to identify given configuration data
     identifier: String,
+    /// Enable overwriting of a output file
+    #[arg(short, long, default_value_t = false)]
+    overwriting: bool,
 }
 
 #[derive(clap::Args)]
@@ -58,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let args = Cli::parse();
-    let mut executor = Runner::<f32>::try_new(args.config.try_into()?, args.identifier)?;
+    let mut executor =
+        Runner::<f32>::try_new(args.config.try_into()?, args.identifier, args.overwriting)?;
     executor.run()
 }

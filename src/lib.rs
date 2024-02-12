@@ -43,6 +43,7 @@ where
 {
     config: Config<V>,
     identifier: String,
+    overwriting: bool,
 }
 
 impl<V> Runner<V>
@@ -54,12 +55,17 @@ where
     pub fn try_new(
         config_data: ConfigFormat,
         identifier: String,
+        overwriting: bool,
     ) -> Result<Self, Box<dyn std::error::Error>>
     where
         for<'de> V: serde::Deserialize<'de>,
     {
         let config: Config<V> = config_data.try_into()?;
-        Ok(Self { config, identifier })
+        Ok(Self {
+            config,
+            identifier,
+            overwriting,
+        })
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>>
@@ -67,10 +73,17 @@ where
         V: FromPrimitive + Sync,
         <V as SampleUniform>::Sampler: Sync,
     {
-        let writer = File::create(self.config.output.location.join(format!(
+        let output_path = self.config.output.location.join(format!(
             "{}_{}.arrow",
             self.identifier, self.config.output.suffix
-        )))?;
+        ));
+        if !self.overwriting && output_path.exists() {
+            panic!(
+                "{} already exists. If you want to overwrite it, run with the overwriting option.",
+                output_path.display()
+            );
+        }
+        let writer = File::create(output_path)?;
 
         let n = V::from_usize(self.config.runtime.graph.node_count()).unwrap();
         let d = V::from_usize(self.config.runtime.graph.edge_count()).unwrap() / n; // average outdegree
