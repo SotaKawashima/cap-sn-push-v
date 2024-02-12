@@ -1,6 +1,5 @@
 use crate::info::Info;
 use approx::UlpsEq;
-use log::debug;
 use num_traits::{Float, NumAssign};
 use serde_with::{serde_as, TryFromInto};
 use std::{array, iter::Sum, ops::AddAssign};
@@ -245,7 +244,7 @@ impl<V: Float> FriendOpinions<V> {
             cond_ftheta_fphi,
         };
 
-        debug!(" P_FS  :{:?}", fop.fs.projection());
+        log::debug!(" P_FS  :{:?}", fop.fs.projection());
 
         let fpa = {
             let mut fpa = fop
@@ -273,8 +272,8 @@ impl<V: Float> FriendOpinions<V> {
             FuseOp::Wgh.fuse_assign(&mut ftheta_ded_1, &ftheta_ded_2);
             ftheta_ded_1
         };
-        debug!(" P_FPA :{:?}", fpa.projection());
-        debug!(" P_FTH :{:?}", ftheta.projection());
+        log::debug!(" P_FPA :{:?}", fpa.projection());
+        log::debug!(" P_FTH :{:?}", ftheta.projection());
         (
             fop,
             ftheta
@@ -313,7 +312,7 @@ pub fn compute_opinions<V>(
 where
     V: Float + UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
 {
-    debug!("b_PA|PTH_1:{:?}", op.cond_pa[1].belief);
+    log::debug!("b_PA|PTH_1:{:?}", op.cond_pa[1].belief);
 
     FuseOp::Wgh.fuse_assign(&mut op.s, &info.content.s.discount(trust));
     FuseOp::Wgh.fuse_assign(&mut op.psi, &info.content.psi.discount(trust));
@@ -329,7 +328,7 @@ where
         let a =
             op.s.deduce(&op.cond_ppsi)
                 .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi));
-        debug!(" S  :{:?}", op.cond_ppsi);
+        log::debug!(" S  :{:?}", op.cond_ppsi);
         let mut pa = a
             .deduce(&op.cond_ptheta)
             .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
@@ -341,7 +340,7 @@ where
         pa
     };
 
-    debug!(" P_PA  :{:?}", pa.projection());
+    log::debug!(" P_PA  :{:?}", pa.projection());
 
     // compute friends opinions
     let fpsi_ded =

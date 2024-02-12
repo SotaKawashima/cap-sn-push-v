@@ -1,6 +1,5 @@
 use approx::UlpsEq;
 use either::Either;
-use log::debug;
 use num_traits::{Float, NumAssign};
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
@@ -205,7 +204,7 @@ where
                 self.cpt.valuate(&self.prospect.sharing[0], &prob),
                 self.cpt.valuate(&self.prospect.sharing[1], &pred_prob),
             ];
-            debug!("V_Y:{:?}", value_sharing);
+            log::info!("V_Y:{:?}", value_sharing);
             *shared = value_sharing[0] < value_sharing[1];
             *shared
         };
@@ -216,7 +215,7 @@ where
         } else {
             let value_selfish: [V; 2] =
                 array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &theta_prob));
-            debug!("V_X:{:?}", value_selfish);
+            log::info!("V_X:{:?}", value_selfish);
             self.done_selfish = value_selfish[0] < value_selfish[1];
             self.done_selfish
         };

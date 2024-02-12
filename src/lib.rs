@@ -16,7 +16,6 @@ use arrow2::chunk::Chunk;
 use arrow2::datatypes::{DataType, Field, Schema};
 use arrow2::io::ipc::write::{Compression, FileWriter, WriteOptions};
 use config::{Config, ConfigFormat, EventTable};
-use log::debug;
 use num_traits::{Float, FromPrimitive, NumAssign};
 use rand::Rng;
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
@@ -227,17 +226,18 @@ where
                     let num_receipt = num_receipt_map.entry(info.content.label).or_insert(0);
                     *num_receipt += 1;
 
+                    log::info!(
+                        "{} -> #{}:{}",
+                        info.content.label,
+                        r.agent_idx,
+                        if r.force { "informer" } else { "sharer" },
+                    );
+
                     let b = if r.force {
                         agent.read_info_trustfully(info, receipt_prob, self.agent_params)
                     } else {
                         agent.read_info(info, receipt_prob, self.agent_params, self.rng)?
                     };
-
-                    debug!(
-                        "{}: {}",
-                        if r.force { "informer" } else { "sharer" },
-                        info.content.label
-                    );
 
                     if !r.force {
                         let num_view = num_view_map.entry(info.content.label).or_insert(0);
