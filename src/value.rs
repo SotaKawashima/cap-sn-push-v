@@ -89,10 +89,42 @@ where
         };
         let e = match (ev.low, ev.high) {
             (None, None) => e,
-            (Some(low), None) => e * (V::one() - low),
+            (Some(low), None) => e * (V::one() - low) + low,
             (None, Some(high)) => e * high,
-            (Some(low), Some(high)) => e * (high - low),
+            (Some(low), Some(high)) => e * (high - low) + low,
         };
         self.base + e
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::thread_rng;
+    use rand_distr::Distribution;
+
+    use super::{DistParam, DistValue, ErrorValue, Value};
+
+    #[test]
+    fn test_sample() {
+        let s = Value {
+            base: 1.0,
+            error: Some(ErrorValue {
+                dist: DistParam::<f32>::Standard,
+                low: Some(-2.0),
+                high: Some(3.0),
+            }),
+        };
+        let v = DistValue::try_from(s).unwrap();
+        let rng = &mut thread_rng();
+        let mut min_x = f32::MAX;
+        let mut max_x = f32::MIN;
+        for _ in 0..1000 {
+            let x = v.sample(rng) - 1.0;
+            min_x = min_x.min(x);
+            max_x = max_x.max(x);
+        }
+        println!("{min_x}, {max_x}");
+        assert!(min_x >= -2.0);
+        assert!(max_x <= 3.0);
     }
 }
