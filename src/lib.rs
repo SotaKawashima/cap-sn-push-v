@@ -21,20 +21,13 @@ use num_traits::{Float, FromPrimitive, NumAssign};
 use rand::Rng;
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
-use agent::{Agent, AgentParams};
+use agent::{Agent, AgentParams, Behavior};
 use info::{Info, InfoContent, InfoLabel};
 
 use graph_lib::prelude::{Graph, GraphB};
 use rand_distr::uniform::SampleUniform;
 use rand_distr::{Distribution, Open01, Standard};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-
-#[derive(Debug)]
-struct Receipt {
-    agent_idx: usize,
-    force: bool,
-    info_idx: usize,
-}
 
 pub struct Runner<V>
 where
@@ -155,6 +148,19 @@ where
     }
 }
 
+#[derive(Debug)]
+enum SendRole {
+    Inform,
+    Share,
+}
+
+#[derive(Debug)]
+struct Receiver {
+    agent_idx: usize,
+    info_idx: usize,
+    role: SendRole,
+}
+
 struct Environment<'a, V, R>
 where
     V: Float + UlpsEq + SampleUniform + NumAssign,
@@ -216,100 +222,146 @@ where
         }
 
         let mut infos = Vec::<Info<V>>::new();
-        let mut received = Vec::new();
+        let mut stack = Vec::new();
         let mut t = 0;
-        let mut num_view_map = BTreeMap::<InfoLabel, u32>::new();
-        let mut num_sharing_map = BTreeMap::<InfoLabel, u32>::new();
-        let mut num_receipt_map = BTreeMap::<InfoLabel, u32>::new();
+        let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
         let mut event_table = self.event_table.0.clone();
 
         log::info!("#i: {num_iter}");
 
-        while !received.is_empty() || !event_table.is_empty() {
+        while !stack.is_empty() || !event_table.is_empty() {
             log::info!("t = {t}");
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
                     infos.push(Info::new(info_idx, &self.info_contents[info_content_idx]));
-                    received.push(Receipt {
+                    stack.push(Receiver {
                         agent_idx,
-                        force: true,
                         info_idx,
+                        role: SendRole::Inform,
                     });
                 }
             }
-            received.shuffle(self.rng);
+            stack.shuffle(self.rng);
 
             let mut num_selfish = 0;
-            num_receipt_map.clear();
-            num_view_map.clear();
-            num_sharing_map.clear();
-            for r in mem::take(&mut received) {
-                let agent = &mut self.agents[r.agent_idx];
-                let info = &mut infos[r.info_idx];
-                let friend_receipt_prob = V::one()
-                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n).powf(self.d);
+            for Receiver {
+                agent_idx,
+                info_idx,
+                role,
+            } in mem::take(&mut stack)
+            {
+                let agent = &mut self.agents[agent_idx];
+                let info = &mut infos[info_idx];
+                let info_label = info.content.label;
+                let info_data = info_data_map.entry(info_label).or_default();
+                info_data.num_received += 1;
 
-                log::info!("r^i_m = {friend_receipt_prob:?}");
+                log::info!("{info_label} -> #{agent_idx}({role:?})");
 
-                let num_receipt = num_receipt_map.entry(info.content.label).or_insert(0);
-                *num_receipt += 1;
-
-                log::info!(
-                    "{} -> #{}:{}",
-                    info.content.label,
-                    r.agent_idx,
-                    if r.force { "informer" } else { "sharer" },
-                );
-
-                if r.force {
-                    if agent.set_info_opinions(info, &self.agent_params.base_rates) {
-                        num_selfish += 1;
+                let send = match role {
+                    SendRole::Inform => {
+                        if agent.set_info_opinions(info, &self.agent_params.base_rates) {
+                            num_selfish += 1;
+                        }
+                        true
                     }
-                } else {
-                    let Some(b) =
-                        agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng)
-                    else {
-                        continue;
-                    };
-                    if b.selfish {
-                        num_selfish += 1;
-                    }
-                    let num_view = num_view_map.entry(info.content.label).or_default();
-                    *num_view += 1;
-                    if b.sharing {
-                        info.shared();
-                        let num_sharing = num_sharing_map.entry(info.content.label).or_default();
-                        *num_sharing += 1;
-                    } else {
-                        continue;
+                    SendRole::Share => {
+                        let friend_receipt_prob = V::one()
+                            - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n)
+                                .powf(self.d);
+                        log::info!("r^i_m = {friend_receipt_prob:?}");
+
+                        if let Some(b) =
+                            agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng)
+                        {
+                            if b.selfish {
+                                num_selfish += 1;
+                            }
+                            info.update_stat(&b);
+                            info_data.update(&b);
+                            b.sharing
+                        } else {
+                            false
+                        }
                     }
                 };
 
-                for bid in self.graph.successors(r.agent_idx) {
-                    received.push(Receipt {
-                        agent_idx: *bid,
-                        force: false,
-                        info_idx: r.info_idx,
-                    });
+                if send {
+                    for bid in self.graph.successors(agent_idx) {
+                        stack.push(Receiver {
+                            agent_idx: *bid,
+                            info_idx,
+                            role: SendRole::Share,
+                        });
+                    }
                 }
             }
-            for (k, n) in &num_receipt_map {
-                self.stat
-                    .push(num_par, num_iter, t, *n, format!("num_receipt:{}", k));
-            }
-            for (k, n) in &num_view_map {
-                self.stat
-                    .push(num_par, num_iter, t, *n, format!("num_view:{}", k));
-            }
-            for (k, n) in &num_sharing_map {
-                self.stat
-                    .push(num_par, num_iter, t, *n, format!("num_sharing:{}", k));
+            for (info_label, d) in mem::take(&mut info_data_map) {
+                d.push_to_stat(&mut self.stat, num_par, num_iter, t, info_label);
             }
             self.stat
                 .push(num_par, num_iter, t, num_selfish, "num_selfish".to_string());
             t += 1;
         }
+    }
+}
+
+#[derive(Default)]
+struct InfoData {
+    num_received: u32,
+    num_shared: u32,
+    num_viewed: u32,
+    num_fst_read: u32,
+}
+
+impl InfoData {
+    fn update(&mut self, b: &Behavior) {
+        self.num_viewed += 1;
+        if b.first_reading {
+            self.num_fst_read += 1;
+        }
+        if b.sharing {
+            self.num_shared += 1;
+        }
+    }
+
+    fn push_to_stat(
+        self,
+        stat: &mut Stat,
+        num_par: u32,
+        num_iter: u32,
+        t: u32,
+        info_label: InfoLabel,
+    ) {
+        stat.push(
+            num_par,
+            num_iter,
+            t,
+            self.num_received,
+            format!("num_received:{info_label}"),
+        );
+        stat.push(
+            num_par,
+            num_iter,
+            t,
+            self.num_shared,
+            format!("num_shared:{info_label}"),
+        );
+        stat.push(
+            num_par,
+            num_iter,
+            t,
+            self.num_viewed,
+            format!("num_viewed:{info_label}"),
+        );
+        stat.push(
+            num_par,
+            num_iter,
+            t,
+            self.num_fst_read,
+            format!("num_fst_read:{info_label}"),
+        );
     }
 }
 

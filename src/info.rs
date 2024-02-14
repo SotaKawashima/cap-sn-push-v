@@ -9,6 +9,7 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::Simplex;
 
 use crate::{
+    agent::Behavior,
     opinion::{PHI, PSI, P_A, S, THETA},
     value::{DistValue, ParamValue},
 };
@@ -46,13 +47,15 @@ impl<V: Float> InfoContent<V> {
 #[derive(Debug)]
 pub struct Info<'a, V: Float> {
     pub idx: usize,
-    pub num_shared: usize,
+    num_shared: usize,
+    num_viewed: usize,
     pub content: &'a InfoContent<V>,
 }
 
 impl<'a, V: Float> Info<'a, V> {
     pub fn reset(&mut self) {
         self.num_shared = 0;
+        self.num_viewed = 0;
     }
 
     pub fn new(idx: usize, content: &'a InfoContent<V>) -> Self {
@@ -60,7 +63,15 @@ impl<'a, V: Float> Info<'a, V> {
             idx,
             content,
             num_shared: Default::default(),
+            num_viewed: Default::default(),
         }
+    }
+
+    pub fn update_stat(&mut self, b: &Behavior) {
+        if b.sharing {
+            self.shared();
+        }
+        self.num_viewed += 1;
     }
 
     pub fn shared(&mut self) {

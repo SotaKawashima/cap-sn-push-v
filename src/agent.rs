@@ -3,7 +3,12 @@ use num_traits::{Float, NumAssign};
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use serde_with::{serde_as, TryFromInto};
-use std::{array, collections::BTreeMap, fmt, iter::Sum};
+use std::{
+    array,
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    iter::Sum,
+};
 
 use crate::{
     cpt::{CptParams, Prospect, CPT},
@@ -40,6 +45,7 @@ where
 pub struct Behavior {
     pub selfish: bool,
     pub sharing: bool,
+    pub first_reading: bool,
 }
 
 pub struct Agent<V: Float> {
@@ -52,6 +58,7 @@ pub struct Agent<V: Float> {
     info_trust_map: BTreeMap<usize, V>,
     selfish: ActionStatus,
     sharing: BTreeMap<usize, ActionStatus>,
+    reading: BTreeSet<usize>,
 }
 
 #[derive(Default)]
@@ -101,6 +108,7 @@ where
             info_trust_map: Default::default(),
             selfish: Default::default(),
             sharing: Default::default(),
+            reading: Default::default(),
         }
     }
 
@@ -125,6 +133,7 @@ where
         self.info_trust_map.clear();
         self.selfish.reset();
         self.sharing.clear();
+        self.reading.clear();
     }
 
     pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
@@ -168,6 +177,8 @@ where
             return None;
         }
 
+        let first_reading = self.reading.insert(info.idx);
+
         let mut temp = self.ops.compute_opinions(
             info,
             self.friend_read_prob,
@@ -197,7 +208,11 @@ where
         self.ops.update_for_sharing(temp);
         let selfish = self.decide_selfish();
 
-        Some(Behavior { selfish, sharing })
+        Some(Behavior {
+            selfish,
+            sharing,
+            first_reading,
+        })
     }
 
     pub fn set_info_opinions(&mut self, info: &Info<V>, base_rates: &GlobalBaseRates<V>) -> bool
