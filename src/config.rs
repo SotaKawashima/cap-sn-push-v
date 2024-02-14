@@ -15,7 +15,7 @@ use serde_with::{serde_as, FromInto, TryFromInto};
 use crate::agent::AgentParams;
 use crate::info::{InfoContent, InfoObject};
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct Config<V>
 where
     V: Float + UlpsEq + NumAssign + SampleUniform,
@@ -98,7 +98,7 @@ impl TryFrom<GraphInfo> for GraphB {
 }
 
 #[serde_as]
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct Scenario<V>
 where
     V: Float + UlpsEq + NumAssign + SampleUniform,
@@ -303,25 +303,25 @@ mod tests {
                             "fptheta": [0.999, 0.0005, 0.0005],
                         },
                         "pi_prob": 1.0,
-                        "read_dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } },
-                        "farrival_dist": { "Beta": {"alpha": 3.0, "beta": 3.0}},
-                        "fread_dist": {"Beta": {"alpha": 3.0, "beta": 3.0}},
-                        "pi_dist": {"Fixed": {"value": 0.5}},
-                        "trust_dists": {
-                            "misinfo": {"Beta": { "alpha": 3.0, "beta": 3.0 }},
-                            "corrective": {"Beta":{ "alpha": 3.0, "beta": 3.0 }},
-                            "observed": "Standard",
-                            "inhibitive": {"Uniform": { "low": 0.5, "high": 1.0 }},
+                        "read_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "farrival_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "fread_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "pi_rate": { "base": 0.5 },
+                        "trust_params": {
+                            "misinfo": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                            "corrective": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                            "observed": { "base": 0.0, "error": { "dist": "Standard", "low": 0.0, "high": 1.0 } },
+                            "inhibitive": { "base": 0.0, "error": { "dist": "Standard", "low": 0.5, "high": 1.0 } },
                         },
                         "cpt_params": {
-                            "x0_dist": {"Fixed": {"value": -2.0}},
-                            "x1_dist": {"Fixed": {"value": -50.0}},
-                            "y_dist": {"Fixed": {"value": -0.001}},
-                            "alpha":  { "Fixed": { "value": 0.88 }},
-                            "beta":   { "Fixed": { "value": 0.88 }},
-                            "lambda": { "Fixed": { "value": 2.25 }},
-                            "gamma":  { "Fixed": { "value": 0.61 }},
-                            "delta":  { "Fixed": { "value": 0.69 }},
+                            "x0": {"base": -2.0},
+                            "x1": {"base": -50.0},
+                            "y":  {"base": -0.001},
+                            "alpha":  { "base": 0.88 },
+                            "beta":   { "base": 0.88 },
+                            "lambda": { "base": 2.25 },
+                            "gamma":  { "base": 0.61 },
+                            "delta":  { "base": 0.69 },
                         }
                     },
                     "info_contents": [
@@ -347,6 +347,7 @@ mod tests {
             }
         );
         let r = serde_json::from_value::<Config<f32>>(v);
+        println!("{:?}", r);
         assert!(r.is_ok());
         let c = r.unwrap();
         println!("{:?}", c.output);
@@ -357,8 +358,7 @@ mod tests {
 
     #[test]
     fn test_toml_config() {
-        let r = toml::from_str::<Config<f32>>(
-            r#"
+        let text = r#"
             name = "test-senario"
 
             [runtime]
@@ -462,27 +462,27 @@ mod tests {
             fptheta = [0.999, 0.0005, 0.0005]
 
             [scenario.agent_params]
-            pi_prob = 1.0
-            read_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
-            farrival_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
-            fread_dist = { Beta = { alpha = 3.0, beta = 3.0 } }
-            pi_dist = { Fixed = { value = 0.5 }}
+            read_prob     = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            farrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            fread_prob    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            pi_prob       = 1.0
+            pi_rate       = { base = 0.5 }
 
-            [scenario.agent_params.trust_dists]
-            misinfo = { Beta = { alpha = 3.0, beta = 3.0 } }
-            corrective = { Beta = { alpha = 3.0, beta = 3.0 } }
-            observed =  "Standard"
-            inhibitive = { Uniform = { low = 0.5, high = 1.0 } }
+            [scenario.agent_params.trust_params]
+            misinfo    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            corrective = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            observed   = { base = 0.0, error = { dist = "Standard" } }
+            inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
             [scenario.agent_params.cpt_params]
-            x0_dist = { Fixed = { value = -2.0 } }
-            x1_dist = { Fixed = { value = -50.0 } }
-            y_dist = { Fixed = { value = -0.001 } }
-            alpha =  { Fixed = { value = 0.88 } }
-            beta =   { Fixed = { value = 0.88 } }
-            lambda = { Fixed = { value = 2.25 } }
-            gamma =  { Fixed = { value = 0.61 } }
-            delta =  { Fixed = { value = 0.69 } }
+            x0 = { base = -2.0 }
+            x1 = { base = -50.0 }
+            y  = { base = -0.001 }
+            alpha  = { base = 0.88 }
+            beta   = { base = 0.88 }
+            lambda = { base = 2.25 }
+            gamma  = { base = 0.61 }
+            delta  = { base = 0.69 }
 
             [scenario]
             info_contents = [
@@ -500,10 +500,15 @@ mod tests {
             [[scenario.event_table]]
             time = 1
             informs = [{ agent_idx = 2, info_content_idx = 1 }]
-            "#,
-        );
+            "#;
+        let r = toml::from_str::<Config<f32>>(&text);
 
-        assert!(r.is_ok());
+        if let Err(e) = &r {
+            let r = e.span().unwrap();
+            let s = r.start.checked_sub(10).unwrap_or_default();
+            let t = (r.end + 10).min(text.len());
+            println!("{:?}", text.get(s..t));
+        }
         let c = r.unwrap();
         println!("{:?}", c.output);
         println!("{:?}", c.runtime.graph);

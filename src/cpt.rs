@@ -4,14 +4,13 @@ use std::{
 };
 
 use approx::{ulps_eq, UlpsEq};
-use either::Either;
 use num_traits::Float;
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use serde_with::{serde_as, TryFromInto};
 use subjective_logic::{harr2, mul::IndexedContainer};
 
-use crate::dist::{sample, Dist, DistParam};
+use crate::value::{DistValue, ParamValue};
 
 #[derive(Clone, Default, Debug)]
 pub struct CPT<V: Float> {
@@ -41,11 +40,11 @@ where
         Standard: Distribution<V>,
     {
         self.reset(
-            sample(&params.alpha, rng),
-            sample(&params.beta, rng),
-            sample(&params.lambda, rng),
-            sample(&params.gamma, rng),
-            sample(&params.delta, rng),
+            params.alpha.sample(rng),
+            params.beta.sample(rng),
+            params.lambda.sample(rng),
+            params.gamma.sample(rng),
+            params.delta.sample(rng),
         );
     }
 
@@ -173,30 +172,30 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
 }
 
 #[serde_as]
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
 pub struct CptParams<V>
 where
-    V: Float + SampleUniform,
+    V: Float,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub x0_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub x1_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub y_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub alpha: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub beta: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub lambda: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub gamma: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub delta: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub x0: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub x1: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub y: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub alpha: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub beta: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub lambda: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub gamma: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub delta: DistValue<V>,
 }
 
 #[derive(Default)]
@@ -234,9 +233,9 @@ where
         Open01: Distribution<V>,
         Standard: Distribution<V>,
     {
-        let x0 = sample(&params.x0_dist, rng);
-        let x1 = sample(&params.x1_dist, rng);
-        let y = sample(&params.y_dist, rng);
+        let x0 = params.x0.sample(rng);
+        let x1 = params.x1.sample(rng);
+        let y = params.y.sample(rng);
         self.reset(x0, x1, y);
     }
 }

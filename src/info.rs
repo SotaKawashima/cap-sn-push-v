@@ -1,7 +1,6 @@
 use std::{fmt::Display, ops::AddAssign};
 
 use approx::UlpsEq;
-use either::Either;
 use num_traits::Float;
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
@@ -10,8 +9,8 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::Simplex;
 
 use crate::{
-    dist::{Dist, DistParam},
     opinion::{PHI, PSI, P_A, S, THETA},
+    value::{DistValue, ParamValue},
 };
 
 #[derive(Debug)]
@@ -178,25 +177,25 @@ mod tests {
 }
 
 #[serde_as]
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct TrustDists<V>
+pub struct TrustParams<V>
 where
-    V: Float + SampleUniform,
+    V: Float,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub misinfo: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub corrective: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub observed: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub inhibitive: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub misinfo: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub corrective: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub observed: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub inhibitive: DistValue<V>,
 }
 
-impl<V> TrustDists<V>
+impl<V> TrustParams<V>
 where
     V: Float + SampleUniform,
     Open01: Distribution<V>,
@@ -208,26 +207,10 @@ where
         Open01: Distribution<V>,
         Standard: Distribution<V>,
     {
-        let misinfo = self
-            .misinfo
-            .as_ref()
-            .map_either(Clone::clone, |dist| dist.sample(rng))
-            .into_inner();
-        let corrective = self
-            .corrective
-            .as_ref()
-            .map_either(Clone::clone, |dist| dist.sample(rng))
-            .into_inner();
-        let observed = self
-            .observed
-            .as_ref()
-            .map_either(Clone::clone, |dist| dist.sample(rng))
-            .into_inner();
-        let inhibitive = self
-            .inhibitive
-            .as_ref()
-            .map_either(Clone::clone, |dist| dist.sample(rng))
-            .into_inner();
+        let misinfo = self.misinfo.sample(rng);
+        let corrective = self.corrective.sample(rng);
+        let observed = self.observed.sample(rng);
+        let inhibitive = self.inhibitive.sample(rng);
 
         move |info: &Info<V>| match info.content.label {
             InfoLabel::Misinfo => misinfo,

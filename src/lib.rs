@@ -1,9 +1,9 @@
 mod agent;
 pub mod config;
 mod cpt;
-mod dist;
 mod info;
 mod opinion;
+mod value;
 
 use std::collections::BTreeMap;
 use std::fs::File;

@@ -1,5 +1,4 @@
 use approx::UlpsEq;
-use either::Either;
 use num_traits::{Float, NumAssign};
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
@@ -8,35 +7,35 @@ use std::{array, collections::BTreeMap, fmt, iter::Sum};
 
 use crate::{
     cpt::{CptParams, Prospect, CPT},
-    dist::{sample, Dist, DistParam},
-    info::{Info, TrustDists},
+    info::{Info, TrustParams},
     opinion::{
         compute_opinions, reset_opinions, FriendOpinions, GlobalBaseRates, InitialOpinions,
         Opinions,
     },
+    value::{DistValue, ParamValue},
 };
 
 #[serde_as]
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct AgentParams<V>
 where
-    V: Float + NumAssign + UlpsEq + SampleUniform,
+    V: Float + NumAssign + UlpsEq,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
     pub initial_opinions: InitialOpinions<V>,
     pub base_rates: GlobalBaseRates<V>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub read_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub farrival_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub fread_dist: Either<V, Dist<V>>,
-    #[serde_as(as = "TryFromInto<DistParam<V>>")]
-    pub pi_dist: Either<V, Dist<V>>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub read_prob: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub farrival_prob: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub fread_prob: DistValue<V>,
+    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
+    pub pi_rate: DistValue<V>,
     /// probability whether people has plural ignorance
     pub pi_prob: V,
-    pub trust_dists: TrustDists<V>,
+    pub trust_params: TrustParams<V>,
     pub cpt_params: CptParams<V>,
 }
 
@@ -120,14 +119,12 @@ where
         self.cpt.reset_with(&agent_params.cpt_params, rng);
         self.prospect.reset_with(&agent_params.cpt_params, rng);
 
-        let r = rng.gen::<V>();
-        let s = sample(&agent_params.pi_dist, rng);
         self.reset(
-            sample(&agent_params.read_dist, rng),
-            sample(&agent_params.farrival_dist, rng),
-            sample(&agent_params.fread_dist, rng),
-            if agent_params.pi_prob > r {
-                s
+            agent_params.read_prob.sample(rng),
+            agent_params.farrival_prob.sample(rng),
+            agent_params.fread_prob.sample(rng),
+            if agent_params.pi_prob > rng.gen::<V>() {
+                agent_params.pi_rate.sample(rng)
             } else {
                 V::zero()
             },
@@ -161,7 +158,7 @@ where
         let trust = *self
             .info_trust_map
             .entry(info.idx)
-            .or_insert_with(|| agent_params.trust_dists.gen_map(rng)(info));
+            .or_insert_with(|| agent_params.trust_params.gen_map(rng)(info));
         if rng.gen::<V>() <= self.read_prob {
             Some(self.read_info_with_trust(info, receipt_prob, &agent_params.base_rates, trust))
         } else {
@@ -229,11 +226,11 @@ mod tests {
     use crate::{
         agent::{Agent, AgentParams},
         cpt::CptParams,
-        info::{Info, InfoContent, InfoObject, TrustDists},
+        info::{Info, InfoContent, InfoObject, TrustParams},
         opinion::{GlobalBaseRates, InitialOpinions},
+        value::DistValue,
     };
 
-    use either::Either::Left;
     use subjective_logic::{harr2, harr3, mul::Simplex};
 
     #[test]
@@ -333,26 +330,26 @@ mod tests {
                 ftheta: [0.999, 0.0005, 0.0005],
                 fptheta: [0.999, 0.0005, 0.0005],
             },
-            read_dist: Left(0.5),
-            farrival_dist: Left(0.5),
-            fread_dist: Left(0.5),
-            pi_dist: Left(0.5),
+            read_prob: DistValue::fixed(0.5),
+            farrival_prob: DistValue::fixed(0.5),
+            fread_prob: DistValue::fixed(0.5),
+            pi_rate: DistValue::fixed(0.5),
             pi_prob: 0.5,
-            trust_dists: TrustDists {
-                misinfo: Left(0.5),
-                corrective: Left(0.5),
-                observed: Left(0.5),
-                inhibitive: Left(0.5),
+            trust_params: TrustParams {
+                misinfo: DistValue::fixed(0.5),
+                corrective: DistValue::fixed(0.5),
+                observed: DistValue::fixed(0.5),
+                inhibitive: DistValue::fixed(0.5),
             },
             cpt_params: CptParams {
-                x0_dist: Left(0.5),
-                x1_dist: Left(0.5),
-                y_dist: Left(0.5),
-                alpha: Left(0.88),
-                beta: Left(0.88),
-                lambda: Left(2.25),
-                gamma: Left(0.61),
-                delta: Left(0.69),
+                x0: DistValue::fixed(0.5),
+                x1: DistValue::fixed(0.5),
+                y: DistValue::fixed(0.5),
+                alpha: DistValue::fixed(0.88),
+                beta: DistValue::fixed(0.88),
+                lambda: DistValue::fixed(2.25),
+                gamma: DistValue::fixed(0.61),
+                delta: DistValue::fixed(0.69),
             },
         };
 
