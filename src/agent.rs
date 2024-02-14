@@ -8,10 +8,7 @@ use std::{array, collections::BTreeMap, fmt, iter::Sum};
 use crate::{
     cpt::{CptParams, Prospect, CPT},
     info::{Info, TrustParams},
-    opinion::{
-        compute_opinions, reset_opinions, FriendOpinions, GlobalBaseRates, InitialOpinions,
-        Opinions,
-    },
+    opinion::{GlobalBaseRates, InitialOpinions, Opinions},
     value::{DistValue, ParamValue},
 };
 
@@ -48,14 +45,40 @@ pub struct Behavior {
 pub struct Agent<V: Float> {
     pub cpt: CPT<V>,
     pub prospect: Prospect<V>,
-    op: Opinions<V>,
-    fop: FriendOpinions<V>,
+    ops: Opinions<V>,
     read_prob: V,
     friend_arrival_prob: V,
     friend_read_prob: V,
-    done_selfish: bool,
     info_trust_map: BTreeMap<usize, V>,
-    info_shared: BTreeMap<usize, bool>,
+    selfish: ActionStatus,
+    sharing: BTreeMap<usize, ActionStatus>,
+}
+
+#[derive(Default)]
+enum ActionStatus {
+    #[default]
+    NotYet,
+    Done,
+}
+
+impl ActionStatus {
+    fn reset(&mut self) {
+        *self = ActionStatus::NotYet;
+    }
+
+    fn is_done(&self) -> bool {
+        matches!(self, ActionStatus::Done)
+    }
+
+    /// retrun true if doing action is chosen, or false otherwise.
+    fn decide<V: Float>(&mut self, values: [V; 2]) -> bool {
+        if values[0] < values[1] {
+            *self = ActionStatus::Done;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl<V> Agent<V>
@@ -71,14 +94,13 @@ where
         Self {
             cpt: Default::default(),
             prospect: Default::default(),
-            op: Default::default(),
-            fop: Default::default(),
+            ops: Default::default(),
             read_prob: V::zero(),
             friend_arrival_prob: V::zero(),
             friend_read_prob: V::zero(),
-            done_selfish: Default::default(),
             info_trust_map: Default::default(),
-            info_shared: Default::default(),
+            selfish: Default::default(),
+            sharing: Default::default(),
         }
     }
 
@@ -92,23 +114,17 @@ where
         base_rates: &GlobalBaseRates<V>,
     ) where
         V: NumAssign + Default,
-        // + Sum + Default + std::fmt::Debug + SampleUniform,
     {
         self.read_prob = read_prob;
         self.friend_arrival_prob = friend_arrival_prob;
         self.friend_read_prob = friend_read_prob;
 
-        reset_opinions(
-            &mut self.op,
-            &mut self.fop,
-            pi_rate,
-            initial_opinions,
-            base_rates,
-        );
+        self.ops
+            .reset_opinions(pi_rate, initial_opinions, base_rates);
 
         self.info_trust_map.clear();
-        self.info_shared.clear();
-        self.done_selfish = false;
+        self.selfish.reset();
+        self.sharing.clear();
     }
 
     pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
@@ -133,22 +149,10 @@ where
         );
     }
 
-    pub fn read_info_trustfully(
-        &mut self,
-        info: &Info<V>,
-        receipt_prob: V,
-        agent_params: &AgentParams<V>,
-    ) -> Behavior
-    where
-        V: Sum + Default + fmt::Debug + NumAssign,
-    {
-        self.read_info_with_trust(info, receipt_prob, &agent_params.base_rates, V::one())
-    }
-
     pub fn read_info(
         &mut self,
         info: &Info<V>,
-        receipt_prob: V,
+        friend_receipt_prob: V,
         agent_params: &AgentParams<V>,
         rng: &mut impl Rng,
     ) -> Option<Behavior>
@@ -159,65 +163,73 @@ where
             .info_trust_map
             .entry(info.idx)
             .or_insert_with(|| agent_params.trust_params.gen_map(rng)(info));
-        if rng.gen::<V>() <= self.read_prob {
-            Some(self.read_info_with_trust(info, receipt_prob, &agent_params.base_rates, trust))
-        } else {
-            None
+
+        if rng.gen::<V>() > self.read_prob {
+            return None;
         }
+
+        let mut temp = self.ops.compute_opinions(
+            info,
+            self.friend_read_prob,
+            friend_receipt_prob,
+            trust,
+            &agent_params.base_rates,
+        );
+
+        // compute values of prospects
+        let sharing_status = self.sharing.entry(info.idx).or_default();
+        let sharing = if sharing_status.is_done() {
+            false
+        } else {
+            let ps = self.ops.predicate_friend_opinions(
+                &mut temp,
+                info,
+                self.friend_arrival_prob * self.friend_read_prob * trust,
+                &agent_params.base_rates,
+            );
+            log::debug!(" P_FA-TH:{:?}", ps[0]);
+            log::debug!("~P_FA-TH:{:?}", ps[0]);
+            let values: [V; 2] =
+                array::from_fn(|i| self.cpt.valuate(&self.prospect.sharing[i], &ps[i]));
+            log::info!("V_Y:{:?}", values);
+            sharing_status.decide(values)
+        };
+        self.ops.update_for_sharing(temp);
+        let selfish = self.decide_selfish();
+
+        Some(Behavior { selfish, sharing })
     }
 
-    fn read_info_with_trust(
-        &mut self,
-        info: &Info<V>,
-        receipt_prob: V,
-        base_rates: &GlobalBaseRates<V>,
-        trust: V,
-    ) -> Behavior
+    pub fn set_info_opinions(&mut self, info: &Info<V>, base_rates: &GlobalBaseRates<V>) -> bool
     where
         V: Sum + Default + fmt::Debug + NumAssign,
     {
-        let mut temp = compute_opinions(
-            &mut self.op,
-            &mut self.fop,
+        let mut temp =
+            self.ops
+                .compute_opinions(info, self.friend_read_prob, V::zero(), V::one(), base_rates);
+        // posting info is equivalent to sharing it to friends with max trust.
+        self.ops.predicate_friend_opinions(
+            &mut temp,
             info,
-            self.friend_read_prob,
-            receipt_prob,
-            trust,
+            self.friend_arrival_prob * self.friend_read_prob,
             base_rates,
         );
-        // compute values of prospects
-        let shared = self.info_shared.entry(info.idx).or_insert(false);
-        let sharing = if *shared {
-            false
-        } else {
-            let (prob, pred_prob) = temp.predicate_friend_opinions(
-                &self.op,
-                &self.fop,
-                info,
-                self.friend_arrival_prob * self.friend_read_prob * trust,
-                base_rates,
-            );
-            let value_sharing: [V; 2] = [
-                self.cpt.valuate(&self.prospect.sharing[0], &prob),
-                self.cpt.valuate(&self.prospect.sharing[1], &pred_prob),
-            ];
-            log::info!("V_Y:{:?}", value_sharing);
-            *shared = value_sharing[0] < value_sharing[1];
-            *shared
-        };
+        self.ops.update_for_sharing(temp);
+        self.decide_selfish()
+    }
 
-        let theta_prob = temp.update_for_sharing(&mut self.op, &mut self.fop);
-        let selfish = if self.done_selfish {
-            false
-        } else {
-            let value_selfish: [V; 2] =
-                array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &theta_prob));
-            log::info!("V_X:{:?}", value_selfish);
-            self.done_selfish = value_selfish[0] < value_selfish[1];
-            self.done_selfish
-        };
-
-        Behavior { selfish, sharing }
+    fn decide_selfish(&mut self) -> bool
+    where
+        V: NumAssign + Sum + fmt::Debug + Default,
+    {
+        if self.selfish.is_done() {
+            return false;
+        }
+        let p = self.ops.get_theta_projection();
+        log::debug!("P_TH:{:?}", p);
+        let values: [V; 2] = array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p));
+        log::info!("V_X:{:?}", values);
+        self.selfish.decide(values)
     }
 }
 
@@ -370,10 +382,6 @@ mod tests {
             &agent_params.base_rates,
         );
 
-        let receipt_prob = 0.0;
-        println!(
-            "{:?}",
-            a.read_info_trustfully(&info, receipt_prob, &agent_params)
-        );
+        println!("{:?}", a.set_info_opinions(&info, &agent_params.base_rates));
     }
 }

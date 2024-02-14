@@ -1,7 +1,7 @@
 output = { location = "./test/" }
 
 [runtime]
-graph = { directed = false, location = { LocalFile = "./test/graph.txt" } }
+graph = { directed = true, location = { LocalFile = "./test/graph.txt" } }
 seed_state = 0
 num_parallel = 1
 iteration_count = 1
@@ -107,22 +107,22 @@ ftheta  = [ 0.999, 0.0005, 0.0005 ]
 fptheta = [ 0.999, 0.0005, 0.0005 ]
 
 [scenario.agent_params]
-read_prob     = { base = 0.0, error = { dist = { Beta = { alpha = 7.0, beta = 3.0 } } } }
-farrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 9.0, beta = 1.0 } } } }
-fread_prob    = { base = 0.0, error = { dist = { Beta = { alpha = 5.0, beta = 5.0 } } } }
+read_prob     = { base = 0.5 }
+farrival_prob = { base = 0.5 }
+fread_prob    = { base = 0.5 }
 pi_prob       = 1.0
 pi_rate       = { base = 0.0, error = { dist = { Beta = { alpha = 19.0, beta = 1.0 } } } }
 
 [scenario.agent_params.trust_params]
-misinfo    = { base = 0.0, error = { dist = { Beta = { alpha = 1.5, beta = 4.5 } } } }
+misinfo    = { base = 1.0 }
 corrective = { base = 0.0, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
 [scenario.agent_params.cpt_params]
-x0     = { base = -2.0 }
-x1     = { base = -50.0 }
-y      = { base = -0.001 }
+x0     = { base = -1.0 }
+x1     = { base = -10.0 }
+y      = { base = -0.01 }
 alpha  = { base = 0.88 }
 beta   = { base = 0.88 }
 lambda = { base = 2.25 }
@@ -131,8 +131,8 @@ delta  = { base = 0.69 }
 
 [scenario]
 info_contents = [
-    # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
-    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
+    { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
+    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
 ]
 
 [[scenario.event_table]]

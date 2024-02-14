@@ -371,24 +371,6 @@ mod tests {
         let p = fatheta.projection();
         let sump = p.into_iter().sum::<f32>();
         println!("{}", sump);
-        // let p = HigherArr2::<f32, 2, 3>::map(|i| p[i] / sump);
-
-        // let fad = Opinion1d::<f32, 2>::new(
-        //     fa.b().map(|b| b / ),
-        //     0.8269686,
-        //     [0.9991985, 0.0008016379],
-        // );
-        // let theta = Opinion1d::<f32, 3>::new(
-        //     [0.009244099, 0.37928966, 0.41457662],
-        //     0.19688994,
-        //     [0.99831605, 0.00080163794, 0.0008825256],
-        // );
-        // assert_ulps_eq!(, 1.0);
-
-        // let p = harr2![
-        //     [0.18865241, 0.34782714, 0.3801881],
-        //     [0.017150123, 0.03162047, 0.03456236]
-        // ];
         let x0 = -0.1;
         let x1 = -2.0;
         let y = -0.01;
@@ -404,7 +386,6 @@ mod tests {
         let a = p.into_iter().sum::<f32>();
         println!("{}, {}", a, relative_eq!(a, 1.0));
         println!("{:?}", level_sets);
-        // println!("{}", cpt.valuate(&level_sets, &p));
         println!("V-={}", cpt.negative_valuate(&level_sets.negative, &p));
     }
 }

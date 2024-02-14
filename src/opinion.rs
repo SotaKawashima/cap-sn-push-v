@@ -1,5 +1,6 @@
 use crate::info::Info;
 use approx::UlpsEq;
+use core::fmt;
 use num_traits::{Float, NumAssign};
 use serde_with::{serde_as, TryFromInto};
 use std::{array, iter::Sum, ops::AddAssign};
@@ -102,101 +103,36 @@ pub struct InitialOpinions<V: Float + AddAssign + UlpsEq> {
 }
 
 #[derive(Debug, Default)]
-pub struct Opinions<V> {
-    pub theta: Opinion1d<V, THETA>,
-    pub psi: Opinion1d<V, PSI>,
-    pub phi: Opinion1d<V, PHI>,
-    pub s: Opinion1d<V, S>,
-    // \Theta | \Phi
-    pub cond_theta_phi: [Simplex<V, THETA>; PHI],
-    // P\Psi | S
-    pub cond_ppsi: [Simplex<V, P_PSI>; S],
-    // P\Theta | P\Psi
-    pub cond_ptheta: [Simplex<V, P_THETA>; P_PSI],
-    // PA | P\Theta
-    pub cond_pa: [Simplex<V, P_A>; P_THETA],
-    // F\Psi | S
-    pub cond_fpsi: [Simplex<V, F_PSI>; S],
-    /// $\Theta | PA.\Psi,FA$
-    pub cond_theta: HigherArr3<Simplex<V, THETA>, P_A, PSI, F_A>,
+pub struct Opinions<V: Float> {
+    op: BaseOpinions<V>,
+    fop: FriendOpinions<V>,
 }
 
-pub fn reset_opinions<V>(
-    op: &mut Opinions<V>,
-    fop: &mut FriendOpinions<V>,
-    pi_rate: V,
-    initial_opinions: InitialOpinions<V>,
-    base_rates: &GlobalBaseRates<V>,
-) where
-    V: Float + UlpsEq + NumAssign + Default,
-{
-    let InitialOpinions {
-        theta,
-        psi,
-        phi,
-        s,
-        cond_theta_phi,
-        fs,
-        fphi,
-        cond_ftheta_fphi,
-        cond_ppsi,
-        cond_ptheta,
-        cond_pa,
-        cond_fpsi,
-        cond_theta,
-        cond_fptheta,
-        cond_fpa,
-        cond_ftheta,
-        cond_fa,
-        cond_fppsi,
-    } = initial_opinions;
-
-    op.theta.simplex = theta;
-    op.theta.base_rate = base_rates.theta;
-    op.psi.simplex = psi;
-    op.psi.base_rate = base_rates.psi;
-    op.phi.simplex = phi;
-    op.phi.base_rate = base_rates.phi;
-    op.s.simplex = s;
-    op.s.base_rate = base_rates.s;
-
-    op.cond_theta_phi = cond_theta_phi;
-    op.cond_ppsi = cond_ppsi;
-    op.cond_ptheta = cond_ptheta;
-    op.cond_fpsi = cond_fpsi;
-    op.cond_theta = cond_theta;
-
-    op.cond_pa = cond_pa;
-    let u = op.cond_pa[1].uncertainty;
-    let b1 = pi_rate * op.cond_pa[1].belief[1];
-    op.cond_pa[1].belief[0] = V::one() - u - b1;
-    op.cond_pa[1].belief[1] = b1;
-    op.cond_pa[1].uncertainty = u;
-
-    fop.fs.simplex = fs;
-    fop.fs.base_rate = base_rates.fs;
-    fop.fphi.simplex = fphi;
-    fop.fphi.base_rate = base_rates.fphi;
-    fop.cond_ftheta_fphi = cond_ftheta_fphi;
-
-    fop.cond_fptheta = cond_fptheta;
-    fop.cond_ftheta = cond_ftheta;
-    fop.cond_fa = cond_fa;
-    fop.cond_fppsi = cond_fppsi;
-
-    fop.cond_fpa = cond_fpa;
-    let u = fop.cond_fpa[1].uncertainty;
-    let b1 = pi_rate * fop.cond_fpa[1].belief[1];
-    fop.cond_fpa[1].belief[0] = V::one() - u - b1;
-    fop.cond_fpa[1].belief[1] = b1;
-    fop.cond_fpa[1].uncertainty = u;
+#[derive(Debug, Default)]
+struct BaseOpinions<V: Float> {
+    theta: Opinion1d<V, THETA>,
+    psi: Opinion1d<V, PSI>,
+    phi: Opinion1d<V, PHI>,
+    s: Opinion1d<V, S>,
+    // \Theta | \Phi
+    cond_theta_phi: [Simplex<V, THETA>; PHI],
+    // P\Psi | S
+    cond_ppsi: [Simplex<V, P_PSI>; S],
+    // P\Theta | P\Psi
+    cond_ptheta: [Simplex<V, P_THETA>; P_PSI],
+    // PA | P\Theta
+    cond_pa: [Simplex<V, P_A>; P_THETA],
+    // F\Psi | S
+    cond_fpsi: [Simplex<V, F_PSI>; S],
+    /// $\Theta | PA.\Psi,FA$
+    cond_theta: HigherArr3<Simplex<V, THETA>, P_A, PSI, F_A>,
 }
 
 #[derive(Debug)]
-pub struct FriendOpinionsUpd<V: Float> {
-    pub fs: Opinion1d<V, F_S>,
-    pub fphi: Opinion1d<V, F_PHI>,
-    pub cond_ftheta_fphi: [Simplex<V, F_THETA>; F_PHI],
+struct FriendOpinionsUpd<V: Float> {
+    fs: Opinion1d<V, F_S>,
+    fphi: Opinion1d<V, F_PHI>,
+    cond_ftheta_fphi: [Simplex<V, F_THETA>; F_PHI],
 }
 
 #[derive(Debug, Default)]
@@ -219,7 +155,7 @@ pub struct FriendOpinions<V: Float> {
 }
 
 impl<V: Float> FriendOpinions<V> {
-    pub fn compute_new_friend_op(
+    fn compute_new_friend_op(
         &self,
         info: &Info<V>,
         fpsi_ded: &Opinion1d<V, F_PSI>,
@@ -244,7 +180,7 @@ impl<V: Float> FriendOpinions<V> {
             cond_ftheta_fphi,
         };
 
-        log::debug!(" P_FS  :{:?}", fop.fs.projection());
+        log::debug!(" w_FPSI:{:?}", fpsi.simplex);
 
         let fpa = {
             let mut fpa = fop
@@ -272,8 +208,8 @@ impl<V: Float> FriendOpinions<V> {
             FuseOp::Wgh.fuse_assign(&mut ftheta_ded_1, &ftheta_ded_2);
             ftheta_ded_1
         };
-        log::debug!(" P_FPA :{:?}", fpa.projection());
-        log::debug!(" P_FTH :{:?}", ftheta.projection());
+        log::debug!(" w_FPA :{:?}", fpa.simplex);
+        log::debug!(" w_FTH :{:?}", ftheta.simplex);
         (
             fop,
             ftheta
@@ -282,7 +218,7 @@ impl<V: Float> FriendOpinions<V> {
         )
     }
 
-    pub fn update(&mut self, fop: FriendOpinionsUpd<V>) {
+    fn update(&mut self, fop: FriendOpinionsUpd<V>) {
         self.fs = fop.fs;
         self.fphi = fop.fphi;
         self.cond_ftheta_fphi = fop.cond_ftheta_fphi;
@@ -298,140 +234,221 @@ pub struct Temporal<V: Float> {
     pred: Option<PredTemporal<V>>,
 }
 
-pub fn compute_opinions<V>(
-    op: &mut Opinions<V>,
-    fop: &mut FriendOpinions<V>,
-    // so: &StaticOpinions<V>,
-    // fso: &FriendStaticOpinions<V>,
-    info: &Info<V>,
-    friend_read_prob: V,
-    receipt_prob: V,
-    trust: V,
-    base_rates: &GlobalBaseRates<V>,
-) -> Temporal<V>
-where
-    V: Float + UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
-{
-    log::debug!("b_PA|PTH_1:{:?}", op.cond_pa[1].belief);
-
-    FuseOp::Wgh.fuse_assign(&mut op.s, &info.content.s.discount(trust));
-    FuseOp::Wgh.fuse_assign(&mut op.psi, &info.content.psi.discount(trust));
-    FuseOp::Wgh.fuse_assign(&mut op.phi, &info.content.phi.discount(trust));
-    for i in 0..info.content.cond_theta_phi.len() {
-        FuseOp::Wgh.fuse_assign(
-            &mut fop.cond_ftheta_fphi[i],
-            &info.content.cond_theta_phi[i].discount(trust),
-        )
-    }
-
-    let pa = {
-        let a =
-            op.s.deduce(&op.cond_ppsi)
-                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi));
-        log::debug!(" S  :{:?}", op.cond_ppsi);
-        let mut pa = a
-            .deduce(&op.cond_ptheta)
-            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
-            .deduce(&op.cond_pa)
-            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.pa));
-
-        // an opinion of PA is computed by using aleatory cummulative fusion.
-        FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(trust));
-        pa
-    };
-
-    log::debug!(" P_PA  :{:?}", pa.projection());
-
-    // compute friends opinions
-    let fpsi_ded =
-        op.s.deduce(&op.cond_fpsi)
-            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.fpsi));
-    let (fop_upd, fa) = fop.compute_new_friend_op(
-        info,
-        &fpsi_ded,
-        receipt_prob * friend_read_prob * trust,
-        base_rates,
-    );
-    fop.update(fop_upd);
-
-    let theta_ded_2 = op
-        .phi
-        .deduce(&op.cond_theta_phi)
-        .unwrap_or_else(|| Opinion::vacuous_with(op.theta.base_rate));
-
-    let theta = {
-        let mut theta_ded_1 = Opinion::product3(pa.as_ref(), op.psi.as_ref(), fa.as_ref())
-            .deduce(&op.cond_theta)
-            .unwrap_or_else(|| Opinion::vacuous_with(op.theta.base_rate));
-        FuseOp::Wgh.fuse_assign(&mut theta_ded_1, &theta_ded_2);
-        theta_ded_1
-    };
-
-    Temporal {
-        fa,
-        theta,
-        fpsi_ded,
-        theta_ded_2,
-        pa,
-        pred: None,
-    }
-}
-
 struct PredTemporal<V: Float> {
     pred_theta: Opinion1d<V, THETA>,
     pred_fop: FriendOpinionsUpd<V>,
 }
 
-impl<V> Temporal<V>
-where
-    V: Float + UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
-{
-    pub fn predicate_friend_opinions(
+impl<V> Temporal<V> where V: Float + UlpsEq + NumAssign + Sum + Default + std::fmt::Debug {}
+
+impl<V: Float> Opinions<V> {
+    pub fn reset_opinions(
         &mut self,
-        op: &Opinions<V>,
-        fop: &FriendOpinions<V>,
+        pi_rate: V,
+        initial_opinions: InitialOpinions<V>,
+        base_rates: &GlobalBaseRates<V>,
+    ) where
+        V: Float + UlpsEq + NumAssign + Default,
+    {
+        let InitialOpinions {
+            theta,
+            psi,
+            phi,
+            s,
+            cond_theta_phi,
+            fs,
+            fphi,
+            cond_ftheta_fphi,
+            cond_ppsi,
+            cond_ptheta,
+            cond_pa,
+            cond_fpsi,
+            cond_theta,
+            cond_fptheta,
+            cond_fpa,
+            cond_ftheta,
+            cond_fa,
+            cond_fppsi,
+        } = initial_opinions;
+
+        self.op.theta.simplex = theta;
+        self.op.theta.base_rate = base_rates.theta;
+        self.op.psi.simplex = psi;
+        self.op.psi.base_rate = base_rates.psi;
+        self.op.phi.simplex = phi;
+        self.op.phi.base_rate = base_rates.phi;
+        self.op.s.simplex = s;
+        self.op.s.base_rate = base_rates.s;
+
+        self.op.cond_theta_phi = cond_theta_phi;
+        self.op.cond_ppsi = cond_ppsi;
+        self.op.cond_ptheta = cond_ptheta;
+        self.op.cond_fpsi = cond_fpsi;
+        self.op.cond_theta = cond_theta;
+
+        self.op.cond_pa = cond_pa;
+        let u = self.op.cond_pa[1].uncertainty;
+        let b1 = pi_rate * self.op.cond_pa[1].belief[1];
+        self.op.cond_pa[1].belief[0] = V::one() - u - b1;
+        self.op.cond_pa[1].belief[1] = b1;
+        self.op.cond_pa[1].uncertainty = u;
+
+        self.fop.fs.simplex = fs;
+        self.fop.fs.base_rate = base_rates.fs;
+        self.fop.fphi.simplex = fphi;
+        self.fop.fphi.base_rate = base_rates.fphi;
+        self.fop.cond_ftheta_fphi = cond_ftheta_fphi;
+
+        self.fop.cond_fptheta = cond_fptheta;
+        self.fop.cond_ftheta = cond_ftheta;
+        self.fop.cond_fa = cond_fa;
+        self.fop.cond_fppsi = cond_fppsi;
+
+        self.fop.cond_fpa = cond_fpa;
+        let u = self.fop.cond_fpa[1].uncertainty;
+        let b1 = pi_rate * self.fop.cond_fpa[1].belief[1];
+        self.fop.cond_fpa[1].belief[0] = V::one() - u - b1;
+        self.fop.cond_fpa[1].belief[1] = b1;
+        self.fop.cond_fpa[1].uncertainty = u;
+    }
+
+    pub fn compute_opinions(
+        &mut self,
+        info: &Info<V>,
+        friend_read_prob: V,
+        friend_receipt_prob: V,
+        trust: V,
+        base_rates: &GlobalBaseRates<V>,
+    ) -> Temporal<V>
+    where
+        V: UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
+    {
+        log::debug!("b_PA|PTH_1:{:?}", self.op.cond_pa[1].belief);
+
+        FuseOp::Wgh.fuse_assign(&mut self.op.s, &info.content.s.discount(trust));
+        FuseOp::Wgh.fuse_assign(&mut self.op.psi, &info.content.psi.discount(trust));
+        FuseOp::Wgh.fuse_assign(&mut self.op.phi, &info.content.phi.discount(trust));
+        for i in 0..info.content.cond_theta_phi.len() {
+            FuseOp::Wgh.fuse_assign(
+                &mut self.fop.cond_ftheta_fphi[i],
+                &info.content.cond_theta_phi[i].discount(trust),
+            )
+        }
+
+        let pa = {
+            let a = self
+                .op
+                .s
+                .deduce(&self.op.cond_ppsi)
+                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ppsi));
+            let mut pa = a
+                .deduce(&self.op.cond_ptheta)
+                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.ptheta))
+                .deduce(&self.op.cond_pa)
+                .unwrap_or_else(|| Opinion::vacuous_with(base_rates.pa));
+
+            // an opinion of PA is computed by using aleatory cummulative fusion.
+            FuseOp::ACm.fuse_assign(&mut pa, &info.content.pa.discount(trust));
+            pa
+        };
+
+        log::debug!(" w_PA  :{:?}", pa.simplex);
+
+        // compute friends opinions
+        let fpsi_ded = self
+            .op
+            .s
+            .deduce(&self.op.cond_fpsi)
+            .unwrap_or_else(|| Opinion::vacuous_with(base_rates.fpsi));
+        let (fop_upd, fa) = self.fop.compute_new_friend_op(
+            info,
+            &fpsi_ded,
+            friend_receipt_prob * friend_read_prob * trust,
+            base_rates,
+        );
+
+        log::debug!(" w_FA  :{:?}", fa.simplex);
+        self.fop.update(fop_upd);
+
+        let theta_ded_2 = self
+            .op
+            .phi
+            .deduce(&self.op.cond_theta_phi)
+            .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
+
+        let theta = {
+            let mut theta_ded_1 = Opinion::product3(pa.as_ref(), self.op.psi.as_ref(), fa.as_ref())
+                .deduce(&self.op.cond_theta)
+                .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
+            FuseOp::Wgh.fuse_assign(&mut theta_ded_1, &theta_ded_2);
+            theta_ded_1
+        };
+
+        Temporal {
+            fa,
+            theta,
+            fpsi_ded,
+            theta_ded_2,
+            pa,
+            pred: None,
+        }
+    }
+
+    pub fn predicate_friend_opinions(
+        &self,
+        temp: &mut Temporal<V>,
         info: &Info<V>,
         ft: V,
         base_rates: &GlobalBaseRates<V>,
-    ) -> (HigherArr2<V, F_A, THETA>, HigherArr2<V, F_A, THETA>) {
+    ) -> [HigherArr2<V, F_A, THETA>; 2]
+    where
+        V: UlpsEq + Sum + Default + fmt::Debug + NumAssign,
+    {
         // predict new friends' opinions in case of sharing
-        let (pred_fop, pred_fa) = fop.compute_new_friend_op(info, &self.fpsi_ded, ft, base_rates);
+        let (pred_fop, pred_fa) =
+            self.fop
+                .compute_new_friend_op(info, &temp.fpsi_ded, ft, base_rates);
         let pred_theta = {
             let mut pred_theta_ded_1 =
-                Opinion::product3(self.pa.as_ref(), op.psi.as_ref(), pred_fa.as_ref())
-                    .deduce(&op.cond_theta)
-                    .unwrap_or_else(|| Opinion::vacuous_with(op.theta.base_rate));
-            FuseOp::Wgh.fuse_assign(&mut pred_theta_ded_1, &self.theta_ded_2);
+                Opinion::product3(temp.pa.as_ref(), self.op.psi.as_ref(), pred_fa.as_ref())
+                    .deduce(&self.op.cond_theta)
+                    .unwrap_or_else(|| Opinion::vacuous_with(self.op.theta.base_rate));
+            FuseOp::Wgh.fuse_assign(&mut pred_theta_ded_1, &temp.theta_ded_2);
             pred_theta_ded_1
         };
 
-        let fa_theta = Opinion::product2(self.fa.as_ref(), self.theta.as_ref());
+        log::debug!("~w_FA  :{:?}", pred_fa.simplex);
+
+        let fa_theta = Opinion::product2(temp.fa.as_ref(), temp.theta.as_ref());
         let pred_fa_theta = Opinion::product2(pred_fa.as_ref(), pred_theta.as_ref());
-        self.pred = Some(PredTemporal {
+        temp.pred = Some(PredTemporal {
             pred_theta,
             pred_fop,
         });
-        (fa_theta.projection(), pred_fa_theta.projection())
+        [fa_theta.projection(), pred_fa_theta.projection()]
     }
 
-    pub fn update_for_sharing(
-        self,
-        op: &mut Opinions<V>,
-        fop: &mut FriendOpinions<V>,
-    ) -> [V; THETA] {
-        match self.pred {
+    pub fn update_for_sharing(&mut self, temp: Temporal<V>) {
+        match temp.pred {
             // sharing info
             Some(PredTemporal {
                 pred_theta,
                 pred_fop,
             }) => {
-                op.theta = pred_theta;
-                fop.update(pred_fop);
+                self.op.theta = pred_theta;
+                self.fop.update(pred_fop);
             }
             None => {
-                op.theta = self.theta;
+                self.op.theta = temp.theta;
             }
         }
-        op.theta.projection()
+    }
+
+    #[inline]
+    pub fn get_theta_projection(&self) -> [V; THETA]
+    where
+        V: NumAssign,
+    {
+        self.op.theta.projection()
     }
 }

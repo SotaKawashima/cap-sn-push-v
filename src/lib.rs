@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
 use std::iter::Sum;
+use std::mem;
 
 use approx::UlpsEq;
 use arrow2::array::{Array, PrimitiveArray, Utf8Array};
@@ -222,7 +223,10 @@ where
         let mut num_receipt_map = BTreeMap::<InfoLabel, u32>::new();
         let mut event_table = self.event_table.0.clone();
 
+        log::info!("#i: {num_iter}");
+
         while !received.is_empty() || !event_table.is_empty() {
+            log::info!("t = {t}");
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
@@ -240,59 +244,56 @@ where
             num_receipt_map.clear();
             num_view_map.clear();
             num_sharing_map.clear();
-            received = received
-                .into_iter()
-                .filter_map(|r| {
-                    let agent = &mut self.agents[r.agent_idx];
-                    let info = &mut infos[r.info_idx];
-                    let receipt_prob = V::one()
-                        - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n)
-                            .powf(self.d);
+            for r in mem::take(&mut received) {
+                let agent = &mut self.agents[r.agent_idx];
+                let info = &mut infos[r.info_idx];
+                let friend_receipt_prob = V::one()
+                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n).powf(self.d);
 
-                    let num_receipt = num_receipt_map.entry(info.content.label).or_insert(0);
-                    *num_receipt += 1;
+                log::info!("r^i_m = {friend_receipt_prob:?}");
 
-                    log::info!(
-                        "{} -> #{}:{}",
-                        info.content.label,
-                        r.agent_idx,
-                        if r.force { "informer" } else { "sharer" },
-                    );
+                let num_receipt = num_receipt_map.entry(info.content.label).or_insert(0);
+                *num_receipt += 1;
 
-                    let b = if r.force {
-                        agent.read_info_trustfully(info, receipt_prob, self.agent_params)
-                    } else {
-                        agent.read_info(info, receipt_prob, self.agent_params, self.rng)?
+                log::info!(
+                    "{} -> #{}:{}",
+                    info.content.label,
+                    r.agent_idx,
+                    if r.force { "informer" } else { "sharer" },
+                );
+
+                if r.force {
+                    if agent.set_info_opinions(info, &self.agent_params.base_rates) {
+                        num_selfish += 1;
+                    }
+                } else {
+                    let Some(b) =
+                        agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng)
+                    else {
+                        continue;
                     };
-
-                    if !r.force {
-                        let num_view = num_view_map.entry(info.content.label).or_insert(0);
-                        *num_view += 1;
-                    }
-                    if !b.sharing {
-                        return None;
-                    }
-                    if !r.force {
-                        info.shared();
-                        let num_sharing = num_sharing_map.entry(info.content.label).or_insert(0);
-                        *num_sharing += 1;
-                    }
                     if b.selfish {
                         num_selfish += 1;
                     }
-                    Some(
-                        self.graph
-                            .successors(r.agent_idx)
-                            .map(|bid| Receipt {
-                                agent_idx: *bid,
-                                force: false,
-                                info_idx: r.info_idx,
-                            })
-                            .collect::<Vec<_>>(),
-                    )
-                })
-                .flatten()
-                .collect();
+                    let num_view = num_view_map.entry(info.content.label).or_default();
+                    *num_view += 1;
+                    if b.sharing {
+                        info.shared();
+                        let num_sharing = num_sharing_map.entry(info.content.label).or_default();
+                        *num_sharing += 1;
+                    } else {
+                        continue;
+                    }
+                };
+
+                for bid in self.graph.successors(r.agent_idx) {
+                    received.push(Receipt {
+                        agent_idx: *bid,
+                        force: false,
+                        info_idx: r.info_idx,
+                    });
+                }
+            }
             for (k, n) in &num_receipt_map {
                 self.stat
                     .push(num_par, num_iter, t, *n, format!("num_receipt:{}", k));
