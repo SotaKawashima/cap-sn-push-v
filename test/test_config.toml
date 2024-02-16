@@ -7,16 +7,22 @@ num_parallel = 1
 iteration_count = 1
 
 [scenario.agent_params.initial_opinions]
-theta = [ [ 0.0, 0.0, 0.0 ], 1.0 ]
+# theta = [ [ 0.0, 0.0, 0.0 ], 1.0 ]
 psi = [ [ 0.0, 0.0 ], 1.0 ]
 phi = [ [ 0.0, 0.0 ], 1.0 ]
 s = [ [ 0.0, 0.0 ], 1.0 ]
+fs = [ [ 0.0, 0.0 ], 1.0 ]
+fphi = [ [ 0.0, 0.0 ], 1.0 ]
+
+[scenario.agent_params.initial_conditions]
 cond_theta_phi = [
     [ [ 0.0, 0.0, 0.0 ], 1.0 ],
     [ [ 0.0, 0.0, 0.0 ], 1.0 ],
 ]
-fs = [ [ 0.0, 0.0 ], 1.0 ]
-fphi = [ [ 0.0, 0.0 ], 1.0 ]
+cond_thetad_phi = [
+    [ [ 0.0, 0.0, 0.0 ], 1.0 ],
+    [ [ 0.0, 0.0, 0.0 ], 1.0 ],
+]
 cond_ftheta_fphi = [
     [ [ 0.0, 0.0, 0.0 ], 1.0 ],
     [ [ 0.0, 0.0, 0.0 ], 1.0 ],
@@ -28,23 +34,33 @@ cond_pa = [
 ]
 cond_theta = [
     [
+        [ [ 0.95, 0.00, 0.00 ], 0.05 ],
+        [ [ 0.00, 0.45, 0.45 ], 0.10 ],
+    ],
+    [
+        [ [ 0.00, 0.475, 0.475 ], 0.05 ],
+        [ [ 0.00, 0.495, 0.495 ], 0.01 ],
+    ],
+]
+cond_thetad = [
+    [
         [
             [ [ 0.95, 0.00, 0.00 ], 0.05 ],
             [ [ 0.95, 0.00, 0.00 ], 0.05 ],
         ],
         [
             [ [ 0.00, 0.45, 0.45 ], 0.10 ],
-            [ [ 0.00, 0.45, 0.45 ], 0.10 ],
+            [ [ 0.00, 0.00, 0.90 ], 0.10 ],
         ],
     ],
     [
         [
             [ [ 0.00, 0.475, 0.475 ], 0.05 ],
-            [ [ 0.00, 0.475, 0.475 ], 0.05 ],
+            [ [ 0.00, 0.00 , 0.95  ], 0.05 ],
         ],
         [
             [ [ 0.00, 0.495, 0.495 ], 0.01 ],
-            [ [ 0.00, 0.495, 0.495 ], 0.01 ],
+            [ [ 0.00, 0.00 , 0.99  ], 0.01 ],
         ],
     ],
 ]
@@ -114,8 +130,8 @@ pi_prob       = 1.0
 pi_rate       = { base = 0.0, error = { dist = { Beta = { alpha = 19.0, beta = 1.0 } } } }
 
 [scenario.agent_params.trust_params]
-misinfo    = { base = 1.0 }
-corrective = { base = 0.0, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
+misinfo    = { base = 0.5 }
+corrective = { base = 0.5 } #, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
@@ -132,7 +148,7 @@ delta  = { base = 0.69 }
 [scenario]
 info_contents = [
     { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
-    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
+    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
 ]
 
 [[scenario.event_table]]
@@ -142,6 +158,6 @@ informs = [
     # { agent_idx = 1, info_content_idx = 0 },
 ]
 
-# [[scenario.event_table]]
-# time = 1
-# informs = [{ agent_idx = 2, info_content_idx = 1 }]
+[[scenario.event_table]]
+time = 1
+informs = [{ agent_idx = 6, info_content_idx = 1 }]

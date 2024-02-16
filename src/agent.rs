@@ -13,7 +13,10 @@ use std::{
 use crate::{
     cpt::{CptParams, Prospect, CPT},
     info::{Info, TrustParams},
-    opinion::{GlobalBaseRates, InitialOpinions, Opinions},
+    opinion::{
+        ConditionalOpinions, GlobalBaseRates, InitialConditions, InitialOpinions, Opinions,
+        TempOpinions,
+    },
     value::{DistValue, ParamValue},
 };
 
@@ -26,6 +29,7 @@ where
     Standard: Distribution<V>,
 {
     pub initial_opinions: InitialOpinions<V>,
+    pub initial_conditions: InitialConditions<V>,
     pub base_rates: GlobalBaseRates<V>,
     #[serde_as(as = "TryFromInto<ParamValue<V>>")]
     pub read_prob: DistValue<V>,
@@ -52,6 +56,7 @@ pub struct Agent<V: Float> {
     pub cpt: CPT<V>,
     pub prospect: Prospect<V>,
     ops: Opinions<V>,
+    conds: ConditionalOpinions<V>,
     read_prob: V,
     friend_arrival_prob: V,
     friend_read_prob: V,
@@ -102,6 +107,7 @@ where
             cpt: Default::default(),
             prospect: Default::default(),
             ops: Default::default(),
+            conds: Default::default(),
             read_prob: V::zero(),
             friend_arrival_prob: V::zero(),
             friend_read_prob: V::zero(),
@@ -119,6 +125,7 @@ where
         friend_read_prob: V,
         pi_rate: V,
         initial_opinions: InitialOpinions<V>,
+        initial_conds: InitialConditions<V>,
         base_rates: &GlobalBaseRates<V>,
     ) where
         V: NumAssign + Default,
@@ -127,8 +134,8 @@ where
         self.friend_arrival_prob = friend_arrival_prob;
         self.friend_read_prob = friend_read_prob;
 
-        self.ops
-            .reset_opinions(pi_rate, initial_opinions, base_rates);
+        self.ops.reset(initial_opinions, base_rates);
+        self.conds.reset(initial_conds, pi_rate);
 
         self.info_trust_map.clear();
         self.selfish.reset();
@@ -154,6 +161,7 @@ where
                 V::zero()
             },
             agent_params.initial_opinions.clone(),
+            agent_params.initial_conditions.clone(),
             &agent_params.base_rates,
         );
     }
@@ -168,45 +176,42 @@ where
     where
         V: Sum + Default + fmt::Debug + NumAssign,
     {
+        if rng.gen::<V>() > self.read_prob {
+            return None;
+        }
+        let first_reading = self.reading.insert(info.idx);
+
         let trust = *self
             .info_trust_map
             .entry(info.idx)
             .or_insert_with(|| agent_params.trust_params.gen_map(rng)(info));
+        let ft = friend_receipt_prob * self.friend_read_prob * trust;
 
-        if rng.gen::<V>() > self.read_prob {
-            return None;
-        }
-
-        let first_reading = self.reading.insert(info.idx);
-
-        let mut temp = self.ops.compute_opinions(
-            info,
-            self.friend_read_prob,
-            friend_receipt_prob,
-            trust,
-            &agent_params.base_rates,
-        );
+        let mut new_ops = self.ops.new(info, trust, ft, &self.conds);
+        let temp = new_ops.compute(info, trust, &self.conds, &agent_params.base_rates);
 
         // compute values of prospects
         let sharing_status = self.sharing.entry(info.idx).or_default();
-        let sharing = if sharing_status.is_done() {
-            false
-        } else {
-            let ps = self.ops.predicate_friend_opinions(
-                &mut temp,
+        let mut sharing = false;
+        if !sharing_status.is_done() {
+            let (pred_new_fop, ps) = new_ops.predicate(
+                &temp,
                 info,
+                ft,
                 self.friend_arrival_prob * self.friend_read_prob * trust,
+                &self.conds,
                 &agent_params.base_rates,
             );
-            log::debug!(" P_FA-TH:{:?}", ps[0]);
-            log::debug!("~P_FA-TH:{:?}", ps[0]);
             let values: [V; 2] =
                 array::from_fn(|i| self.cpt.valuate(&self.prospect.sharing[i], &ps[i]));
             log::info!("V_Y:{:?}", values);
-            sharing_status.decide(values)
+            if sharing_status.decide(values) {
+                new_ops.replace_pred_fop(pred_new_fop);
+                sharing = true;
+            }
         };
-        self.ops.update_for_sharing(temp);
-        let selfish = self.decide_selfish();
+        self.ops = new_ops;
+        let selfish = self.decide_selfish(temp);
 
         Some(Behavior {
             selfish,
@@ -219,28 +224,32 @@ where
     where
         V: Sum + Default + fmt::Debug + NumAssign,
     {
-        let mut temp =
-            self.ops
-                .compute_opinions(info, self.friend_read_prob, V::zero(), V::one(), base_rates);
+        let trust = V::one();
+        let ft = V::zero();
+        let mut new_ops = self.ops.new(info, trust, ft, &self.conds);
+        let temp = new_ops.compute(info, trust, &self.conds, base_rates);
         // posting info is equivalent to sharing it to friends with max trust.
-        self.ops.predicate_friend_opinions(
-            &mut temp,
+        let (pred_fop, _) = new_ops.predicate(
+            &temp,
             info,
+            ft,
             self.friend_arrival_prob * self.friend_read_prob,
+            &self.conds,
             base_rates,
         );
-        self.ops.update_for_sharing(temp);
-        self.decide_selfish()
+        new_ops.replace_pred_fop(pred_fop);
+        self.ops = new_ops;
+        self.decide_selfish(temp)
     }
 
-    fn decide_selfish(&mut self) -> bool
+    fn decide_selfish(&mut self, temp: TempOpinions<V>) -> bool
     where
         V: NumAssign + Sum + fmt::Debug + Default,
     {
         if self.selfish.is_done() {
             return false;
         }
-        let p = self.ops.get_theta_projection();
+        let p = temp.get_theta_projection();
         log::debug!("P_TH:{:?}", p);
         let values: [V; 2] = array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p));
         log::info!("V_X:{:?}", values);
@@ -254,7 +263,7 @@ mod tests {
         agent::{Agent, AgentParams},
         cpt::CptParams,
         info::{Info, InfoContent, InfoObject, TrustParams},
-        opinion::{GlobalBaseRates, InitialOpinions},
+        opinion::{GlobalBaseRates, InitialConditions, InitialOpinions},
         value::DistValue,
     };
 
@@ -264,20 +273,32 @@ mod tests {
     fn test_agent() {
         let agent_params = AgentParams {
             initial_opinions: InitialOpinions {
-                theta: Simplex::vacuous(),
                 psi: Simplex::vacuous(),
                 phi: Simplex::vacuous(),
                 s: Simplex::vacuous(),
-                cond_theta_phi: [Simplex::vacuous(), Simplex::vacuous()],
                 fs: Simplex::vacuous(),
                 fphi: Simplex::vacuous(),
+            },
+            initial_conditions: InitialConditions {
+                cond_theta_phi: [Simplex::vacuous(), Simplex::vacuous()],
+                cond_thetad_phi: [Simplex::vacuous(), Simplex::vacuous()],
                 cond_ftheta_fphi: [Simplex::vacuous(), Simplex::vacuous()],
                 cond_pa: [
                     Simplex::new([0.90, 0.00], 0.10),
                     Simplex::new([0.00, 0.99], 0.01),
                     Simplex::new([0.90, 0.00], 0.10),
                 ],
-                cond_theta: harr3![
+                cond_theta: harr2![
+                    [
+                        Simplex::new([0.95, 0.00, 0.00], 0.05),
+                        Simplex::new([0.00, 0.45, 0.45], 0.10),
+                    ],
+                    [
+                        Simplex::new([0.00, 0.475, 0.475], 0.05),
+                        Simplex::new([0.00, 0.495, 0.495], 0.01),
+                    ]
+                ],
+                cond_thetad: harr3![
                     [
                         [
                             Simplex::new([0.95, 0.00, 0.00], 0.05),
@@ -394,6 +415,7 @@ mod tests {
             0.5,
             0.0,
             agent_params.initial_opinions.clone(),
+            agent_params.initial_conditions.clone(),
             &agent_params.base_rates,
         );
 

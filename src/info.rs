@@ -10,7 +10,7 @@ use subjective_logic::mul::Simplex;
 
 use crate::{
     agent::Behavior,
-    opinion::{PHI, PSI, P_A, S, THETA},
+    opinion::{PHI, PSI, P_A, S},
     value::{DistValue, ParamValue},
 };
 
@@ -21,7 +21,7 @@ pub struct InfoContent<V: Float> {
     pub s: Simplex<V, S>,
     pub pa: Simplex<V, P_A>,
     pub phi: Simplex<V, PHI>,
-    pub cond_theta_phi: [Simplex<V, THETA>; PHI],
+    // pub cond_theta_phi: [Simplex<V, THETA>; PHI],
 }
 
 impl<V: Float> InfoContent<V> {
@@ -31,7 +31,7 @@ impl<V: Float> InfoContent<V> {
         s: Simplex<V, S>,
         pa: Simplex<V, P_A>,
         phi: Simplex<V, PHI>,
-        cond_theta_phi: [Simplex<V, THETA>; PHI],
+        // cond_theta_phi: [Simplex<V, THETA>; PHI],
     ) -> Self {
         Self {
             label,
@@ -39,7 +39,7 @@ impl<V: Float> InfoContent<V> {
             s,
             pa,
             phi,
-            cond_theta_phi,
+            // cond_theta_phi,
         }
     }
 }
@@ -108,8 +108,8 @@ where
     Inhibitive {
         #[serde_as(as = "TryFromInto<([V; PHI], V)>")]
         phi: Simplex<V, PSI>,
-        #[serde_as(as = "[TryFromInto<([V; THETA], V)>; 2]")]
-        cond_theta_phi: [Simplex<V, THETA>; PHI],
+        // #[serde_as(as = "[TryFromInto<([V; THETA], V)>; 2]")]
+        // cond_theta_phi: [Simplex<V, THETA>; PHI],
     },
 }
 
@@ -144,7 +144,7 @@ where
                 Simplex::vacuous(),
                 Simplex::vacuous(),
                 Simplex::vacuous(),
-                [Simplex::vacuous(), Simplex::vacuous()],
+                // [Simplex::vacuous(), Simplex::vacuous()],
             ),
             InfoObject::Corrective { psi, s } => InfoContent::new(
                 InfoLabel::Corrective,
@@ -152,7 +152,7 @@ where
                 s,
                 Simplex::vacuous(),
                 Simplex::vacuous(),
-                [Simplex::vacuous(), Simplex::vacuous()],
+                // [Simplex::vacuous(), Simplex::vacuous()],
             ),
             InfoObject::Observed { pa } => InfoContent::new(
                 InfoLabel::Observed,
@@ -160,18 +160,18 @@ where
                 Simplex::vacuous(),
                 pa,
                 Simplex::vacuous(),
-                [Simplex::vacuous(), Simplex::vacuous()],
+                // [Simplex::vacuous(), Simplex::vacuous()],
             ),
             InfoObject::Inhibitive {
                 phi,
-                cond_theta_phi,
+                // cond_theta_phi,
             } => InfoContent::new(
                 InfoLabel::Inhibitive,
                 Simplex::vacuous(),
                 Simplex::vacuous(),
                 Simplex::vacuous(),
                 phi,
-                cond_theta_phi,
+                // cond_theta_phi,
             ),
         }
     }
