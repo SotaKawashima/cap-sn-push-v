@@ -8,9 +8,15 @@ use num_traits::Float;
 use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use serde_with::{serde_as, TryFromInto};
-use subjective_logic::{harr2, mul::IndexedContainer};
+use subjective_logic::{
+    harr2,
+    mul::{prod::HigherArr2, IndexedContainer},
+};
 
-use crate::value::{DistValue, ParamValue};
+use crate::{
+    opinion::{F_A, THETA},
+    value::{DistValue, ParamValue},
+};
 
 #[derive(Clone, Default, Debug)]
 pub struct CPT<V: Float> {
@@ -209,10 +215,10 @@ where
     V: Float,
 {
     pub fn reset(&mut self, x0: V, x1: V, y: V) {
-        let selfish_outcome_maps = [[V::zero(), x1, V::zero()], [x0, x0, x0]];
-        let sharing_outcome_maps = [
-            harr2![[V::zero(), x1, V::zero()], [x0, x0, x0]],
-            harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]],
+        let selfish_outcome_maps: [[V; THETA]; 2] = [[V::zero(), x1], [x0, x0]];
+        let sharing_outcome_maps: [HigherArr2<V, F_A, THETA>; 2] = [
+            harr2![[V::zero(), x1], [x0, x0]],
+            harr2![[y, x1 + y], [x0 + y, x0 + y]],
         ];
         let selfish = [
             LevelSet::new(&selfish_outcome_maps[0]),

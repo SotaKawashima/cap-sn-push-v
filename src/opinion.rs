@@ -10,7 +10,7 @@ use subjective_logic::mul::{
     Discount, Opinion, Opinion1d, Projection, Simplex,
 };
 
-pub const THETA: usize = 3;
+pub const THETA: usize = 2;
 pub const PSI: usize = 2;
 pub const PHI: usize = 2;
 pub const A: usize = 2;
@@ -166,6 +166,7 @@ pub struct FriendOpinions<V: Float> {
     // cond_ftheta_fphi: [Simplex<V, F_THETA>; F_PHI],
 }
 
+#[derive(Debug)]
 pub struct TempOpinions<V: Float> {
     theta: Opinion1d<V, THETA>,
     pa: Opinion1d<V, P_A>,

@@ -228,6 +228,8 @@ where
         let ft = V::zero();
         let mut new_ops = self.ops.new(info, trust, ft, &self.conds);
         let temp = new_ops.compute(info, trust, &self.conds, base_rates);
+        log::debug!("{new_ops:?}");
+        log::debug!("{temp:?}");
         // posting info is equivalent to sharing it to friends with max trust.
         let (pred_fop, _) = new_ops.predicate(
             &temp,
@@ -283,46 +285,47 @@ mod tests {
                 cond_theta_phi: [Simplex::vacuous(), Simplex::vacuous()],
                 cond_thetad_phi: [Simplex::vacuous(), Simplex::vacuous()],
                 cond_ftheta_fphi: [Simplex::vacuous(), Simplex::vacuous()],
-                cond_pa: [
-                    Simplex::new([0.90, 0.00], 0.10),
-                    Simplex::new([0.00, 0.99], 0.01),
-                    Simplex::new([0.90, 0.00], 0.10),
-                ],
+                // PA -> \Psi
                 cond_theta: harr2![
                     [
-                        Simplex::new([0.95, 0.00, 0.00], 0.05),
-                        Simplex::new([0.00, 0.45, 0.45], 0.10),
+                        Simplex::new([0.95, 0.00], 0.05),
+                        Simplex::new([0.45, 0.45], 0.10),
                     ],
                     [
-                        Simplex::new([0.00, 0.475, 0.475], 0.05),
-                        Simplex::new([0.00, 0.495, 0.495], 0.01),
+                        Simplex::new([0.475, 0.475], 0.05),
+                        Simplex::new([0.495, 0.495], 0.01),
                     ]
                 ],
+                // PA -> \Psi -> FA
                 cond_thetad: harr3![
                     [
                         [
-                            Simplex::new([0.95, 0.00, 0.00], 0.05),
-                            Simplex::new([0.95, 0.00, 0.00], 0.05),
+                            Simplex::new([0.95, 0.00], 0.05),
+                            Simplex::new([0.99, 0.00], 0.01),
                         ],
                         [
-                            Simplex::new([0.00, 0.45, 0.45], 0.10),
-                            Simplex::new([0.00, 0.45, 0.45], 0.10),
+                            Simplex::new([0.45, 0.45], 0.10),
+                            Simplex::new([0.99, 0.00], 0.01),
                         ],
                     ],
                     [
                         [
-                            Simplex::new([0.00, 0.475, 0.475], 0.05),
-                            Simplex::new([0.00, 0.475, 0.475], 0.05),
+                            Simplex::new([0.475, 0.475], 0.05),
+                            Simplex::new([0.99, 0.00], 0.01),
                         ],
                         [
-                            Simplex::new([0.00, 0.495, 0.495], 0.01),
-                            Simplex::new([0.00, 0.495, 0.495], 0.01),
+                            Simplex::new([0.495, 0.495], 0.01),
+                            Simplex::new([0.99, 0.00], 0.01),
                         ],
                     ]
                 ],
+                cond_pa: [
+                    Simplex::new([0.90, 0.00], 0.10),
+                    Simplex::new([0.00, 0.99], 0.01),
+                ],
                 cond_ptheta: [
-                    Simplex::new([0.99, 0.00, 0.00], 0.01),
-                    Simplex::new([0.00, 0.495, 0.495], 0.01),
+                    Simplex::new([0.99, 0.00], 0.01),
+                    Simplex::new([0.495, 0.495], 0.01),
                 ],
                 cond_ppsi: [
                     Simplex::new([0.99, 0.00], 0.01),
@@ -335,26 +338,24 @@ mod tests {
                 cond_fa: [
                     Simplex::new([0.95, 0.00], 0.05),
                     Simplex::new([0.00, 0.95], 0.05),
-                    Simplex::new([0.95, 0.00], 0.05),
                 ],
                 cond_fpa: [
                     Simplex::new([0.90, 0.00], 0.10),
                     Simplex::new([0.00, 0.99], 0.01),
-                    Simplex::new([0.90, 0.00], 0.10),
                 ],
                 cond_ftheta: harr2![
                     [
-                        Simplex::new([0.95, 0.00, 0.00], 0.05),
-                        Simplex::new([0.00, 0.45, 0.45], 0.10),
+                        Simplex::new([0.95, 0.00], 0.05),
+                        Simplex::new([0.45, 0.45], 0.10),
                     ],
                     [
-                        Simplex::new([0.00, 0.475, 0.475], 0.05),
-                        Simplex::new([0.00, 0.495, 0.495], 0.01),
+                        Simplex::new([0.475, 0.475], 0.05),
+                        Simplex::new([0.495, 0.495], 0.01),
                     ]
                 ],
                 cond_fptheta: [
-                    Simplex::new([0.99, 0.000, 0.000], 0.01),
-                    Simplex::new([0.00, 0.495, 0.495], 0.01),
+                    Simplex::new([0.99, 0.00], 0.01),
+                    Simplex::new([0.495, 0.495], 0.01),
                 ],
                 cond_fppsi: [
                     Simplex::new([0.99, 0.00], 0.01),
@@ -373,10 +374,10 @@ mod tests {
                 fpsi: [0.999, 0.001],
                 fppsi: [0.999, 0.001],
                 fphi: [0.999, 0.001],
-                theta: [0.999, 0.0005, 0.0005],
-                ptheta: [0.999, 0.0005, 0.0005],
-                ftheta: [0.999, 0.0005, 0.0005],
-                fptheta: [0.999, 0.0005, 0.0005],
+                theta: [0.999, 0.001],
+                ptheta: [0.999, 0.001],
+                ftheta: [0.999, 0.001],
+                fptheta: [0.999, 0.001],
             },
             read_prob: DistValue::fixed(0.5),
             farrival_prob: DistValue::fixed(0.5),
