@@ -8,7 +8,7 @@ use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, GraphB, UndiGraphB};
 use num_traits::{Float, NumAssign};
 use rand_distr::uniform::SampleUniform;
-use rand_distr::{Distribution, Open01, Standard};
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde::Deserialize;
 use serde_with::{serde_as, FromInto, TryFromInto};
 
@@ -21,6 +21,8 @@ where
     V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     #[serde(default)]
     pub output: Output,
@@ -104,6 +106,8 @@ where
     V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     pub agent_params: AgentParams<V>,
     #[serde_as(as = "Vec<FromInto<InfoObject<V>>>")]
@@ -171,6 +175,8 @@ where
     for<'de> V: Deserialize<'de>,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     type Error = ParseConfigError;
 
@@ -211,114 +217,169 @@ mod tests {
                 "scenario": {
                     "agent_params": {
                         "initial_opinions": {
-                            //"theta": [[0.0, 0.0, 0.0], 1.0],
-                            "psi":   [[0.0, 0.0], 1.0],
-                            "phi":   [[0.0, 0.0], 1.0],
-                            "s":     [[0.0, 0.0], 1.0],
-                            "fs": [[0.0, 0.0], 1.0],
-                            "fphi": [[0.0, 0.0], 1.0],
-                        },
-                        "initial_conditions": {
-                            "cond_ppsi": [
-                                [[0.99, 0.00], 0.01],
-                                [[0.25, 0.65], 0.10],
-                            ],
-                            "cond_ptheta": [
-                                [[0.99 , 0.00 ], 0.01],
-                                [[0.495, 0.495], 0.01],
-                            ],
-                            "cond_pa": [
-                                [[0.90, 0.00], 0.10],
-                                [[0.00, 0.99], 0.01],
-                            ],
-                            "cond_theta": [
-                                [
-                                    [[0.95, 0.00], 0.05],
-                                    [[0.45, 0.45], 0.10],
-                                ],
-                                [
-                                    [[0.475, 0.475], 0.05],
-                                    [[0.495, 0.495], 0.01],
-                                ]
-                            ],
-                            "cond_thetad": [
-                                [
-                                    [
-                                        [[0.95, 0.00], 0.05],
-                                        [[0.95, 0.00], 0.05],
-                                    ],
-                                    [
-                                        [[0.45, 0.45], 0.10],
-                                        [[0.45, 0.45], 0.10],
-                                    ],
-                                ],
-                                [
-                                    [
-                                        [[0.475, 0.475], 0.05],
-                                        [[0.00 , 0.95 ], 0.05],
-                                    ],
-                                    [
-                                        [[0.495, 0.495], 0.01],
-                                        [[0.00 , 0.99 ], 0.01],
-                                    ],
-                                ]
-                            ],
-                            "cond_theta_phi":  [[[0.0, 0.0], 1.0], [[0.90, 0.0], 0.10]],
-                            "cond_thetad_phi": [[[0.0, 0.0], 1.0], [[0.99, 0.0], 0.01]],
-                            "cond_ftheta_fphi":[[[0.0, 0.0], 1.0], [[0.99, 0.0], 0.01]],
-                            "cond_fpsi": [
-                                [[0.99, 0.00], 0.01],
-                                [[0.70, 0.20], 0.10],
-                            ],
-                            "cond_fppsi": [
-                                [[0.99, 0.00], 0.01],
-                                [[0.25, 0.65], 0.10],
-                            ],
-                            "cond_fptheta": [
-                                [[0.99 , 0.00 ], 0.01],
-                                [[0.495, 0.495], 0.01],
-                            ],
-                            "cond_fpa": [
-                                [[0.90, 0.00], 0.10],
-                                [[0.00, 0.99], 0.01],
-                            ],
-                            "cond_ftheta": [
-                                [
-                                    [[0.95, 0.00], 0.05],
-                                    [[0.45, 0.45], 0.10],
-                                ],
-                                [
-                                    [[0.475, 0.475], 0.05],
-                                    [[0.495, 0.495], 0.01],
-                                ]
-                            ],
-                            "cond_fa": [
-                                [[0.95, 0.00], 0.05],
-                                [[0.00, 0.95], 0.05],
-                            ],
+                            "base": {
+                                "psi"  : [[0.0, 0.0], 1.0],
+                                "phi"  : [[0.0, 0.0], 1.0],
+                                "s"    : [[0.0, 0.0], 1.0],
+                                "o"    : [[0.0, 0.0], 1.0],
+                            },
+                            "friend": {
+                                "fphi" : [[0.0, 0.0], 1.0],
+                                "fs"   : [[0.0, 0.0], 1.0],
+                                "fo"   : [[0.0, 0.0], 1.0],
+                            },
+                            "social": {
+                                "kphi" : [[0.0, 0.0], 1.0],
+                                "ks"   : [[0.0, 0.0], 1.0],
+                                "ko"   : [[0.0, 0.0], 1.0],
+                            }
                         },
                         "base_rates": {
-                            "s": [0.999, 0.001],
-                            "fs": [0.99, 0.01],
-                            "psi": [0.999, 0.001],
-                            "ppsi": [0.999, 0.001],
-                            "pa": [0.999, 0.001],
-                            "fa": [0.999, 0.001],
-                            "fpa": [0.999, 0.001],
-                            "phi": [0.999, 0.001],
-                            "fpsi": [0.999, 0.001],
-                            "fppsi": [0.999, 0.001],
-                            "fphi": [0.999, 0.001],
-                            "theta": [0.999,  0.001],
-                            "ptheta": [0.999, 0.001],
-                            "ftheta": [0.999, 0.001],
-                            "fptheta": [0.999,0.001],
+                            "base": {
+                                "psi"    : [0.999, 0.001],
+                                "phi"    : [0.999, 0.001],
+                                "s"      : [0.999, 0.001],
+                                "o"      : [0.999, 0.001],
+                                "b"      : [0.999, 0.001],
+                                "theta"  : [0.999, 0.001],
+                                "a"      : [0.999, 0.001],
+                                "thetad" : [0.999, 0.001],
+                            },
+                            "friend": {
+                                "fpsi"    : [0.999, 0.001],
+                                "fphi"    : [0.999, 0.001],
+                                "fs"      : [0.999, 0.001],
+                                "fo"      : [0.999, 0.001],
+                                "fb"      : [0.999, 0.001],
+                                "ftheta"  : [0.999, 0.001],
+                            },
+                            "social": {
+                                "kpsi"    : [0.999, 0.001],
+                                "kphi"    : [0.999, 0.001],
+                                "ks"      : [0.999, 0.001],
+                                "ko"      : [0.999, 0.001],
+                                "kb"      : [0.999, 0.001],
+                                "ktheta"  : [0.999, 0.001],
+                            },
                         },
-                        "pi_prob": 1.0,
-                        "read_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-                        "farrival_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-                        "fread_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-                        "pi_rate": { "base": 0.5 },
+                        "initial_conditions": {
+                            "base": {
+                                "cond_o" : [
+                                    { "Fixed" : [[1.0, 0.00], 0.00] },
+                                    { "Fixed" : [[0.0, 0.70], 0.30] },
+                                ],
+                                "cond_b" : [
+                                    { "Fixed" : [[0.90, 0.00], 0.10] },
+                                    { "Fixed" : [[0.00, 0.99], 0.01] },
+                                ],
+                                "cond_theta" : [
+                                    [
+                                        { "Fixed" : [[0.95, 0.00], 0.05] },
+                                        { "Fixed" : [[0.45, 0.45], 0.10] },
+                                    ],
+                                    [
+                                        { "Fixed" : [[0.475, 0.475], 0.05] },
+                                        { "Fixed" : [[0.495, 0.495], 0.01] },
+                                    ]
+                                ],
+                                "cond_theta_phi" : [
+                                    { "Fixed" : [[0.00, 0.0], 1.00] },
+                                    { "Fixed" : [[0.99, 0.0], 0.01] }
+                                ],
+                                "cond_a" : [
+                                    { "Fixed" : [[0.95, 0.00], 0.05] },
+                                    { "Fixed" : [[0.00, 0.95], 0.05] },
+                                ],
+                                "cond_thetad" : [
+                                    [
+                                        [
+                                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                                        ],
+                                        [
+                                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                                        ],
+                                    ],
+                                    [
+                                        [
+                                            { "Fixed" : [[0.475, 0.475], 0.05] },
+                                            { "Fixed" : [[0.00 , 0.95 ], 0.05] },
+                                        ],
+                                        [
+                                            { "Fixed" : [[0.495, 0.495], 0.01] },
+                                            { "Fixed" : [[0.00 , 0.99 ], 0.01] },
+                                        ],
+                                    ]
+                                ],
+                                "cond_thetad_phi" : [
+                                    { "Fixed" : [[0.00, 0.0], 1.00] },
+                                    { "Fixed" : [[0.99, 0.0], 0.01] },
+                                ],
+                            },
+                            "friend": {
+                                "cond_fpsi" : [
+                                    { "Fixed" : [[0.99, 0.00], 0.01] },
+                                    { "Fixed" : [[0.70, 0.20], 0.10] },
+                                ],
+                                "cond_fo" : [
+                                    { "Fixed" : [[1.0, 0.00], 0.00] },
+                                    { "Fixed" : [[0.0, 0.70], 0.30] },
+                                ],
+                                "cond_fb" : [
+                                    { "Fixed" : [[0.90, 0.00], 0.10] },
+                                    { "Fixed" : [[0.00, 0.99], 0.01] },
+                                ],
+                                "cond_ftheta" : [
+                                    [
+                                        { "Fixed" : [[0.95, 0.00], 0.05] },
+                                        { "Fixed" : [[0.45, 0.45], 0.10] },
+                                    ],
+                                    [
+                                        { "Fixed" : [[0.475, 0.475], 0.05] },
+                                        { "Fixed" : [[0.495, 0.495], 0.01] },
+                                    ]
+                                ],
+                                "cond_ftheta_fphi" : [
+                                    { "Fixed" : [[0.00, 0.0], 1.00] },
+                                    { "Fixed" : [[0.90, 0.0], 0.10] }
+                                ],
+                            },
+                            "social": {
+                                "cond_kpsi" : [
+                                    { "Fixed" : [[0.99, 0.00], 0.01] },
+                                    { "Fixed" : [[0.25, 0.65], 0.10] },
+                                ],
+                                "cond_ko" : [
+                                    { "Fixed" : [[1.0, 0.00], 0.00] },
+                                    { "Fixed" : [[0.0, 0.70], 0.30] },
+                                ],
+                                "cond_kb" : [
+                                    { "Fixed" : [[1.00, 0.00], 0.00] },
+                                    { "Fixed" : [[0.25, 0.65], 0.10] },
+                                ],
+                                "cond_ktheta" : [
+                                    [
+                                        { "Fixed" : [[0.95, 0.00], 0.05] },
+                                        { "Fixed" : [[0.45, 0.45], 0.10] },
+                                    ],
+                                    [
+                                        { "Fixed" : [[0.475, 0.475], 0.05] },
+                                        { "Fixed" : [[0.495, 0.495], 0.01] },
+                                    ]
+                                ],
+                                "cond_ktheta_kphi" : [
+                                    { "Fixed" : [[0.00, 0.0], 1.00] },
+                                    { "Fixed" : [[0.90, 0.0], 0.10] },
+                                ],
+                            },
+                        },
+                        // "pi_prob": 1.0,
+                        // "pi_rate": { "base": 0.5 },
+                        "access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "friend_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "social_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
+                        "friend_arrival_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
                         "trust_params": {
                             "misinfo": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
                             "corrective": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
@@ -381,116 +442,159 @@ mod tests {
             num_parallel = 1
             iteration_count = 1
 
-            [scenario.agent_params.initial_opinions]
-            # theta = [[0.0, 0.0, 0.0], 1.0]
-            psi =   [[0.0, 0.0], 1.0]
-            phi =   [[0.0, 0.0], 1.0]
-            s =     [[0.0, 0.0], 1.0]
-            fs = [[0.0, 0.0], 1.0]
-            fphi = [[0.0, 0.0], 1.0]
+            [scenario.agent_params.base_rates.base]
+            psi    = [0.999, 0.001]
+            phi    = [0.999, 0.001]
+            s      = [0.999, 0.001]
+            o      = [0.999, 0.001]
+            b      = [0.999, 0.001]
+            theta  = [0.999, 0.001]
+            a      = [0.999, 0.001]
+            thetad = [0.999, 0.001]
+            [scenario.agent_params.base_rates.friend]
+            fpsi    = [0.999, 0.001]
+            fphi    = [0.999, 0.001]
+            fs      = [0.999, 0.001]
+            fo      = [0.999, 0.001]
+            fb      = [0.999, 0.001]
+            ftheta  = [0.999, 0.001]
+            [scenario.agent_params.base_rates.social]
+            kpsi    = [0.999, 0.001]
+            kphi    = [0.999, 0.001]
+            ks      = [0.999, 0.001]
+            ko      = [0.999, 0.001]
+            kb      = [0.999, 0.001]
+            ktheta  = [0.999, 0.001]
 
-            [scenario.agent_params.initial_conditions]
-            cond_ppsi = [
-                [[0.99, 0.00], 0.01],
-                [[0.25, 0.65], 0.10],
+            [scenario.agent_params.initial_opinions.base]
+            psi  = [[0.0, 0.0], 1.0]
+            phi  = [[0.0, 0.0], 1.0]
+            s    = [[0.0, 0.0], 1.0]
+            o    = [[0.0, 0.0], 1.0]
+            [scenario.agent_params.initial_opinions.friend]
+            fphi = [[0.0, 0.0], 1.0]
+            fs   = [[0.0, 0.0], 1.0]
+            fo   = [[0.0, 0.0], 1.0]
+            [scenario.agent_params.initial_opinions.social]
+            kphi = [[0.0, 0.0], 1.0]
+            ks   = [[0.0, 0.0], 1.0]
+            ko   = [[0.0, 0.0], 1.0]
+
+            [scenario.agent_params.initial_conditions.base]
+            cond_o = [
+                { Fixed = [[1.0, 0.00], 0.00] },
+                { Fixed = [[0.0, 0.70], 0.30] },
             ]
-            cond_ptheta = [
-                [[0.99 , 0.00 ], 0.01],
-                [[0.495, 0.495], 0.01],
-            ]
-            cond_pa = [
-                [[0.90, 0.00], 0.10],
-                [[0.00, 0.99], 0.01],
+            cond_b = [
+                { Fixed = [[0.90, 0.00], 0.10] },
+                { Fixed = [[0.00, 0.99], 0.01] },
             ]
             cond_theta = [
                 [
-                    [[0.95, 0.00], 0.05],
-                    [[0.45, 0.45], 0.10],
+                    { Fixed = [[0.95, 0.00], 0.05] },
+                    { Fixed = [[0.45, 0.45], 0.10] },
                 ],
                 [
-                    [[0.475, 0.475], 0.05],
-                    [[0.495, 0.495], 0.01],
+                    { Fixed = [[0.475, 0.475], 0.05] },
+                    { Fixed = [[0.495, 0.495], 0.01] },
                 ]
+            ]
+            cond_theta_phi= [
+                { Fixed = [[0.00, 0.0], 1.00] },
+                { Fixed = [[0.99, 0.0], 0.01] }
+            ]
+            cond_a = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.00, 0.95], 0.05] },
             ]
             cond_thetad = [
                 [
                     [
-                        [[0.95, 0.00], 0.05],
-                        [[0.95, 0.00], 0.05],
+                        { Fixed = [[0.95, 0.00], 0.05] },
+                        { Fixed = [[0.95, 0.00], 0.05] },
                     ],
                     [
-                        [[0.45, 0.45], 0.10],
-                        [[0.45, 0.45], 0.10],
+                        { Fixed = [[0.45, 0.45], 0.10] },
+                        { Fixed = [[0.45, 0.45], 0.10] },
                     ],
                 ],
                 [
                     [
-                        [[0.475, 0.475], 0.05],
-                        [[0.00 , 0.95 ], 0.05],
+                        { Fixed = [[0.475, 0.475], 0.05] },
+                        { Fixed = [[0.00 , 0.95 ], 0.05] },
                     ],
                     [
-                        [[0.495, 0.495], 0.01],
-                        [[0.00 , 0.99 ], 0.01],
+                        { Fixed = [[0.495, 0.495], 0.01] },
+                        { Fixed = [[0.00 , 0.99 ], 0.01] },
                     ],
                 ]
             ]
-            cond_theta_phi   = [[[0.0, 0.0], 1.0], [[0.90, 0.0], 0.10]]
-            cond_thetad_phi  = [[[0.0, 0.0], 1.0], [[0.99, 0.0], 0.01]]
-            cond_ftheta_fphi = [[[0.0, 0.0], 1.0], [[0.90, 0.0], 0.10]]
+            cond_thetad_phi = [
+                { Fixed = [[0.00, 0.0], 1.00] },
+                { Fixed = [[0.99, 0.0], 0.01] },
+            ]
+            [scenario.agent_params.initial_conditions.friend]
             cond_fpsi = [
-                [[0.99, 0.00], 0.01],
-                [[0.70, 0.20], 0.10],
+                { Fixed = [[0.99, 0.00], 0.01] },
+                { Fixed = [[0.70, 0.20], 0.10] },
             ]
-            cond_fppsi = [
-                [[0.99, 0.00], 0.01],
-                [[0.25, 0.65], 0.10],
+            cond_fo = [
+                { Fixed = [[1.0, 0.00], 0.00] },
+                { Fixed = [[0.0, 0.70], 0.30] },
             ]
-            cond_fptheta = [
-                [[0.99 , 0.00 ], 0.01],
-                [[0.495, 0.495], 0.01],
-            ]
-            cond_fpa = [
-                [[0.90, 0.00], 0.10],
-                [[0.00, 0.99], 0.01],
+            cond_fb = [
+                { Fixed = [[0.90, 0.00], 0.10] },
+                { Fixed = [[0.00, 0.99], 0.01] },
             ]
             cond_ftheta = [
                 [
-                    [[0.95, 0.00], 0.05],
-                    [[0.45, 0.45], 0.10],
+                    { Fixed = [[0.95, 0.00], 0.05] },
+                    { Fixed = [[0.45, 0.45], 0.10] },
                 ],
                 [
-                    [[0.475, 0.475], 0.05],
-                    [[0.495, 0.495], 0.01],
+                    { Fixed = [[0.475, 0.475], 0.05] },
+                    { Fixed = [[0.495, 0.495], 0.01] },
                 ]
             ]
-            cond_fa = [
-                [[0.95, 0.00], 0.05],
-                [[0.00, 0.95], 0.05],
+            cond_ftheta_fphi = [
+                { Fixed = [[0.00, 0.0], 1.00] },
+                { Fixed = [[0.90, 0.0], 0.10] }
+            ]
+            [scenario.agent_params.initial_conditions.social]
+            cond_kpsi = [
+                { Fixed = [[0.99, 0.00], 0.01] },
+                { Fixed = [[0.25, 0.65], 0.10] },
+            ]
+            cond_ko = [
+                { Fixed = [[1.0, 0.00], 0.00] },
+                { Fixed = [[0.0, 0.70], 0.30] },
+            ]
+            cond_kb = [
+                { Fixed = [[1.00, 0.00], 0.00] },
+                { Fixed = [[0.25, 0.65], 0.10] },
+            ]
+            cond_ktheta = [
+                [
+                    { Fixed = [[0.95, 0.00], 0.05] },
+                    { Fixed = [[0.45, 0.45], 0.10] },
+                ],
+                [
+                    { Fixed = [[0.475, 0.475], 0.05] },
+                    { Fixed = [[0.495, 0.495], 0.01] },
+                ]
+            ]
+            cond_ktheta_kphi = [
+                { Fixed = [[0.00, 0.0], 1.00] },
+                { Fixed = [[0.90, 0.0], 0.10] },
             ]
 
-            [scenario.agent_params.base_rates]
-            s = [0.999, 0.001]
-            fs = [0.99, 0.01]
-            psi = [0.999, 0.001]
-            ppsi = [0.999, 0.001]
-            pa = [0.999, 0.001]
-            fa = [0.999, 0.001]
-            fpa = [0.999, 0.001]
-            phi = [0.999, 0.001]
-            fpsi = [0.999, 0.001]
-            fppsi = [0.999, 0.001]
-            fphi = [0.999, 0.001]
-            theta = [0.999,  0.001]
-            ptheta = [0.999, 0.001]
-            ftheta = [0.999, 0.001]
-            fptheta = [0.999,0.001]
-
             [scenario.agent_params]
-            read_prob     = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
-            farrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
-            fread_prob    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
-            pi_prob       = 1.0
-            pi_rate       = { base = 0.5 }
+            access_prob         = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            friend_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            social_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            friend_arrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+            # pi_prob       = 1.0
+            # pi_rate       = { base = 0.5 }
 
             [scenario.agent_params.trust_params]
             misinfo    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
@@ -537,6 +641,18 @@ mod tests {
         println!("{:?}", c.output);
         println!("{:?}", c.runtime.graph);
         println!("{:?}", c.scenario.agent_params.initial_opinions);
+        println!(
+            "{:?}",
+            c.scenario.agent_params.initial_conditions.base.cond_theta
+        );
+        println!(
+            "{:?}",
+            c.scenario
+                .agent_params
+                .initial_conditions
+                .social
+                .cond_ktheta_kphi
+        );
         println!(
             "{:?}",
             c.scenario

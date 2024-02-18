@@ -26,7 +26,7 @@ use info::{Info, InfoContent, InfoLabel};
 
 use graph_lib::prelude::{Graph, GraphB};
 use rand_distr::uniform::SampleUniform;
-use rand_distr::{Distribution, Open01, Standard};
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 pub struct Runner<V>
@@ -34,6 +34,8 @@ where
     V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     config: Config<V>,
     identifier: String,
@@ -45,6 +47,8 @@ where
     V: Float + NumAssign + UlpsEq + Default + Sum + std::fmt::Debug + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     pub fn try_new(
         config_data: ConfigFormat,
@@ -166,6 +170,8 @@ where
     V: Float + UlpsEq + SampleUniform + NumAssign,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     graph: &'a GraphB,
     info_contents: &'a [InfoContent<V>],
@@ -184,6 +190,8 @@ where
     V: Float + UlpsEq + SampleUniform + NumAssign,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
 {
     fn new(
         graph: &'a GraphB,

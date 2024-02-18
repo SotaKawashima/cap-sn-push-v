@@ -14,7 +14,7 @@ use subjective_logic::{
 };
 
 use crate::{
-    opinion::{F_A, THETA},
+    opinion::{F_B, THETA},
     value::{DistValue, ParamValue},
 };
 
@@ -216,7 +216,7 @@ where
 {
     pub fn reset(&mut self, x0: V, x1: V, y: V) {
         let selfish_outcome_maps: [[V; THETA]; 2] = [[V::zero(), x1], [x0, x0]];
-        let sharing_outcome_maps: [HigherArr2<V, F_A, THETA>; 2] = [
+        let sharing_outcome_maps: [HigherArr2<V, F_B, THETA>; 2] = [
             harr2![[V::zero(), x1], [x0, x0]],
             harr2![[y, x1 + y], [x0 + y, x0 + y]],
         ];
