@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
 use std::iter::Sum;
-use std::mem;
 
 use approx::UlpsEq;
 use arrow2::array::{Array, PrimitiveArray, Utf8Array};
@@ -154,16 +153,9 @@ where
 }
 
 #[derive(Debug)]
-enum SendRole {
-    Inform,
-    Share,
-}
-
-#[derive(Debug)]
 struct Receiver {
     agent_idx: usize,
     info_idx: usize,
-    role: SendRole,
 }
 
 struct Environment<'a, V, R>
@@ -226,41 +218,49 @@ where
     where
         V: FromPrimitive + Sum + Default + std::fmt::Debug,
     {
-        for a in &mut self.agents {
-            a.reset_with(self.agent_params, self.rng);
+        log::info!("#i: {num_iter}");
+
+        for agent in &mut self.agents {
+            agent.reset_with(self.agent_params, self.rng);
         }
 
         let mut infos = Vec::<Info<V>>::new();
-        let mut stack = Vec::new();
-        let mut t = 0;
+        let mut receivers = Vec::new();
         let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
         let mut event_table = self.event_table.0.clone();
-
         let mut agents_willing_selfish = Vec::<usize>::new();
+        let mut senders = Vec::new();
 
-        log::info!("#i: {num_iter}");
+        let mut t = 0;
 
-        while !stack.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty() {
+        while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
+        {
             log::info!("t = {t}");
+            let mut num_selfish = 0;
+
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
-                    infos.push(Info::new(info_idx, &self.info_contents[info_content_idx]));
-                    stack.push(Receiver {
+                    let info = Info::new(info_idx, &self.info_contents[info_content_idx]);
+
+                    log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
+
+                    self.agents[agent_idx].set_info_opinions(&info, &self.agent_params.base_rates);
+                    infos.push(info);
+
+                    senders.push(Receiver {
                         agent_idx,
                         info_idx,
-                        role: SendRole::Inform,
                     });
                 }
             }
-            stack.shuffle(self.rng);
 
-            let mut num_selfish = 0;
-            for Receiver {
+            receivers.shuffle(self.rng);
+
+            for r @ Receiver {
                 agent_idx,
                 info_idx,
-                role,
-            } in mem::take(&mut stack)
+            } in receivers.drain(..)
             {
                 let agent = &mut self.agents[agent_idx];
                 let info = &mut infos[info_idx];
@@ -268,56 +268,53 @@ where
                 let info_data = info_data_map.entry(info_label).or_default();
                 info_data.num_received += 1;
 
-                log::info!("Agent {agent_idx} ({role:?}) <- {info_label}");
+                log::info!("Agent {agent_idx} (sharer) <- {info_label}");
 
-                let send = match role {
-                    SendRole::Inform => {
-                        agent.set_info_opinions(info, &self.agent_params.base_rates);
-                        true
-                    }
-                    SendRole::Share => 'a: {
-                        let friend_receipt_prob = V::one()
-                            - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n)
-                                .powf(self.d);
-                        log::info!("r^i_m = {friend_receipt_prob:?}");
+                let friend_receipt_prob = V::one()
+                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n).powf(self.d);
+                log::info!("r^i_m = {friend_receipt_prob:?}");
 
-                        if self.rng.gen::<V>() > agent.access_prob() {
-                            break 'a false;
-                        }
-                        let b =
-                            agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng);
-                        info.update_stat(&b);
-                        info_data.update(&b);
-                        b.sharing
-                    }
-                };
+                if self.rng.gen::<V>() > agent.access_prob() {
+                    continue;
+                }
 
-                if send {
-                    for bid in self.graph.successors(agent_idx) {
-                        stack.push(Receiver {
-                            agent_idx: *bid,
-                            info_idx,
-                            role: SendRole::Share,
-                        });
-                    }
+                let b = agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng);
+                info.update_stat(&b);
+                info_data.update(&b);
+                if b.sharing {
+                    senders.push(r);
                 }
 
                 if agent.is_willing_selfish() {
                     agents_willing_selfish.push(agent_idx);
                 }
             }
-            for (info_label, d) in mem::take(&mut info_data_map) {
-                d.push_to_stat(&mut self.stat, num_par, num_iter, t, info_label);
-            }
-            for i in mem::take(&mut agents_willing_selfish) {
-                let a = &mut self.agents[i];
-                if a.progress_selfish_status() {
-                    log::info!("Agent {i} : done selfish");
-                    num_selfish += 1;
-                } else if a.is_willing_selfish() {
-                    agents_willing_selfish.push(i);
+
+            for Receiver {
+                agent_idx,
+                info_idx,
+            } in senders.drain(..)
+            {
+                for bid in self.graph.successors(agent_idx) {
+                    receivers.push(Receiver {
+                        agent_idx: *bid,
+                        info_idx,
+                    });
                 }
             }
+
+            for (info_label, d) in &mut info_data_map {
+                d.push_to_stat(&mut self.stat, num_par, num_iter, t, info_label);
+                *d = InfoData::default();
+            }
+            agents_willing_selfish.retain(|&agent_idx| {
+                let agent = &mut self.agents[agent_idx];
+                if agent.progress_selfish_status() {
+                    log::info!("Agent {agent_idx} : done selfish");
+                    num_selfish += 1;
+                }
+                agent.is_willing_selfish()
+            });
             self.stat
                 .push(num_par, num_iter, t, num_selfish, "num_selfish".to_string());
 
@@ -346,12 +343,12 @@ impl InfoData {
     }
 
     fn push_to_stat(
-        self,
+        &self,
         stat: &mut Stat,
         num_par: u32,
         num_iter: u32,
         t: u32,
-        info_label: InfoLabel,
+        info_label: &InfoLabel,
     ) {
         stat.push(
             num_par,

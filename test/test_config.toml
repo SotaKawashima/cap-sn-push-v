@@ -166,14 +166,14 @@ friend_arrival_prob = { base = 0.8 }
 # pi_rate       = { base = 0.0, error = { dist = { Beta = { alpha = 19.0, beta = 1.0 } } } }
 
 [scenario.agent_params.trust_params]
-misinfo    = { base = 0.6 }
+misinfo    = { base = 0.7 }
 corrective = { base = 0.95 } #, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
 [scenario.agent_params.cpt_params]
 x0     = { base = -1.0 }
-x1     = { base = -6.0 }
+x1     = { base = -8.0 }
 y      = { base = -0.01 }
 alpha  = { base = 0.88 }
 beta   = { base = 0.88 }
@@ -184,6 +184,7 @@ delta  = { base = 0.69 }
 [scenario]
 info_contents = [
     { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
+    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 1.0, 0.0 ], 0.0 ] } },
     { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
 ]
 
@@ -195,5 +196,6 @@ informs = [
 ]
 
 [[scenario.event_table]]
-time = 2
+time = 1
 informs = [{ agent_idx = 6, info_content_idx = 1 }]
+# informs = [{ agent_idx = 6, info_content_idx = 2 }]
