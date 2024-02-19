@@ -376,6 +376,7 @@ mod tests {
                         },
                         // "pi_prob": 1.0,
                         // "pi_rate": { "base": 0.5 },
+                        "delay_selfish": {"Fixed": 0 },
                         "access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
                         "friend_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
                         "social_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
@@ -589,12 +590,11 @@ mod tests {
             ]
 
             [scenario.agent_params]
+            delay_selfish       = { Fixed = 0 }
             access_prob         = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
             friend_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
             social_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
             friend_arrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
-            # pi_prob       = 1.0
-            # pi_rate       = { base = 0.5 }
 
             [scenario.agent_params.trust_params]
             misinfo    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }

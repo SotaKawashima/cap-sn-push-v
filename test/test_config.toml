@@ -58,11 +58,11 @@ cond_b = [
 cond_theta = [
     [
         { Fixed = [[0.95, 0.00], 0.05] },
-        { Fixed = [[0.60, 0.30], 0.10] },
+        { Fixed = [[0.50, 0.40], 0.10] },
     ],
     [
-        { Fixed = [[0.63, 0.32], 0.05] },
-        { Fixed = [[0.66, 0.33], 0.01] },
+        { Fixed = [[0.52, 0.43], 0.05] },
+        { Fixed = [[0.55, 0.44], 0.01] },
     ]
 ]
 cond_theta_phi= [
@@ -157,7 +157,8 @@ cond_ktheta_kphi = [
 ]
 
 [scenario.agent_params]
-access_prob         = { base = 0.5 }
+delay_selfish       = { Gamma = {shape = 5, scale = 0.4} }
+access_prob         = { base = 0.8 }
 friend_access_prob  = { base = 0.8 }
 social_access_prob  = { base = 0.8 }
 friend_arrival_prob = { base = 0.8 }
@@ -165,14 +166,14 @@ friend_arrival_prob = { base = 0.8 }
 # pi_rate       = { base = 0.0, error = { dist = { Beta = { alpha = 19.0, beta = 1.0 } } } }
 
 [scenario.agent_params.trust_params]
-misinfo    = { base = 0.5 }
-corrective = { base = 0.9 } #, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
+misinfo    = { base = 0.6 }
+corrective = { base = 0.95 } #, error = { dist = { Beta = { alpha = 4.5, beta = 1.5 } } } }
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
 [scenario.agent_params.cpt_params]
 x0     = { base = -1.0 }
-x1     = { base = -5.0 }
+x1     = { base = -6.0 }
 y      = { base = -0.01 }
 alpha  = { base = 0.88 }
 beta   = { base = 0.88 }
@@ -194,5 +195,5 @@ informs = [
 ]
 
 [[scenario.event_table]]
-time = 1
+time = 2
 informs = [{ agent_idx = 6, info_content_idx = 1 }]

@@ -1,6 +1,7 @@
 mod agent;
 pub mod config;
 mod cpt;
+mod dist;
 mod info;
 mod opinion;
 mod value;
@@ -21,7 +22,7 @@ use num_traits::{Float, FromPrimitive, NumAssign};
 use rand::Rng;
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
-use agent::{Agent, AgentParams, Behavior};
+use agent::{Agent, AgentParams, BehaviorByInfo};
 use info::{Info, InfoContent, InfoLabel};
 
 use graph_lib::prelude::{Graph, GraphB};
@@ -206,7 +207,7 @@ where
         V: Default + NumAssign,
     {
         let agents = (0..graph.node_count())
-            .map(|_| Agent::new())
+            .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
             graph,
@@ -235,9 +236,11 @@ where
         let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
         let mut event_table = self.event_table.0.clone();
 
+        let mut agents_willing_selfish = Vec::<usize>::new();
+
         log::info!("#i: {num_iter}");
 
-        while !stack.is_empty() || !event_table.is_empty() {
+        while !stack.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty() {
             log::info!("t = {t}");
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
@@ -265,33 +268,27 @@ where
                 let info_data = info_data_map.entry(info_label).or_default();
                 info_data.num_received += 1;
 
-                log::info!("{info_label} -> #{agent_idx}({role:?})");
+                log::info!("Agent {agent_idx} ({role:?}) <- {info_label}");
 
                 let send = match role {
                     SendRole::Inform => {
-                        if agent.set_info_opinions(info, &self.agent_params.base_rates) {
-                            num_selfish += 1;
-                        }
+                        agent.set_info_opinions(info, &self.agent_params.base_rates);
                         true
                     }
-                    SendRole::Share => {
+                    SendRole::Share => 'a: {
                         let friend_receipt_prob = V::one()
                             - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n)
                                 .powf(self.d);
                         log::info!("r^i_m = {friend_receipt_prob:?}");
 
-                        if let Some(b) =
-                            agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng)
-                        {
-                            if b.selfish {
-                                num_selfish += 1;
-                            }
-                            info.update_stat(&b);
-                            info_data.update(&b);
-                            b.sharing
-                        } else {
-                            false
+                        if self.rng.gen::<V>() > agent.access_prob() {
+                            break 'a false;
                         }
+                        let b =
+                            agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng);
+                        info.update_stat(&b);
+                        info_data.update(&b);
+                        b.sharing
                     }
                 };
 
@@ -304,12 +301,26 @@ where
                         });
                     }
                 }
+
+                if agent.is_willing_selfish() {
+                    agents_willing_selfish.push(agent_idx);
+                }
             }
             for (info_label, d) in mem::take(&mut info_data_map) {
                 d.push_to_stat(&mut self.stat, num_par, num_iter, t, info_label);
             }
+            for i in mem::take(&mut agents_willing_selfish) {
+                let a = &mut self.agents[i];
+                if a.progress_selfish_status() {
+                    log::info!("Agent {i} : done selfish");
+                    num_selfish += 1;
+                } else if a.is_willing_selfish() {
+                    agents_willing_selfish.push(i);
+                }
+            }
             self.stat
                 .push(num_par, num_iter, t, num_selfish, "num_selfish".to_string());
+
             t += 1;
         }
     }
@@ -320,14 +331,14 @@ struct InfoData {
     num_received: u32,
     num_shared: u32,
     num_viewed: u32,
-    num_fst_read: u32,
+    num_fst_viewed: u32,
 }
 
 impl InfoData {
-    fn update(&mut self, b: &Behavior) {
+    fn update(&mut self, b: &BehaviorByInfo) {
         self.num_viewed += 1;
-        if b.first_reading {
-            self.num_fst_read += 1;
+        if b.first_access {
+            self.num_fst_viewed += 1;
         }
         if b.sharing {
             self.num_shared += 1;
@@ -367,8 +378,8 @@ impl InfoData {
             num_par,
             num_iter,
             t,
-            self.num_fst_read,
-            format!("num_fst_read:{info_label}"),
+            self.num_fst_viewed,
+            format!("num_fst_viewed:{info_label}"),
         );
     }
 }

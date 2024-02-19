@@ -386,9 +386,11 @@ impl<V: Float> TempOpinions<V> {
     #[inline]
     pub fn get_theta_projection(&self) -> [V; THETA]
     where
-        V: NumAssign,
+        V: NumAssign + fmt::Debug,
     {
-        self.theta.projection()
+        let p = self.theta.projection();
+        log::debug!("P_TH : {:?}", p);
+        p
     }
 }
 

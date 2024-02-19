@@ -15,7 +15,7 @@ use subjective_logic::{
 
 use crate::{
     opinion::{F_B, THETA},
-    value::{DistValue, ParamValue},
+    value::{EValue, EValueParam},
 };
 
 #[derive(Clone, Default, Debug)]
@@ -186,22 +186,22 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub x0: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub x1: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub y: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub alpha: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub beta: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub lambda: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub gamma: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub delta: DistValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub x0: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub x1: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub y: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub alpha: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub beta: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub lambda: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub gamma: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub delta: EValue<V>,
 }
 
 #[derive(Default)]

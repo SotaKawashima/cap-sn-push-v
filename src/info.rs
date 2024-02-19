@@ -9,9 +9,9 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::Simplex;
 
 use crate::{
-    agent::Behavior,
+    agent::BehaviorByInfo,
     opinion::{O, PHI, PSI, S},
-    value::{DistValue, ParamValue},
+    value::{EValue, EValueParam},
 };
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl<'a, V: Float> Info<'a, V> {
         }
     }
 
-    pub fn update_stat(&mut self, b: &Behavior) {
+    pub fn update_stat(&mut self, b: &BehaviorByInfo) {
         if b.sharing {
             self.shared();
         }
@@ -187,14 +187,14 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub misinfo: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub corrective: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub observed: DistValue<V>,
-    #[serde_as(as = "TryFromInto<ParamValue<V>>")]
-    pub inhibitive: DistValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub misinfo: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub corrective: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub observed: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub inhibitive: EValue<V>,
 }
 
 impl<V> TrustParams<V>
