@@ -4,7 +4,7 @@ output = { location = "./test/" }
 graph = { directed = true, location = { LocalFile = "./test/graph.txt" } }
 seed_state = 0
 num_parallel = 1
-iteration_count = 1
+iteration_count = 20
 
 [scenario.agent_params.base_rates.base]
 psi    = [0.999, 0.001]

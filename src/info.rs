@@ -9,7 +9,6 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::Simplex;
 
 use crate::{
-    agent::BehaviorByInfo,
     opinion::{O, PHI, PSI, S},
     value::{EValue, EValueParam},
 };
@@ -64,13 +63,12 @@ impl<'a, V: Float> Info<'a, V> {
         }
     }
 
-    pub fn update_stat(&mut self, b: &BehaviorByInfo) {
-        if b.sharing {
-            self.shared();
-        }
+    #[inline]
+    pub fn viewed(&mut self) {
         self.num_viewed += 1;
     }
 
+    #[inline]
     pub fn shared(&mut self) {
         self.num_shared += 1;
     }
@@ -114,6 +112,17 @@ pub enum InfoLabel {
     Corrective,
     Observed,
     Inhibitive,
+}
+
+impl From<&InfoLabel> for u8 {
+    fn from(value: &InfoLabel) -> Self {
+        match value {
+            InfoLabel::Misinfo => 0,
+            InfoLabel::Corrective => 1,
+            InfoLabel::Observed => 2,
+            InfoLabel::Inhibitive => 3,
+        }
+    }
 }
 
 impl Display for InfoLabel {

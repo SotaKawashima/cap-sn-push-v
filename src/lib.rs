@@ -4,30 +4,24 @@ mod cpt;
 mod dist;
 mod info;
 mod opinion;
+mod stat;
 mod value;
 
-use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::Write;
-use std::iter::Sum;
+use std::{collections::BTreeMap, iter::Sum, sync::mpsc, thread};
 
 use approx::UlpsEq;
-use arrow2::array::{Array, PrimitiveArray, Utf8Array};
-use arrow2::chunk::Chunk;
-use arrow2::datatypes::{DataType, Field, Schema};
-use arrow2::io::ipc::write::{Compression, FileWriter, WriteOptions};
 use config::{Config, ConfigFormat, EventTable};
-use num_traits::{Float, FromPrimitive, NumAssign};
-use rand::Rng;
-use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
-
-use agent::{Agent, AgentParams, BehaviorByInfo};
-use info::{Info, InfoContent, InfoLabel};
-
 use graph_lib::prelude::{Graph, GraphB};
-use rand_distr::uniform::SampleUniform;
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use num_traits::{Float, FromPrimitive, NumAssign};
+use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
+use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+
+use agent::{Agent, AgentParams};
+use info::{Info, InfoContent, InfoLabel};
+use stat::{FileWriters, InfoData, InfoStat, Stat};
+
+use crate::stat::AgentStat;
 
 pub struct Runner<V>
 where
@@ -44,7 +38,7 @@ where
 
 impl<V> Runner<V>
 where
-    V: Float + NumAssign + UlpsEq + Default + Sum + std::fmt::Debug + SampleUniform,
+    V: Float + NumAssign + UlpsEq + Default + Sum + std::fmt::Debug + SampleUniform + Send + Sync,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -54,7 +48,7 @@ where
         config_data: ConfigFormat,
         identifier: String,
         overwriting: bool,
-    ) -> Result<Self, Box<dyn std::error::Error>>
+    ) -> anyhow::Result<Self>
     where
         for<'de> V: serde::Deserialize<'de>,
     {
@@ -66,25 +60,30 @@ where
         })
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>>
+    pub fn run(&mut self) -> anyhow::Result<()>
     where
         V: FromPrimitive + Sync,
         <V as SampleUniform>::Sampler: Sync,
     {
-        let output_path = self.config.output.location.join(format!(
-            "{}_{}.arrow",
-            self.identifier, self.config.output.suffix
-        ));
-        if !self.overwriting && output_path.exists() {
-            panic!(
-                "{} already exists. If you want to overwrite it, run with the overwriting option.",
-                output_path.display()
-            );
-        }
-        let writer = File::create(output_path)?;
+        let (sender, receiver) = mpsc::channel::<Stat>();
+        let mut writers = FileWriters::try_new(
+            &self.config.output,
+            &self.config.runtime,
+            &self.identifier,
+            self.overwriting,
+        )?;
 
-        let n = V::from_usize(self.config.runtime.graph.node_count()).unwrap();
-        let d = V::from_usize(self.config.runtime.graph.edge_count()).unwrap() / n; // average outdegree
+        let handle = thread::spawn(move || {
+            while let Ok(stat) = receiver.recv() {
+                writers.write(stat).unwrap();
+            }
+            writers.finish().unwrap();
+            println!("finished writing.");
+        });
+
+        let num_nodes = V::from_usize(self.config.runtime.graph.node_count()).unwrap();
+        let mean_degree =
+            V::from_usize(self.config.runtime.graph.edge_count()).unwrap() / num_nodes;
 
         let mut rng = SmallRng::seed_from_u64(self.config.runtime.seed_state);
         let rngs = (0..(self.config.runtime.num_parallel))
@@ -92,63 +91,25 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         println!("started.");
-        let stats = rngs
-            .into_par_iter()
+        rngs.into_par_iter()
             .enumerate()
-            .map(|(num_par, mut rng)| {
-                let num_par = num_par as u32;
+            .for_each(|(num_par, mut rng)| {
                 let mut env = Environment::new(
-                    &self.config.runtime.graph,
-                    &self.config.scenario.info_contents,
-                    &self.config.scenario.agent_params,
-                    &self.config.scenario.event_table,
+                    &self.config,
                     &mut rng,
-                    n,
-                    d,
+                    num_nodes,
+                    mean_degree,
+                    sender.clone(),
                 );
+                let num_par = num_par as u32;
                 for num_iter in 0..(self.config.runtime.iteration_count) {
                     env.execute(num_par, num_iter);
                 }
-                env.stat
-            })
-            .collect::<Vec<_>>();
-        println!("finished.");
-        self.write(writer, &stats)?;
+            });
+        drop(sender);
+        handle.join().unwrap();
         println!("done.");
         Ok(())
-    }
-
-    fn write<W: Write>(&self, writer: W, stats: &[Stat]) -> arrow2::error::Result<()> {
-        let metadata = BTreeMap::from_iter([
-            ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-            (
-                "num_parallel".to_string(),
-                self.config.runtime.num_parallel.to_string(),
-            ),
-            (
-                "iteration_count".to_string(),
-                self.config.runtime.iteration_count.to_string(),
-            ),
-        ]);
-        let compression: Option<Compression> = if self.config.output.compress {
-            Some(Compression::ZSTD)
-        } else {
-            None
-        };
-
-        let mut writer = FileWriter::try_new(
-            writer,
-            Schema {
-                fields: Stat::get_fields(),
-                metadata,
-            },
-            None,
-            WriteOptions { compression },
-        )?;
-        for stat in stats {
-            writer.write(&stat.try_into()?, None)?;
-        }
-        writer.finish()
     }
 }
 
@@ -171,10 +132,10 @@ where
     agent_params: &'a AgentParams<V>,
     event_table: &'a EventTable,
     rng: &'a mut R,
-    n: V,
-    d: V,
+    num_nodes: V,
+    mean_degree: V,
     agents: Vec<Agent<V>>,
-    stat: Stat,
+    sender: mpsc::Sender<Stat>,
 }
 
 impl<'a, V, R> Environment<'a, V, R>
@@ -187,30 +148,28 @@ where
     Exp1: Distribution<V>,
 {
     fn new(
-        graph: &'a GraphB,
-        info_contents: &'a [InfoContent<V>],
-        agent_params: &'a AgentParams<V>,
-        event_table: &'a EventTable,
+        config: &'a Config<V>,
         rng: &'a mut R,
-        n: V,
-        d: V,
+        num_nodes: V,
+        mean_degree: V,
+        sender: mpsc::Sender<Stat>,
     ) -> Self
     where
         V: Default + NumAssign,
     {
-        let agents = (0..graph.node_count())
+        let agents = (0..config.runtime.graph.node_count())
             .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
-            graph,
-            info_contents,
-            agent_params,
-            event_table,
+            graph: &config.runtime.graph,
+            info_contents: &config.scenario.info_contents,
+            agent_params: &config.scenario.agent_params,
+            event_table: &config.scenario.event_table,
             rng,
-            n,
-            d,
+            num_nodes,
+            mean_degree,
             agents,
-            stat: Stat::default(),
+            sender,
         }
     }
 
@@ -231,13 +190,13 @@ where
         let mut agents_willing_selfish = Vec::<usize>::new();
         let mut senders = Vec::new();
 
+        let mut info_stat = InfoStat::default();
+        let mut agent_stat = AgentStat::default();
         let mut t = 0;
 
         while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
         {
             log::info!("t = {t}");
-            let mut num_selfish = 0;
-
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
@@ -266,12 +225,13 @@ where
                 let info = &mut infos[info_idx];
                 let info_label = info.content.label;
                 let info_data = info_data_map.entry(info_label).or_default();
-                info_data.num_received += 1;
+                info_data.received();
 
                 log::info!("Agent {agent_idx} (sharer) <- {info_label}");
 
                 let friend_receipt_prob = V::one()
-                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.n).powf(self.d);
+                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.num_nodes)
+                        .powf(self.mean_degree);
                 log::info!("r^i_m = {friend_receipt_prob:?}");
 
                 if self.rng.gen::<V>() > agent.access_prob() {
@@ -279,10 +239,15 @@ where
                 }
 
                 let b = agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng);
-                info.update_stat(&b);
-                info_data.update(&b);
+                info.viewed();
+                info_data.viewed();
                 if b.sharing {
+                    info.shared();
+                    info_data.shared();
                     senders.push(r);
+                }
+                if b.first_access {
+                    info_data.first_viewed();
                 }
 
                 if agent.is_willing_selfish() {
@@ -304,122 +269,20 @@ where
             }
 
             for (info_label, d) in &mut info_data_map {
-                d.push_to_stat(&mut self.stat, num_par, num_iter, t, info_label);
+                info_stat.push(num_par, num_iter, t, d, info_label);
                 *d = InfoData::default();
             }
             agents_willing_selfish.retain(|&agent_idx| {
                 let agent = &mut self.agents[agent_idx];
                 if agent.progress_selfish_status() {
                     log::info!("Agent {agent_idx} : done selfish");
-                    num_selfish += 1;
+                    agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
                 }
                 agent.is_willing_selfish()
             });
-            self.stat
-                .push(num_par, num_iter, t, num_selfish, "num_selfish".to_string());
-
             t += 1;
         }
-    }
-}
-
-#[derive(Default)]
-struct InfoData {
-    num_received: u32,
-    num_shared: u32,
-    num_viewed: u32,
-    num_fst_viewed: u32,
-}
-
-impl InfoData {
-    fn update(&mut self, b: &BehaviorByInfo) {
-        self.num_viewed += 1;
-        if b.first_access {
-            self.num_fst_viewed += 1;
-        }
-        if b.sharing {
-            self.num_shared += 1;
-        }
-    }
-
-    fn push_to_stat(
-        &self,
-        stat: &mut Stat,
-        num_par: u32,
-        num_iter: u32,
-        t: u32,
-        info_label: &InfoLabel,
-    ) {
-        stat.push(
-            num_par,
-            num_iter,
-            t,
-            self.num_received,
-            format!("num_received:{info_label}"),
-        );
-        stat.push(
-            num_par,
-            num_iter,
-            t,
-            self.num_shared,
-            format!("num_shared:{info_label}"),
-        );
-        stat.push(
-            num_par,
-            num_iter,
-            t,
-            self.num_viewed,
-            format!("num_viewed:{info_label}"),
-        );
-        stat.push(
-            num_par,
-            num_iter,
-            t,
-            self.num_fst_viewed,
-            format!("num_fst_viewed:{info_label}"),
-        );
-    }
-}
-
-#[derive(Default)]
-struct Stat {
-    num_par: Vec<u32>,
-    num_iter: Vec<u32>,
-    t: Vec<u32>,
-    num_people: Vec<u32>,
-    kind: Vec<String>,
-}
-
-impl TryFrom<&Stat> for Chunk<Box<dyn Array>> {
-    type Error = arrow2::error::Error;
-
-    fn try_from(value: &Stat) -> Result<Self, Self::Error> {
-        Chunk::try_new(vec![
-            PrimitiveArray::from_slice(&value.num_par).boxed(),
-            PrimitiveArray::from_slice(&value.num_iter).boxed(),
-            PrimitiveArray::from_slice(&value.t).boxed(),
-            PrimitiveArray::from_slice(&value.num_people).boxed(),
-            Utf8Array::<i32>::from_slice(&value.kind).boxed(),
-        ])
-    }
-}
-
-impl Stat {
-    fn push(&mut self, num_par: u32, num_iter: u32, t: u32, num_people: u32, kind: String) {
-        self.num_par.push(num_par);
-        self.num_iter.push(num_iter);
-        self.t.push(t);
-        self.num_people.push(num_people);
-        self.kind.push(kind);
-    }
-
-    fn get_fields() -> Vec<Field> {
-        vec![
-            Field::new("num_par", DataType::UInt32, false),
-            Field::new("num_iter", DataType::UInt32, false),
-            Field::new("t", DataType::UInt32, false),
-            Field::new("num_people", DataType::UInt32, false),
-            Field::new("kind", DataType::Utf8, false),
-        ]
+        self.sender.send(info_stat.into()).unwrap();
+        self.sender.send(agent_stat.into()).unwrap();
     }
 }

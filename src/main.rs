@@ -57,7 +57,7 @@ impl TryFrom<InputConfig> for ConfigFormat {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = Cli::parse();
