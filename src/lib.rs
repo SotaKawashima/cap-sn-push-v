@@ -204,6 +204,7 @@ where
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
                     let info = Info::new(info_idx, &self.info_contents[info_content_idx]);
+                    info_data_map.entry(info.content.label).or_default();
 
                     log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
 
@@ -231,7 +232,7 @@ where
                 let agent = &mut self.agents[agent_idx];
                 let info = &mut infos[info_idx];
                 let info_label = info.content.label;
-                let info_data = info_data_map.entry(info_label).or_default();
+                let info_data = info_data_map.get_mut(&info_label).unwrap();
                 info_data.received();
 
                 log::info!("Agent {agent_idx} (sharer) <- {info_label}");
