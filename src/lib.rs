@@ -204,8 +204,12 @@ where
 
                     log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
 
-                    self.agents[agent_idx].set_info_opinions(&info, &self.agent_params.base_rates);
+                    let agent = &mut self.agents[agent_idx];
+                    agent.set_info_opinions(&info, &self.agent_params.base_rates);
                     infos.push(info);
+                    if agent.is_willing_selfish() {
+                        agents_willing_selfish.push(agent_idx);
+                    }
 
                     senders.push(Receiver {
                         agent_idx,
