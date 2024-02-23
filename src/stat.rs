@@ -132,7 +132,7 @@ impl AgentStat {
             Field::new("num_par", DataType::UInt32, false),
             Field::new("num_iter", DataType::UInt32, false),
             Field::new("t", DataType::UInt32, false),
-            Field::new("agent_idx", DataType::UInt8, false),
+            Field::new("agent_idx", DataType::UInt32, false),
             Field::new("selfish", DataType::Boolean, false),
         ]
     }
