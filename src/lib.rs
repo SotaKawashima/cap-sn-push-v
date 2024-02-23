@@ -21,7 +21,7 @@ use agent::{Agent, AgentParams};
 use info::{Info, InfoContent, InfoLabel};
 use stat::{FileWriters, InfoData, InfoStat, Stat};
 
-use crate::stat::AgentStat;
+use crate::stat::{AgentStat, PopData, PopStat};
 
 pub struct Runner<V>
 where
@@ -192,11 +192,14 @@ where
 
         let mut info_stat = InfoStat::default();
         let mut agent_stat = AgentStat::default();
+        let mut pop_stat = PopStat::default();
         let mut t = 0;
 
         while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
         {
             log::info!("t = {t}");
+            let mut pop_data = PopData::default();
+
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
@@ -281,12 +284,15 @@ where
                 if agent.progress_selfish_status() {
                     log::info!("Agent {agent_idx} : done selfish");
                     agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
+                    pop_data.selfish();
                 }
                 agent.is_willing_selfish()
             });
+            pop_stat.push(num_par, num_iter, t, pop_data);
             t += 1;
         }
         self.sender.send(info_stat.into()).unwrap();
         self.sender.send(agent_stat.into()).unwrap();
+        self.sender.send(pop_stat.into()).unwrap();
     }
 }

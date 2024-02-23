@@ -39,6 +39,7 @@ impl InfoData {
 pub enum Stat {
     Info(InfoStat),
     Agent(AgentStat),
+    Pop(PopStat),
 }
 
 #[derive(Default)]
@@ -165,9 +166,73 @@ impl From<AgentStat> for Stat {
     }
 }
 
+#[derive(Default)]
+pub struct PopData {
+    num_selfish: u32,
+}
+
+impl PopData {
+    pub fn selfish(&mut self) {
+        self.num_selfish += 1;
+    }
+}
+
+#[derive(Default)]
+pub struct PopStat {
+    num_par: Vec<u32>,
+    num_iter: Vec<u32>,
+    t: Vec<u32>,
+    num_selfish: Vec<u32>,
+}
+
+impl PopStat {
+    pub fn push(&mut self, num_par: u32, num_iter: u32, t: u32, d: PopData) {
+        self.num_par.push(num_par);
+        self.num_iter.push(num_iter);
+        self.t.push(t);
+        self.num_selfish.push(d.num_selfish);
+    }
+
+    fn get_fields() -> Vec<Field> {
+        vec![
+            Field::new("num_par", DataType::UInt32, false),
+            Field::new("num_iter", DataType::UInt32, false),
+            Field::new("t", DataType::UInt32, false),
+            Field::new("num_selfish", DataType::UInt32, false),
+        ]
+    }
+
+    fn output_path(output: &Output, identifier: &str) -> PathBuf {
+        output.location.join(format!(
+            "{}.arrow",
+            [&identifier, "pop", &output.suffix].join("_")
+        ))
+    }
+}
+
+impl TryFrom<&PopStat> for Chunk<Box<dyn Array>> {
+    type Error = arrow2::error::Error;
+
+    fn try_from(value: &PopStat) -> Result<Self, Self::Error> {
+        Chunk::try_new(vec![
+            PrimitiveArray::from_slice(&value.num_par).boxed(),
+            PrimitiveArray::from_slice(&value.num_iter).boxed(),
+            PrimitiveArray::from_slice(&value.t).boxed(),
+            PrimitiveArray::from_slice(&value.num_selfish).boxed(),
+        ])
+    }
+}
+
+impl From<PopStat> for Stat {
+    fn from(value: PopStat) -> Self {
+        Self::Pop(value)
+    }
+}
+
 pub struct FileWriters {
     info: FileWriter<File>,
     agent: FileWriter<File>,
+    pop: FileWriter<File>,
 }
 
 impl FileWriters {
@@ -192,6 +257,13 @@ impl FileWriters {
                 AgentStat::get_fields(),
                 create_metadata(runtime),
             )?,
+            pop: create_writer(
+                PopStat::output_path(output, identifier),
+                overwriting,
+                output.compress,
+                PopStat::get_fields(),
+                create_metadata(runtime),
+            )?,
         })
     }
 
@@ -199,6 +271,7 @@ impl FileWriters {
         match stat {
             Stat::Info(ref stat) => self.info.write(&stat.try_into()?, None)?,
             Stat::Agent(ref stat) => self.agent.write(&stat.try_into()?, None)?,
+            Stat::Pop(ref stat) => self.pop.write(&stat.try_into()?, None)?,
         }
         Ok(())
     }
