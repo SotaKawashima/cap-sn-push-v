@@ -279,6 +279,7 @@ impl FileWriters {
     pub fn finish(&mut self) -> arrow2::error::Result<()> {
         self.info.finish()?;
         self.agent.finish()?;
+        self.pop.finish()?;
         Ok(())
     }
 }
