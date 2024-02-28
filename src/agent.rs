@@ -329,16 +329,17 @@ mod tests {
         dist::IValue,
         info::{Info, InfoContent, InfoObject, TrustParams},
         opinion::{
-            BaseRates, FriendBaseRates, GlobalBaseRates, InitialBaseConditions,
-            InitialBaseSimplexes, InitialConditions, InitialFriendConditions,
-            InitialFriendSimplexes, InitialOpinions, InitialSocialConditions,
-            InitialSocialSimplexes, SimplexDist, SimplexParam, SocialBaseRates,
+            BaseRates, CondThetaDist, CondThetadDist, FriendBaseRates, GlobalBaseRates,
+            InitialBaseConditions, InitialBaseSimplexes, InitialConditions,
+            InitialFriendConditions, InitialFriendSimplexes, InitialOpinions,
+            InitialSocialConditions, InitialSocialSimplexes, SimplexDist, SimplexParam,
+            SocialBaseRates,
         },
         value::EValue,
     };
 
     use rand::thread_rng;
-    use subjective_logic::{harr2, harr3, mul::Simplex};
+    use subjective_logic::mul::Simplex;
 
     use super::DelayActionStatus;
 
@@ -419,16 +420,11 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.1, 0.9], 0.0)),
                     ],
                     // B,\Psi => \Theta
-                    cond_theta: harr2![
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.8, 0.2], 0.0)),
-                            SimplexDist::Fixed(Simplex::new([0.2, 0.8], 0.0)),
-                        ],
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.85, 0.15], 0.0)),
-                            SimplexDist::Fixed(Simplex::new([0.15, 0.85], 0.0)),
-                        ]
-                    ],
+                    cond_theta: CondThetaDist {
+                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    },
                     // \Phi => \Theta
                     cond_theta_phi: [
                         SimplexDist::Fixed(Simplex::new([0.7, 0.3], 0.0)),
@@ -440,28 +436,12 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.4, 0.6], 0.0)),
                     ],
                     // B,\Psi,A => \Theta'
-                    cond_thetad: harr3![
-                        [
-                            [
-                                SimplexDist::Fixed(Simplex::new([0.51, 0.49], 0.0)),
-                                SimplexDist::Fixed(Simplex::new([0.49, 0.51], 0.0)),
-                            ],
-                            [
-                                SimplexDist::Fixed(Simplex::new([0.52, 0.48], 0.0)),
-                                SimplexDist::Fixed(Simplex::new([0.48, 0.52], 0.0)),
-                            ],
-                        ],
-                        [
-                            [
-                                SimplexDist::Fixed(Simplex::new([0.53, 0.47], 0.0)),
-                                SimplexDist::Fixed(Simplex::new([0.47, 0.53], 0.0)),
-                            ],
-                            [
-                                SimplexDist::Fixed(Simplex::new([0.54, 0.46], 0.0)),
-                                SimplexDist::Fixed(Simplex::new([0.46, 0.54], 0.0)),
-                            ],
-                        ]
-                    ],
+                    cond_thetad: CondThetadDist {
+                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        avoid_u_rates: [1.0, 1.0, 1.0],
+                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    },
                     // \Phi => \Theta'
                     cond_thetad_phi: [
                         SimplexDist::Fixed(Simplex::new([0.4, 0.6], 0.0)),
@@ -485,16 +465,11 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.2, 0.7], 0.1)),
                     ],
                     // FB,F\Psi => F\Theta
-                    cond_ftheta: harr2![
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.60, 0.30], 0.1)),
-                            SimplexDist::Fixed(Simplex::new([0.30, 0.60], 0.1)),
-                        ],
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.61, 0.29], 0.1)),
-                            SimplexDist::Fixed(Simplex::new([0.29, 0.61], 0.1)),
-                        ]
-                    ],
+                    cond_ftheta: CondThetaDist {
+                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    },
                     // F\Phi => F\Theta
                     cond_ftheta_fphi: [
                         SimplexDist::Fixed(Simplex::new([0.5, 0.4], 0.1)),
@@ -518,16 +493,11 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.2, 0.6], 0.2)),
                     ],
                     // KB,K\Psi => K\Theta
-                    cond_ktheta: harr2![
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.50, 0.30], 0.2)),
-                            SimplexDist::Fixed(Simplex::new([0.30, 0.50], 0.2)),
-                        ],
-                        [
-                            SimplexDist::Fixed(Simplex::new([0.51, 0.29], 0.2)),
-                            SimplexDist::Fixed(Simplex::new([0.29, 0.51], 0.2)),
-                        ]
-                    ],
+                    cond_ktheta: CondThetaDist {
+                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    },
                     // K\Phi => K\Theta
                     cond_ktheta_kphi: [
                         SimplexDist::Fixed(Simplex::new([0.41, 0.39], 0.2)),

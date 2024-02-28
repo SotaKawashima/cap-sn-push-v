@@ -4,7 +4,7 @@ output = { location = "./test/" }
 graph = { directed = true, location = { LocalFile = "./test/graph.txt" } }
 seed_state = 0
 num_parallel = 1
-iteration_count = 20
+iteration_count = 1
 
 [scenario.agent_params.base_rates.base]
 psi    = [0.999, 0.001]
@@ -55,16 +55,6 @@ cond_b = [
     { Fixed = [[0.90, 0.00], 0.10] },
     { Fixed = [[0.00, 0.80], 0.20] },
 ]
-cond_theta = [
-    [
-        { Fixed = [[0.95, 0.00], 0.05] },
-        { Fixed = [[0.50, 0.40], 0.10] },
-    ],
-    [
-        { Fixed = [[0.52, 0.43], 0.05] },
-        { Fixed = [[0.55, 0.44], 0.01] },
-    ]
-]
 cond_theta_phi= [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.90, 0.0], 0.10] }
@@ -73,32 +63,20 @@ cond_a = [
     { Fixed = [[0.95, 0.00], 0.05] },
     { Fixed = [[0.00, 0.95], 0.05] },
 ]
-cond_thetad = [
-    [
-        [
-            { Fixed = [[0.95, 0.00], 0.05] },
-            { Fixed = [[0.95, 0.00], 0.05] },
-        ],
-        [
-            { Fixed = [[0.30, 0.60], 0.10] },
-            { Fixed = [[0.90, 0.00], 0.10] },
-        ],
-    ],
-    [
-        [
-            { Fixed = [[0.317, 0.633], 0.05] },
-            { Fixed = [[0.95 , 0.00 ], 0.05] },
-        ],
-        [
-            { Fixed = [[0.33 , 0.66 ], 0.01] },
-            { Fixed = [[0.99 , 0.00 ], 0.01] },
-        ],
-    ]
-]
 cond_thetad_phi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.99, 0.0], 0.01] },
 ]
+[scenario.agent_params.initial_conditions.base.cond_theta]
+none = { Fixed = [[0.95, 0.00], 0.05] }
+possible = { Fixed = [[0.50, 0.40], 0.10] }
+rates = [[1.0, 0.5], [1.0, 0.1]]
+[scenario.agent_params.initial_conditions.base.cond_thetad]
+none = { Fixed = [[0.95, 0.00], 0.05] }
+possible = { Fixed = [[0.30, 0.60], 0.10] }
+rates = [[1.0, 0.5], [1.0, 0.1]]
+avoid_u_rates = [2.0, 0.5, 0.1]
+
 [scenario.agent_params.initial_conditions.friend]
 cond_fpsi = [
     # [ [ 1.00, 0.00 ], 0.00 ],
@@ -114,20 +92,15 @@ cond_fb = [
     { Fixed = [[0.90, 0.00], 0.10] },
     { Fixed = [[0.00, 0.70], 0.30] },
 ]
-cond_ftheta = [
-    [
-        { Fixed = [[0.95, 0.00], 0.05] },
-        { Fixed = [[0.45, 0.45], 0.10] },
-    ],
-    [
-        { Fixed = [[0.475, 0.475], 0.05] },
-        { Fixed = [[0.495, 0.495], 0.01] },
-    ]
-]
 cond_ftheta_fphi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.90, 0.0], 0.10] }
 ]
+[scenario.agent_params.initial_conditions.friend.cond_ftheta]
+none = { Fixed = [[0.95, 0.00], 0.05] }
+possible = { Fixed = [[0.45, 0.45], 0.10] }
+rates = [[1.0, 0.5], [1.0, 0.1]]
+
 [scenario.agent_params.initial_conditions.social]
 cond_kpsi = [
     { Fixed = [[0.99, 0.00], 0.01] },
@@ -141,20 +114,14 @@ cond_kb = [
     { Fixed = [[0.90, 0.00], 0.10] },
     { Fixed = [[0.00, 0.70], 0.30] },
 ]
-cond_ktheta = [
-    [
-        { Fixed = [[0.95, 0.00], 0.05] },
-        { Fixed = [[0.45, 0.45], 0.10] },
-    ],
-    [
-        { Fixed = [[0.475, 0.475], 0.05] },
-        { Fixed = [[0.495, 0.495], 0.01] },
-    ]
-]
 cond_ktheta_kphi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.90, 0.0], 0.10] },
 ]
+[scenario.agent_params.initial_conditions.social.cond_ktheta]
+none = { Fixed = [[0.95, 0.00], 0.05] }
+possible = { Fixed = [[0.45, 0.45], 0.10] }
+rates = [[1.0, 0.5], [1.0, 0.1]]
 
 [scenario.agent_params]
 delay_selfish       = { Gamma = {shape = 5, scale = 0.4} }
