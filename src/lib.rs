@@ -7,37 +7,42 @@ mod opinion;
 mod stat;
 mod value;
 
-use std::{collections::BTreeMap, iter::Sum, sync::mpsc, thread};
+use std::{collections::BTreeMap, iter::Sum, path::Path, sync::mpsc, thread};
 
 use approx::UlpsEq;
-use config::{Config, ConfigFormat, EventTable};
-use graph_lib::prelude::{Graph, GraphB};
+use config::{ConfigData, General, Runtime, Scenario};
+use graph_lib::prelude::Graph;
 use num_traits::{Float, FromPrimitive, NumAssign};
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use agent::{Agent, AgentParams};
-use info::{Info, InfoContent, InfoLabel};
+use info::{Info, InfoLabel};
 use stat::{FileWriters, InfoData, InfoStat, Stat};
 
 use crate::stat::{AgentStat, PopData, PopStat};
 
-pub struct Runner<V>
+pub struct Runner<P, V>
 where
+    P: AsRef<Path>,
     V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    config: Config<V>,
+    general: ConfigData<P, General>,
+    runtime: ConfigData<P, Runtime>,
+    agent_params: ConfigData<P, AgentParams<V>>,
+    scenario: ConfigData<P, Scenario<V>>,
     identifier: String,
     overwriting: bool,
 }
 
-impl<V> Runner<V>
+impl<P, V> Runner<P, V>
 where
+    P: AsRef<Path>,
     V: Float + NumAssign + UlpsEq + Default + Sum + std::fmt::Debug + SampleUniform + Send + Sync,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
@@ -45,19 +50,45 @@ where
     Exp1: Distribution<V>,
 {
     pub fn try_new(
-        config_data: ConfigFormat,
+        general_path: P,
+        runtime_path: P,
+        agent_params_path: P,
+        scenario_path: P,
         identifier: String,
         overwriting: bool,
     ) -> anyhow::Result<Self>
     where
         for<'de> V: serde::Deserialize<'de>,
     {
-        let config: Config<V> = config_data.try_into()?;
         Ok(Self {
-            config,
+            general: ConfigData::try_new(general_path)?,
+            runtime: ConfigData::try_new(runtime_path)?,
+            agent_params: ConfigData::try_new(agent_params_path)?,
+            scenario: ConfigData::try_new(scenario_path)?,
             identifier,
             overwriting,
         })
+    }
+
+    fn create_metadata(&self) -> BTreeMap<String, String> {
+        BTreeMap::from_iter([
+            ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+            ("general".to_string(), self.general.get_path_string()),
+            ("runtime".to_string(), self.runtime.get_path_string()),
+            (
+                "agent_params".to_string(),
+                self.agent_params.get_path_string(),
+            ),
+            ("scenario".to_string(), self.scenario.get_path_string()),
+            (
+                "num_parallel".to_string(),
+                self.runtime.data.num_parallel.to_string(),
+            ),
+            (
+                "iteration_count".to_string(),
+                self.runtime.data.iteration_count.to_string(),
+            ),
+        ])
     }
 
     pub fn run(&mut self) -> anyhow::Result<()>
@@ -67,10 +98,10 @@ where
     {
         let (sender, receiver) = mpsc::channel::<Stat>();
         let mut writers = FileWriters::try_new(
-            &self.config.output,
-            &self.config.runtime,
+            &self.general.data.output,
             &self.identifier,
             self.overwriting,
+            self.create_metadata(),
         )?;
 
         let handle = thread::spawn(move || {
@@ -81,12 +112,11 @@ where
             println!("finished writing.");
         });
 
-        let num_nodes = V::from_usize(self.config.runtime.graph.node_count()).unwrap();
-        let mean_degree =
-            V::from_usize(self.config.runtime.graph.edge_count()).unwrap() / num_nodes;
+        let num_nodes = V::from_usize(self.scenario.data.graph.node_count()).unwrap();
+        let mean_degree = V::from_usize(self.scenario.data.graph.edge_count()).unwrap() / num_nodes;
 
-        let mut rng = SmallRng::seed_from_u64(self.config.runtime.seed_state);
-        let rngs = (0..(self.config.runtime.num_parallel))
+        let mut rng = SmallRng::seed_from_u64(self.runtime.data.seed_state);
+        let rngs = (0..(self.runtime.data.num_parallel))
             .map(|_| SmallRng::from_rng(&mut rng))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -95,14 +125,15 @@ where
             .enumerate()
             .for_each(|(num_par, mut rng)| {
                 let mut env = Environment::new(
-                    &self.config,
+                    &self.agent_params.data,
+                    &self.scenario.data,
                     &mut rng,
                     num_nodes,
                     mean_degree,
                     sender.clone(),
                 );
                 let num_par = num_par as u32;
-                for num_iter in 0..(self.config.runtime.iteration_count) {
+                for num_iter in 0..(self.runtime.data.iteration_count) {
                     env.execute(num_par, num_iter);
                 }
             });
@@ -127,10 +158,8 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    graph: &'a GraphB,
-    info_contents: &'a [InfoContent<V>],
     agent_params: &'a AgentParams<V>,
-    event_table: &'a EventTable,
+    scenario: &'a Scenario<V>,
     rng: &'a mut R,
     num_nodes: V,
     mean_degree: V,
@@ -148,7 +177,8 @@ where
     Exp1: Distribution<V>,
 {
     fn new(
-        config: &'a Config<V>,
+        agent_params: &'a AgentParams<V>,
+        scenario: &'a Scenario<V>,
         rng: &'a mut R,
         num_nodes: V,
         mean_degree: V,
@@ -157,14 +187,12 @@ where
     where
         V: Default + NumAssign,
     {
-        let agents = (0..config.runtime.graph.node_count())
+        let agents = (0..scenario.graph.node_count())
             .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
-            graph: &config.runtime.graph,
-            info_contents: &config.scenario.info_contents,
-            agent_params: &config.scenario.agent_params,
-            event_table: &config.scenario.event_table,
+            agent_params,
+            scenario,
             rng,
             num_nodes,
             mean_degree,
@@ -186,7 +214,7 @@ where
         let mut infos = Vec::<Info<V>>::new();
         let mut receivers = Vec::new();
         let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
-        let mut event_table = self.event_table.0.clone();
+        let mut event_table = self.scenario.event_table.0.clone();
         let mut agents_willing_selfish = Vec::<usize>::new();
         let mut senders = Vec::new();
 
@@ -203,7 +231,7 @@ where
             if let Some(informms) = event_table.remove(&t) {
                 for (agent_idx, info_content_idx) in informms {
                     let info_idx = infos.len();
-                    let info = Info::new(info_idx, &self.info_contents[info_content_idx]);
+                    let info = Info::new(info_idx, &self.scenario.info_contents[info_content_idx]);
                     info_data_map.entry(info.content.label).or_default();
 
                     log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
@@ -268,7 +296,7 @@ where
                 info_idx,
             } in senders.drain(..)
             {
-                for bid in self.graph.successors(agent_idx) {
+                for bid in self.scenario.graph.successors(agent_idx) {
                     receivers.push(Receiver {
                         agent_idx: *bid,
                         info_idx,
@@ -295,5 +323,38 @@ where
         self.sender.send(info_stat.into()).unwrap();
         self.sender.send(agent_stat.into()).unwrap();
         self.sender.send(pop_stat.into()).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Runner;
+    use arrow2::io::ipc::read::read_file_metadata;
+    use std::fs;
+
+    #[test]
+    fn test_exec() {
+        let general_path = "./test/config/general.toml";
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path = "./test/config/scenario.toml";
+        let mut runner = Runner::<_, f32>::try_new(
+            general_path,
+            runtime_path,
+            agent_params_path,
+            scenario_path,
+            "run_test".to_string(),
+            true,
+        )
+        .unwrap();
+        runner.run().unwrap();
+
+        let mut reader = fs::File::open("./test/run_test_info_out.arrow").unwrap();
+        let metadata = read_file_metadata(&mut reader).unwrap();
+        let metadata = metadata.schema.metadata;
+        assert_eq!(metadata["general"], general_path);
+        assert_eq!(metadata["runtime"], runtime_path);
+        assert_eq!(metadata["agent_params"], agent_params_path);
+        assert_eq!(metadata["scenario"], scenario_path);
     }
 }

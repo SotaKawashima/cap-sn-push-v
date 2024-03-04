@@ -1,14 +1,27 @@
-use std::{fs, io, path::PathBuf};
+use std::path::PathBuf;
 
-use cap_sn::{config::ConfigFormat, Runner};
+use cap_sn::{
+    config::{DataFormat, FileReadError},
+    Runner,
+};
 use clap::Parser;
 
 #[derive(clap::Parser)]
 struct Cli {
-    #[command(flatten)]
-    config: InputConfig,
     /// string to identify given configuration data
     identifier: String,
+    /// the path of a general config file
+    #[arg(short, long)]
+    general: PathBuf,
+    /// the path of a runtime config file
+    #[arg(short, long)]
+    runtime: PathBuf,
+    /// the path of a agent parameters config file
+    #[arg(short, long)]
+    agent_params: PathBuf,
+    /// the path of a scenario config file
+    #[arg(short, long)]
+    scenario: PathBuf,
     /// Enable overwriting of a output file
     #[arg(short, long, default_value_t = false)]
     overwriting: bool,
@@ -25,33 +38,14 @@ struct InputConfig {
     toml_data: Option<String>,
 }
 
-#[derive(thiserror::Error, Debug)]
-enum ConfigError {
-    #[error("extension is needed.")]
-    NoExtension,
-    #[error("extension {0} is invalid.")]
-    InvalidExtension(String),
-    #[error("{0}")]
-    IntoStringError(#[from] std::str::Utf8Error),
-    #[error("{0}")]
-    IOError(#[from] io::Error),
-}
-
-impl TryFrom<InputConfig> for ConfigFormat {
-    type Error = ConfigError;
+impl TryFrom<InputConfig> for DataFormat {
+    type Error = FileReadError;
 
     fn try_from(value: InputConfig) -> Result<Self, Self::Error> {
         match (value.file_path, value.json_data, value.toml_data) {
-            (Some(path), None, None) => match path.extension() {
-                None => Err(ConfigError::NoExtension),
-                Some(ext) => match <&str>::try_from(ext)? {
-                    "json" => Ok(ConfigFormat::JSON(fs::read_to_string(path)?)),
-                    "toml" => Ok(ConfigFormat::TOML(fs::read_to_string(path)?)),
-                    s => Err(ConfigError::InvalidExtension(s.to_string())),
-                },
-            },
-            (None, Some(data), None) => Ok(ConfigFormat::JSON(data)),
-            (None, None, Some(data)) => Ok(ConfigFormat::TOML(data)),
+            (Some(path), None, None) => DataFormat::read(path),
+            (None, Some(data), None) => Ok(DataFormat::JSON(data)),
+            (None, None, Some(data)) => Ok(DataFormat::TOML(data)),
             _ => unreachable!(),
         }
     }
@@ -61,7 +55,13 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = Cli::parse();
-    let mut executor =
-        Runner::<f32>::try_new(args.config.try_into()?, args.identifier, args.overwriting)?;
+    let mut executor = Runner::<PathBuf, f32>::try_new(
+        args.general,
+        args.runtime,
+        args.agent_params,
+        args.scenario,
+        args.identifier,
+        args.overwriting,
+    )?;
     executor.run()
 }

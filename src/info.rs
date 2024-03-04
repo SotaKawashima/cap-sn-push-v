@@ -49,11 +49,6 @@ pub struct Info<'a, V: Float> {
 }
 
 impl<'a, V: Float> Info<'a, V> {
-    pub fn reset(&mut self) {
-        self.num_shared = 0;
-        self.num_viewed = 0;
-    }
-
     pub fn new(idx: usize, content: &'a InfoContent<V>) -> Self {
         Self {
             idx,

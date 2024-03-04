@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::PathBuf;
 
-use crate::config::{Output, Runtime};
+use crate::config::Output;
 use crate::info::InfoLabel;
 
 #[derive(Default)]
@@ -238,9 +238,9 @@ pub struct FileWriters {
 impl FileWriters {
     pub fn try_new(
         output: &Output,
-        runtime: &Runtime,
         identifier: &str,
         overwriting: bool,
+        metadata: BTreeMap<String, String>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             info: create_writer(
@@ -248,21 +248,21 @@ impl FileWriters {
                 overwriting,
                 output.compress,
                 InfoStat::get_fields(),
-                create_metadata(runtime),
+                metadata.clone(),
             )?,
             agent: create_writer(
                 AgentStat::output_path(output, identifier),
                 overwriting,
                 output.compress,
                 AgentStat::get_fields(),
-                create_metadata(runtime),
+                metadata.clone(),
             )?,
             pop: create_writer(
                 PopStat::output_path(output, identifier),
                 overwriting,
                 output.compress,
                 PopStat::get_fields(),
-                create_metadata(runtime),
+                metadata,
             )?,
         })
     }
@@ -282,17 +282,6 @@ impl FileWriters {
         self.pop.finish()?;
         Ok(())
     }
-}
-
-fn create_metadata(runtime: &Runtime) -> BTreeMap<String, String> {
-    BTreeMap::from_iter([
-        ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-        ("num_parallel".to_string(), runtime.num_parallel.to_string()),
-        (
-            "iteration_count".to_string(),
-            runtime.iteration_count.to_string(),
-        ),
-    ])
 }
 
 fn create_writer(

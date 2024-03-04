@@ -13,6 +13,7 @@ pub struct ValueWithError<V: Float, D> {
     error: Option<RangedDist<V, D>>,
 }
 
+#[allow(dead_code)]
 impl<V> EValue<V>
 where
     V: Float,

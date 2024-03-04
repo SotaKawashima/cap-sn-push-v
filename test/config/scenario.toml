@@ -1,0 +1,44 @@
+graph = { directed = true, location = { LocalFile = "./test/graph/graph.txt" } }
+
+info_contents = [
+    # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
+    { Misinfo = { psi = [[0.00, 0.80], 0.20] } },
+    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 0.99 ], 0.01 ] } },
+    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 0.99 ], 0.01 ] } },
+    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
+]
+
+[[scenario.event_table]]
+time = 0
+informs = [
+    { agent_idx = 0, info_content_idx = 0 },
+    # { agent_idx = 1, info_content_idx = 0 },
+]
+
+[[scenario.event_table]]
+time = 1
+informs = [{ agent_idx = 6, info_content_idx = 1 }]
+# informs = [{ agent_idx = 6, info_content_idx = 2 }]
+[[event_table]]
+time = 0
+informs = [
+    { agent_idx = 0, info_content_idx = 0 },
+]
+
+[[event_table]]
+time = 1
+informs = [
+    { agent_idx = 1, info_content_idx = 1 },
+]
+
+# [[scenario.event_table]]
+# time = 4
+# informs = [
+#     { agent_idx = 31, info_content_idx = 1 },
+# ]
+
+# [[scenario.event_table]]
+# time = 3
+# informs = [
+#     { agent_idx = 43, info_content_idx = 2 },
+# ]
