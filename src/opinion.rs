@@ -1,9 +1,12 @@
-use crate::info::Info;
+use crate::{
+    info::Info,
+    value::{EValue, EValueParam},
+};
 use approx::UlpsEq;
 use core::fmt;
 use num_traits::{Float, NumAssign};
 use rand::Rng;
-use rand_distr::{Dirichlet, Distribution, Exp1, Open01, StandardNormal};
+use rand_distr::{Dirichlet, Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
 use std::{array, iter::Sum, ops::AddAssign};
 use subjective_logic::{
@@ -244,6 +247,7 @@ where
 pub struct InitialConditions<V>
 where
     V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -259,6 +263,7 @@ where
 pub struct InitialBaseConditions<V>
 where
     V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -272,8 +277,8 @@ where
     /// $B,\Psi \Rightarrow \Theta$
     // #[serde_as(as = "TryFromInto<[[SimplexParam<[V; THETA], V>; PSI]; B]>")]
     // pub cond_theta: HigherArr2<SimplexDist<V, THETA>, B, PSI>,
-    #[serde_as(as = "TryFromInto<CondThetaParam<[V; THETA], V>>")]
-    pub cond_theta: CondThetaDist<V, THETA>,
+    // #[serde_as(as = "TryFromInto<CondThetaParam<[V; THETA], V>>")]
+    pub cond_theta: CondThetaDist<V>,
     /// $\Phi \Rightarrow \Theta$
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETA], V>>; PHI]")]
     pub cond_theta_phi: [SimplexDist<V, THETA>; PHI],
@@ -283,8 +288,8 @@ where
     /// $B,\Psi,A \Rightarrow \Theta'$
     // #[serde_as(as = "TryFromInto<[[[SimplexParam<[V; THETAD], V>; A]; PSI]; B]>")]
     // pub cond_thetad: HigherArr3<SimplexDist<V, THETAD>, B, PSI, A>,
-    #[serde_as(as = "TryFromInto<CondThetadParam<[V; THETA], V>>")]
-    pub cond_thetad: CondThetadDist<V, THETA>,
+    // #[serde_as(as = "TryFromInto<CondThetadParam<[V; THETAD], V>>")]
+    pub cond_thetad: CondThetadDist<V>,
     /// $\Phi \Rightarrow \Theta'$
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETA], V>>; PHI]")]
     pub cond_thetad_phi: [SimplexDist<V, THETAD>; PHI],
@@ -296,6 +301,7 @@ where
 pub struct InitialFriendConditions<V>
 where
     V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -310,10 +316,7 @@ where
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; F_B], V>>; F_S]")]
     pub cond_fb: [SimplexDist<V, F_B>; F_S],
     /// $FB,F\Psi \Rightarrow F\Theta$
-    // #[serde_as(as = "TryFromInto<[[SimplexParam<[V; F_THETA], V>; F_PSI]; F_B]>")]
-    // pub cond_ftheta: HigherArr2<SimplexDist<V, F_THETA>, F_B, F_PSI>,
-    #[serde_as(as = "TryFromInto<CondThetaParam<[V; F_THETA], V>>")]
-    pub cond_ftheta: CondThetaDist<V, F_THETA>,
+    pub cond_ftheta: CondFThetaDist<V>,
     /// $F\Phi \Rightarrow F\Theta$
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; F_THETA], V>>; F_PHI]")]
     pub cond_ftheta_fphi: [SimplexDist<V, F_THETA>; F_PHI],
@@ -325,6 +328,7 @@ where
 pub struct InitialSocialConditions<V>
 where
     V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -339,168 +343,208 @@ where
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; K_B], V>>; K_S]")]
     pub cond_kb: [SimplexDist<V, K_B>; K_S],
     /// $KB,K\Psi \Rightarrow K\Theta$
-    // #[serde_as(as = "TryFromInto<[[SimplexParam<[V; K_THETA], V>; K_PSI]; K_B]>")]
-    // pub cond_ktheta: HigherArr2<SimplexDist<V, K_THETA>, K_B, K_PSI>,
-    #[serde_as(as = "TryFromInto<CondThetaParam<[V; K_THETA], V>>")]
-    pub cond_ktheta: CondThetaDist<V, K_THETA>,
+    pub cond_ktheta: CondKThetaDist<V>,
     /// $K\Phi \Rightarrow K\Theta$
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; K_THETA], V>>; K_PHI]")]
     pub cond_ktheta_kphi: [SimplexDist<V, K_THETA>; K_PHI],
 }
 
-#[serde_as]
+/// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
 #[derive(Debug, serde::Deserialize)]
-struct CondThetaParam<T, V: Float> {
-    none: SimplexParam<T, V>,
-    possible: SimplexParam<T, V>,
-    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-    rates: [(V, V); 2],
+pub struct RelativeParam<T> {
+    pub belief: T,
+    pub uncertainty: T,
 }
 
-#[derive(Debug)]
-pub struct CondThetaDist<V, const N: usize>
+impl<V> Distribution<RelativeParam<V>> for RelativeParam<EValue<V>>
 where
     V: Float,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
     Open01: Distribution<V>,
+    Standard: Distribution<V>,
 {
-    pub none: SimplexDist<V, N>,
-    pub possible: SimplexDist<V, N>,
-    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-    pub rates: [(V, V); 2],
-}
-
-impl<V, const N: usize> TryFrom<CondThetaParam<[V; N], V>> for CondThetaDist<V, N>
-where
-    V: Float + UlpsEq + AddAssign,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    type Error = <SimplexDist<V, N> as TryFrom<SimplexParam<[V; N], V>>>::Error;
-
-    fn try_from(value: CondThetaParam<[V; N], V>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            none: value.none.try_into()?,
-            possible: value.possible.try_into()?,
-            rates: value.rates,
-        })
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> RelativeParam<V> {
+        RelativeParam {
+            belief: self.belief.sample(rng),
+            uncertainty: self.uncertainty.sample(rng),
+        }
     }
 }
 
-fn rate_to_simplex<V: Float + AddAssign + UlpsEq>(x: V, y: V, w: &Simplex<V, 2>) -> Simplex<V, 2> {
-    let b0 = w.b()[0];
-    let u = *w.u();
-    let sb = V::one() - u;
-    let x = x.min(sb / b0);
-    let y = y.min(V::one() / u);
-    let ud = u * y;
-    let sbd = V::one() - ud;
-    let bd0 = b0 / sb * x * sbd;
-    Simplex::new([bd0, sbd - bd0], ud)
-}
-
-fn avaoid_rate_to_simplex<V: Float + AddAssign + UlpsEq>(r: V, u: V) -> Simplex<V, 2> {
-    let r = r.min(V::one() / u);
-    let ud = u * r;
-    let bd0 = V::one() - ud;
-    Simplex::new([bd0, V::zero()], ud)
-}
-
-impl<V> Distribution<HigherArr2<Simplex<V, 2>, 2, 2>> for CondThetaDist<V, 2>
+impl<V> RelativeParam<V>
 where
     V: Float + AddAssign + UlpsEq,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
 {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, 2>, 2, 2> {
-        let neg_w = &self.none.sample(rng);
-        let pos_w = &self.possible.sample(rng);
-        let rates = &self.rates;
-        harr2![
-            [neg_w.clone(), pos_w.clone()],
-            [
-                rate_to_simplex(rates[0].0, rates[0].1, pos_w),
-                rate_to_simplex(rates[1].0, rates[1].1, pos_w),
-            ]
-        ]
+    fn to_simplex(self, w: &Simplex<V, 2>) -> Simplex<V, 2> {
+        let b1 = w.b()[1];
+        let u = *w.u();
+        let sb = V::one() - u;
+        let x = self.belief.min(sb / b1);
+        let y = self.uncertainty.min(V::one() / u);
+        let ud = u * y;
+        let sbd = V::one() - ud;
+        let bd1 = b1 / sb * x * sbd;
+        Simplex::new([sbd - bd1, bd1], ud)
+    }
+}
+
+impl<V> TryFrom<RelativeParam<EValueParam<V>>> for RelativeParam<EValue<V>>
+where
+    V: Float,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+{
+    type Error = <EValue<V> as TryFrom<EValueParam<V>>>::Error;
+
+    fn try_from(value: RelativeParam<EValueParam<V>>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            belief: value.belief.try_into()?,
+            uncertainty: value.uncertainty.try_into()?,
+        })
     }
 }
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
-struct CondThetadParam<T, V: Float> {
-    none: SimplexParam<T, V>,
-    possible: SimplexParam<T, V>,
-    avoid_u_rates: [V; 3],
-    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-    rates: [(V, V); 2],
-}
-
-#[derive(Debug)]
-pub struct CondThetadDist<V, const N: usize>
-where
-    V: Float,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    pub none: SimplexDist<V, N>,
-    pub possible: SimplexDist<V, N>,
-    pub avoid_u_rates: [V; 3],
-    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-    pub rates: [(V, V); 2],
-}
-
-impl<V, const N: usize> TryFrom<CondThetadParam<[V; N], V>> for CondThetadDist<V, N>
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct CondThetaDist<V>
 where
     V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    type Error = <SimplexDist<V, N> as TryFrom<SimplexParam<[V; N], V>>>::Error;
+    #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETA], V>>; PSI]")]
+    pub b0: [SimplexDist<V, THETA>; PSI],
+    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; PSI]")]
+    pub b1: [RelativeParam<EValue<V>>; PSI],
+}
 
-    fn try_from(value: CondThetadParam<[V; N], V>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            none: value.none.try_into()?,
-            possible: value.possible.try_into()?,
-            avoid_u_rates: value.avoid_u_rates,
-            rates: value.rates,
-        })
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct CondFThetaDist<V>
+where
+    V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    #[serde_as(as = "[TryFromInto<SimplexParam<[V; F_THETA], V>>; F_PSI]")]
+    pub fb0: [SimplexDist<V, F_THETA>; F_PSI],
+    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; F_PSI]")]
+    pub fb1: [RelativeParam<EValue<V>>; F_PSI],
+}
+
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct CondKThetaDist<V>
+where
+    V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    #[serde_as(as = "[TryFromInto<SimplexParam<[V; K_THETA], V>>; K_PSI]")]
+    pub kb0: [SimplexDist<V, K_THETA>; K_PSI],
+    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; K_PSI]")]
+    pub kb1: [RelativeParam<EValue<V>>; K_PSI],
+}
+
+impl<V> Distribution<HigherArr2<Simplex<V, THETA>, B, PSI>> for CondThetaDist<V>
+where
+    V: Float + AddAssign + UlpsEq,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, THETA>, B, PSI> {
+        let [b00, b01] = array::from_fn(|i| self.b0[i].sample(rng));
+        let [b10, b11] = array::from_fn(|i| self.b1[i].sample(rng).to_simplex(&b01));
+        harr2![[b00, b01], [b10, b11]]
     }
 }
 
-impl<V> Distribution<HigherArr3<Simplex<V, THETAD>, B, PSI, A>> for CondThetadDist<V, 2>
+impl<V> Distribution<HigherArr2<Simplex<V, F_THETA>, F_B, F_PSI>> for CondFThetaDist<V>
 where
     V: Float + AddAssign + UlpsEq,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, F_THETA>, F_B, F_PSI> {
+        let [b00, b01] = array::from_fn(|i| self.fb0[i].sample(rng));
+        let [b10, b11] = array::from_fn(|i| self.fb1[i].sample(rng).to_simplex(&b01));
+        harr2![[b00, b01], [b10, b11]]
+    }
+}
+
+impl<V> Distribution<HigherArr2<Simplex<V, K_THETA>, K_B, K_PSI>> for CondKThetaDist<V>
+where
+    V: Float + AddAssign + UlpsEq,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, K_THETA>, K_B, K_PSI> {
+        let [b00, b01] = array::from_fn(|i| self.kb0[i].sample(rng));
+        let [b10, b11] = array::from_fn(|i| self.kb1[i].sample(rng).to_simplex(&b01));
+        harr2![[b00, b01], [b10, b11]]
+    }
+}
+
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct CondThetadDist<V>
+where
+    V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    // pub none: SimplexDist<V, N>,
+    // pub possible: SimplexDist<V, N>,
+    // pub avoid_u_rates: [V; 3],
+    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
+    // pub rates: [(V, V); 2],
+    #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETAD], V>>; PSI]")]
+    pub a0b0: [SimplexDist<V, THETAD>; PSI],
+    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; PSI]")]
+    pub a0b1: [RelativeParam<EValue<V>>; PSI],
+    #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
+    pub a1: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
+}
+
+impl<V> Distribution<HigherArr3<Simplex<V, THETAD>, A, B, PSI>> for CondThetadDist<V>
+where
+    V: Float + AddAssign + UlpsEq,
+    Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr3<Simplex<V, THETAD>, B, PSI, A> {
-        let none = &self.none.sample(rng);
-        let possible = &self.possible.sample(rng);
-        let rates = &self.rates;
-        let avoid_u_rates = &self.avoid_u_rates;
+        let [a0b00, a0b01] = array::from_fn(|i| self.a0b0[i].sample(rng));
+        let [a0b10, a0b11] = array::from_fn(|i| self.a0b1[i].sample(rng).to_simplex(&a0b01));
+        // a -> b -> psi
         harr3![
-            [
-                [none.clone(), none.clone()],
-                [
-                    possible.clone(),
-                    avaoid_rate_to_simplex(avoid_u_rates[0], *none.u())
-                ]
-            ],
+            [[a0b00.clone(), a0b01.clone()], [a0b10, a0b11]],
             [
                 [
-                    rate_to_simplex(rates[0].0, rates[0].1, possible),
-                    avaoid_rate_to_simplex(avoid_u_rates[1], *none.u())
+                    self.a1[[0, 0]].sample(rng).to_simplex(&a0b00),
+                    self.a1[[0, 1]].sample(rng).to_simplex(&a0b00),
                 ],
                 [
-                    rate_to_simplex(rates[1].0, rates[1].1, possible),
-                    avaoid_rate_to_simplex(avoid_u_rates[2], *none.u())
+                    self.a1[[1, 0]].sample(rng).to_simplex(&a0b00),
+                    self.a1[[1, 1]].sample(rng).to_simplex(&a0b00),
                 ]
             ]
         ]
@@ -527,7 +571,7 @@ pub struct BaseConditionalOpinions<V: Float> {
     /// $K\Theta \Rightarrow A$
     cond_a: [Simplex<V, A>; F_THETA],
     /// $B,\Psi,A \Rightarrow \Theta'$
-    cond_thetad: HigherArr3<Simplex<V, THETAD>, B, PSI, A>,
+    cond_thetad: HigherArr3<Simplex<V, THETAD>, A, B, PSI>,
     /// $\Phi \Rightarrow \Theta'$
     cond_thetad_phi: [Simplex<V, THETAD>; PHI],
 }
@@ -690,7 +734,7 @@ impl<V: Float> BaseOpinions<V> {
             .phi
             .deduce(&conds.cond_thetad_phi)
             .unwrap_or_else(|| Opinion::vacuous_with(base_rates.thetad));
-        let mut thetad_ded_1 = Opinion::product3(b.as_ref(), self.psi.as_ref(), a.as_ref())
+        let mut thetad_ded_1 = Opinion::product3(a.as_ref(), b.as_ref(), self.psi.as_ref())
             .deduce(&conds.cond_thetad)
             .unwrap_or_else(|| Opinion::vacuous_with(base_rates.thetad));
         FuseOp::Wgh.fuse_assign(&mut thetad_ded_1, &thetad_ded_2);
@@ -1027,6 +1071,7 @@ impl<V: Float> ConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialConditions<V>, rng: &mut R) -> Self
     where
         V: Float + AddAssign + UlpsEq,
+        Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
@@ -1058,6 +1103,7 @@ impl<V: Float> BaseConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialBaseConditions<V>, rng: &mut R) -> Self
     where
         V: Float + AddAssign + UlpsEq,
+        Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
@@ -1078,6 +1124,7 @@ impl<V: Float> FriendConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialFriendConditions<V>, rng: &mut R) -> Self
     where
         V: Float + AddAssign + UlpsEq,
+        Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
@@ -1096,6 +1143,7 @@ impl<V: Float> SocialConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialSocialConditions<V>, rng: &mut R) -> Self
     where
         V: Float + AddAssign + UlpsEq,
+        Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
@@ -1112,16 +1160,19 @@ impl<V: Float> SocialConditionalOpinions<V> {
 
 #[cfg(test)]
 mod tests {
+    use std::array;
+
     use approx::ulps_eq;
     use rand::thread_rng;
     use rand_distr::Distribution;
-    use subjective_logic::mul::Simplex;
-
-    use crate::opinion::rate_to_simplex;
-
-    use super::{
-        CondThetaDist, CondThetaParam, CondThetadDist, CondThetadParam, SimplexDist, SimplexParam,
+    use subjective_logic::{
+        harr2,
+        mul::{prod::HigherArr2, IndexedContainer, Simplex},
     };
+
+    use crate::value::EValue;
+
+    use super::{CondThetaDist, CondThetadDist, RelativeParam, SimplexDist, SimplexParam};
 
     #[test]
     fn test_simplex_dist_conversion() {
@@ -1211,88 +1262,163 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_to_simplex() {
-        let w = Simplex::new([0.1, 0.90], 0.00);
-        let wd = rate_to_simplex(1.0, 1.0, &w);
+    fn test_relative_param() {
+        let w = Simplex::new([0.9, 0.1], 0.00);
+        let wd = RelativeParam {
+            belief: 1.0,
+            uncertainty: 1.0,
+        }
+        .to_simplex(&w);
         assert_eq!(w, wd);
 
         let w = Simplex::new([0.0, 0.90], 0.10);
-        let wd = rate_to_simplex(1.0, 1.0, &w);
+        let wd = RelativeParam {
+            belief: 1.0,
+            uncertainty: 1.0,
+        }
+        .to_simplex(&w);
         assert_eq!(w, wd);
 
         let w = Simplex::new([0.0, 0.90], 0.10);
-        let wd = rate_to_simplex(1.0, 0.0, &w);
+        let wd = RelativeParam {
+            belief: 1.0,
+            uncertainty: 0.0,
+        }
+        .to_simplex(&w);
         assert_eq!(wd.b()[1], 1.0);
 
         let w = Simplex::new([0.2, 0.30], 0.50);
-        let wd = rate_to_simplex(1.0, 0.0, &w);
+        let wd = RelativeParam {
+            belief: 1.0,
+            uncertainty: 0.0,
+        }
+        .to_simplex(&w);
         assert_eq!(wd.b()[0], 0.4);
         assert_eq!(wd.b()[1], 0.6);
 
         let w = Simplex::new([0.2, 0.30], 0.50);
-        let wd = rate_to_simplex(0.0, 1.2, &w);
-        assert_eq!(wd.b()[1], 0.4);
+        let wd = RelativeParam {
+            belief: 0.0,
+            uncertainty: 1.2,
+        }
+        .to_simplex(&w);
+        assert_eq!(wd.b()[0], 0.4);
         assert_eq!(*wd.u(), 0.6);
     }
 
     #[test]
     fn test_cond_theta() {
         let rng = &mut thread_rng();
-        let cond_param = CondThetaParam {
-            none: SimplexParam::Fixed([0.95, 0.00], 0.05),
-            possible: SimplexParam::Dirichlet {
-                alpha: vec![10.5, 10.5, 9.0],
-                zeros: None,
-            },
-            rates: [(1.2, 1.0), (1.5, 1.0)],
+        let cond_dist = CondThetaDist {
+            b0: [
+                SimplexParam::Fixed([0.95, 0.00], 0.05).try_into().unwrap(),
+                SimplexParam::Dirichlet {
+                    alpha: vec![10.5, 10.5, 9.0],
+                    zeros: None,
+                }
+                .try_into()
+                .unwrap(),
+            ],
+            b1: [
+                RelativeParam {
+                    belief: EValue::fixed(1.2),
+                    uncertainty: EValue::fixed(1.0),
+                },
+                RelativeParam {
+                    belief: EValue::fixed(1.5),
+                    uncertainty: EValue::fixed(1.0),
+                },
+            ],
         };
-        let cond_dist: CondThetaDist<f32, 2> = cond_param.try_into().unwrap();
         for cond in cond_dist.sample_iter(rng).take(10) {
             let pw = &cond[[0, 1]];
             let pw1 = &cond[[1, 0]];
             let pw2 = &cond[[1, 1]];
-            let k = pw.b()[0] / (1.0 - *pw.u());
-            assert!(1.2 > 1.0 / k || ulps_eq!(k * 1.2, pw1.b()[0] / (1.0 - *pw1.u())));
-            assert!(1.5 > 1.0 / k || ulps_eq!(k * 1.5, pw2.b()[0] / (1.0 - *pw2.u())));
+            let k = pw.b()[1] / (1.0 - *pw.u());
+            assert!(1.2 > 1.0 / k || ulps_eq!(k * 1.2, pw1.b()[1] / (1.0 - *pw1.u())));
+            assert!(1.5 > 1.0 / k || ulps_eq!(k * 1.5, pw2.b()[1] / (1.0 - *pw2.u())));
         }
     }
 
     #[test]
     fn test_cond_thetad() {
         let rng = &mut thread_rng();
-        let rates = [(1.2, 0.98), (1.5, 1.01)];
-        let avoid_u_rates = [1.0, 1.25, 1.5];
-        let cond_param = CondThetadParam {
-            none: SimplexParam::Dirichlet {
-                alpha: vec![27.0, 3.0],
-                zeros: Some(vec![1]),
+        let a0b1 = [
+            RelativeParam {
+                belief: EValue::fixed(1.2f32),
+                uncertainty: EValue::fixed(0.98),
             },
-            possible: SimplexParam::Dirichlet {
-                alpha: vec![10.5, 10.5, 9.0],
-                zeros: None,
+            RelativeParam {
+                belief: EValue::fixed(1.5),
+                uncertainty: EValue::fixed(1.01),
             },
-            rates: rates.clone(),
-            avoid_u_rates: avoid_u_rates.clone(),
-        };
-        let cond_dist: CondThetadDist<f32, 2> = cond_param.try_into().unwrap();
-        for cond in cond_dist.sample_iter(rng).take(10) {
-            let nws = [&cond[[0, 0, 0]], &cond[[0, 0, 1]]];
-            let pwb = &cond[[0, 1, 0]];
-            let pws = [&cond[[1, 0, 0]], &cond[[1, 1, 0]]];
-            let aws = [&cond[[0, 1, 1]], &cond[[1, 0, 1]], &cond[[1, 1, 1]]];
-            let pu = *pwb.u();
-            let k = pwb.b()[0] / (1.0 - pu);
-            let nu = *nws[0].u();
+        ];
+        let a1 = harr2![
+            [
+                RelativeParam {
+                    belief: EValue::fixed(1.0),
+                    uncertainty: EValue::fixed(1.0),
+                },
+                RelativeParam {
+                    belief: EValue::fixed(1.0),
+                    uncertainty: EValue::fixed(1.0),
+                },
+            ],
+            [
+                RelativeParam {
+                    belief: EValue::fixed(1.0),
+                    uncertainty: EValue::fixed(1.25),
+                },
+                RelativeParam {
+                    belief: EValue::fixed(1.0),
+                    uncertainty: EValue::fixed(1.5),
+                },
+            ]
+        ];
+        let a0b1_: [RelativeParam<_>; 2] = array::from_fn(|i| a0b1[i].sample(rng));
+        let a1_: HigherArr2<RelativeParam<_>, 2, 2> = HigherArr2::from_fn(|i| a1[i].sample(rng));
 
-            assert_eq!(nws[0], nws[1]);
-            assert_eq!(nws[0].b()[1], 0.0);
-            assert!(*nws[0].u() > 0.0);
-            for ((x, y), pw) in rates.into_iter().zip(pws) {
-                assert!(x > 1.0 / k || ulps_eq!(k * x, pw.b()[0] / (1.0 - *pw.u())));
-                assert!(y > 1.0 / pu || ulps_eq!(pu * y, *pw.u()));
+        let cond_dist = CondThetadDist {
+            a0b0: [
+                SimplexParam::Dirichlet {
+                    alpha: vec![27.0, 3.0],
+                    zeros: Some(vec![1]),
+                }
+                .try_into()
+                .unwrap(),
+                SimplexParam::Dirichlet {
+                    alpha: vec![10.5, 10.5, 9.0],
+                    zeros: None,
+                }
+                .try_into()
+                .unwrap(),
+            ],
+            a0b1,
+            a1,
+        };
+        for cond in cond_dist.sample_iter(rng).take(10) {
+            let a0b0 = [&cond[[0, 0, 0]], &cond[[0, 0, 1]]];
+            let a0b1 = [&cond[[0, 1, 0]], &cond[[0, 1, 1]]];
+            let a1 = [
+                &cond[[1, 0, 0]],
+                &cond[[1, 0, 1]],
+                &cond[[1, 1, 0]],
+                &cond[[1, 1, 1]],
+            ];
+            let pu = *a0b0[1].u();
+            let k = a0b0[1].b()[1] / (1.0 - pu);
+            let nu = *a0b0[0].u();
+
+            assert_eq!(a0b0[0].b()[1], 0.0);
+            assert!(*a0b0[0].u() > 0.0);
+            for (rp, pw) in a0b1_.iter().zip(a0b1) {
+                assert!(
+                    rp.belief > 1.0 / k || ulps_eq!(k * rp.belief, pw.b()[1] / (1.0 - *pw.u()))
+                );
+                assert!(rp.uncertainty > 1.0 / pu || ulps_eq!(pu * rp.uncertainty, *pw.u()));
             }
-            for (r, aw) in avoid_u_rates.into_iter().zip(aws) {
-                assert!(r > 1.0 / nu || ulps_eq!(r * nu, *aw.u()));
+            for (rp, aw) in a1_.into_iter().zip(a1) {
+                assert!(rp.uncertainty > 1.0 / nu || ulps_eq!(rp.uncertainty * nu, *aw.u()));
             }
         }
     }

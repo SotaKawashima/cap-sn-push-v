@@ -168,7 +168,7 @@ impl From<AgentStat> for Stat {
 
 #[derive(Default)]
 pub struct PopData {
-    num_selfish: u32,
+    pub num_selfish: u32,
 }
 
 impl PopData {

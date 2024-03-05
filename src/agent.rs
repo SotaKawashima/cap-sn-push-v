@@ -327,19 +327,19 @@ mod tests {
         agent::{ActionStatus, Agent, AgentParams},
         cpt::CptParams,
         dist::IValue,
-        info::{Info, InfoContent, InfoObject, TrustParams},
+        info::{InfoBuilder, InfoObject, TrustParams},
         opinion::{
-            BaseRates, CondThetaDist, CondThetadDist, FriendBaseRates, GlobalBaseRates,
-            InitialBaseConditions, InitialBaseSimplexes, InitialConditions,
-            InitialFriendConditions, InitialFriendSimplexes, InitialOpinions,
-            InitialSocialConditions, InitialSocialSimplexes, SimplexDist, SimplexParam,
-            SocialBaseRates,
+            BaseRates, CondFThetaDist, CondKThetaDist, CondThetaDist, CondThetadDist,
+            FriendBaseRates, GlobalBaseRates, InitialBaseConditions, InitialBaseSimplexes,
+            InitialConditions, InitialFriendConditions, InitialFriendSimplexes, InitialOpinions,
+            InitialSocialConditions, InitialSocialSimplexes, RelativeParam, SimplexDist,
+            SimplexParam, SocialBaseRates,
         },
         value::EValue,
     };
 
     use rand::thread_rng;
-    use subjective_logic::mul::Simplex;
+    use subjective_logic::{harr2, mul::Simplex};
 
     use super::DelayActionStatus;
 
@@ -421,9 +421,20 @@ mod tests {
                     ],
                     // B,\Psi => \Theta
                     cond_theta: CondThetaDist {
-                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                        b0: [
+                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        ],
+                        b1: [
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                        ],
                     },
                     // \Phi => \Theta
                     cond_theta_phi: [
@@ -437,10 +448,42 @@ mod tests {
                     ],
                     // B,\Psi,A => \Theta'
                     cond_thetad: CondThetadDist {
-                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        avoid_u_rates: [1.0, 1.0, 1.0],
-                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                        a0b0: [
+                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        ],
+                        a0b1: [
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                        ],
+                        a1: harr2![
+                            [
+                                RelativeParam {
+                                    belief: EValue::fixed(1.0),
+                                    uncertainty: EValue::fixed(1.0),
+                                },
+                                RelativeParam {
+                                    belief: EValue::fixed(1.0),
+                                    uncertainty: EValue::fixed(1.0),
+                                },
+                            ],
+                            [
+                                RelativeParam {
+                                    belief: EValue::fixed(1.0),
+                                    uncertainty: EValue::fixed(1.0),
+                                },
+                                RelativeParam {
+                                    belief: EValue::fixed(1.0),
+                                    uncertainty: EValue::fixed(1.0),
+                                },
+                            ]
+                        ],
                     },
                     // \Phi => \Theta'
                     cond_thetad_phi: [
@@ -465,10 +508,21 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.2, 0.7], 0.1)),
                     ],
                     // FB,F\Psi => F\Theta
-                    cond_ftheta: CondThetaDist {
-                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    cond_ftheta: CondFThetaDist {
+                        fb0: [
+                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        ],
+                        fb1: [
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                        ],
                     },
                     // F\Phi => F\Theta
                     cond_ftheta_fphi: [
@@ -493,10 +547,21 @@ mod tests {
                         SimplexDist::Fixed(Simplex::new([0.2, 0.6], 0.2)),
                     ],
                     // KB,K\Psi => K\Theta
-                    cond_ktheta: CondThetaDist {
-                        none: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                        possible: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        rates: [(1.0, 1.0), (1.0, 1.0)],
+                    cond_ktheta: CondKThetaDist {
+                        kb0: [
+                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        ],
+                        kb1: [
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                            RelativeParam {
+                                belief: EValue::fixed(1.0),
+                                uncertainty: EValue::fixed(1.0),
+                            },
+                        ],
                     },
                     // K\Phi => K\Theta
                     cond_ktheta_kphi: [
@@ -558,10 +623,11 @@ mod tests {
             },
         };
 
-        let info_contents = [InfoContent::<f32>::from(InfoObject::Misinfo {
+        let info_objects = [InfoObject::Misinfo {
             psi: Simplex::new([0.00, 0.99], 0.01),
-        })];
-        let info = Info::new(0, &info_contents[0]);
+        }];
+        let info_builder = InfoBuilder::new();
+        let info = info_builder.build(0, &info_objects[0]);
 
         let mut a = Agent::default();
         a.prospect.reset(-0.1, -2.0, -0.001);

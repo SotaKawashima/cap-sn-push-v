@@ -1,39 +1,24 @@
-use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use approx::UlpsEq;
-use graph_lib::io::{DataFormat as GraphDataFormat, ParseBuilder};
-use graph_lib::prelude::{DiGraphB, GraphB, UndiGraphB};
-use num_traits::{Float, NumAssign};
-use rand_distr::uniform::SampleUniform;
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use serde_with::{serde_as, FromInto, TryFromInto};
-
-use crate::info::{InfoContent, InfoObject};
+use serde_with::serde_as;
 
 pub struct ConfigData<P: AsRef<Path>, T> {
     pub path: P,
     pub data: T,
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum ConfigError {
-    #[error("{0}")]
-    IOError(#[from] FileReadError),
-    #[error("{0}")]
-    ParseError(#[from] ParseError),
-}
-
 impl<P: AsRef<Path>, T> ConfigData<P, T> {
-    pub fn try_new(path: P) -> Result<Self, ConfigError>
+    pub fn try_new<S>(path: P) -> anyhow::Result<Self>
     where
-        T: DeserializeOwned,
+        S: DeserializeOwned,
+        S: TryInto<T>,
+        anyhow::Error: From<S::Error>,
     {
-        let data = DataFormat::read(&path)?.parse()?;
+        let data = DataFormat::read(&path)?.parse::<S>()?.try_into()?;
         Ok(Self { path, data })
     }
 
@@ -87,93 +72,6 @@ impl Default for Output {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct GraphInfo {
-    directed: bool,
-    location: DataLocation,
-}
-
-#[derive(Debug, serde::Deserialize)]
-enum DataLocation {
-    LocalFile(String),
-}
-
-impl TryFrom<GraphInfo> for GraphB {
-    type Error = io::Error;
-
-    fn try_from(value: GraphInfo) -> Result<Self, Self::Error> {
-        match value.location {
-            DataLocation::LocalFile(path) => {
-                let builder = ParseBuilder::new(File::open(path)?, GraphDataFormat::EdgeList);
-                if value.directed {
-                    Ok(GraphB::Di(builder.parse::<DiGraphB>()?))
-                } else {
-                    Ok(GraphB::Ud(builder.parse::<UndiGraphB>()?))
-                }
-            }
-        }
-    }
-}
-
-#[serde_as]
-#[derive(Debug, serde::Deserialize)]
-#[serde(bound(deserialize = "V: Deserialize<'de>"))]
-pub struct Scenario<V>
-where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    #[serde_as(as = "TryFromInto<GraphInfo>")]
-    pub graph: GraphB,
-    #[serde_as(as = "Vec<FromInto<InfoObject<V>>>")]
-    pub info_contents: Vec<InfoContent<V>>,
-    #[serde_as(as = "FromInto<Vec<Event>>")]
-    pub event_table: EventTable,
-}
-
-#[derive(serde::Deserialize, Debug)]
-struct Event {
-    time: u32,
-    informs: Vec<Inform>,
-}
-
-#[derive(serde::Deserialize, Debug)]
-struct Inform {
-    agent_idx: usize,
-    info_content_idx: usize,
-}
-
-/// time -> agent_idx -> info_content_idx
-#[derive(Debug, Clone)]
-pub struct EventTable(pub BTreeMap<u32, BTreeMap<usize, usize>>);
-
-impl From<Vec<Event>> for EventTable {
-    fn from(value: Vec<Event>) -> Self {
-        Self(
-            value
-                .into_iter()
-                .map(|Event { time, informs }| {
-                    (
-                        time,
-                        informs
-                            .into_iter()
-                            .map(
-                                |Inform {
-                                     agent_idx,
-                                     info_content_idx,
-                                 }| (agent_idx, info_content_idx),
-                            )
-                            .collect(),
-                    )
-                })
-                .collect(),
-        )
-    }
-}
-
 pub enum DataFormat {
     JSON(String),
     TOML(String),
@@ -221,12 +119,13 @@ pub enum ParseError {
 
 #[cfg(test)]
 mod tests {
-    use super::{General, Runtime, Scenario};
+    use super::{General, Runtime};
     use crate::agent::AgentParams;
+    use crate::scenario::{Scenario, ScenarioParam};
     use serde_json::json;
 
     #[test]
-    fn test_json_config() {
+    fn test_json_config() -> anyhow::Result<()> {
         let g = json!({
             "output": {
                 "location": "./test/",
@@ -295,9 +194,14 @@ mod tests {
                         { "Fixed" : [[0.00, 0.99], 0.01] },
                     ],
                     "cond_theta" : {
-                        "none": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "possible": { "Fixed" : [[0.45, 0.45], 0.10] },
-                        "rates": [[1.0, 1.0], [1.0, 1.0]]
+                        "b0": [
+                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                        ],
+                        "b1": [
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        ]
                     },
                     "cond_theta_phi" : [
                         { "Fixed" : [[0.00, 0.0], 1.00] },
@@ -308,10 +212,24 @@ mod tests {
                         { "Fixed" : [[0.00, 0.95], 0.05] },
                     ],
                     "cond_thetad" : {
-                        "none": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "possible": { "Fixed" : [[0.45, 0.45], 0.10] },
-                        "rates": [[1.0, 1.0], [1.0, 1.0]],
-                        "avoid_u_rates": [1.0, 1.0, 1.0]
+                        "a0b0": [
+                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                        ],
+                        "a0b1": [
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        ],
+                        "a1": [
+                            [
+                                { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                                { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            ],
+                            [
+                                { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                                { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            ],
+                        ]
                     },
                     "cond_thetad_phi" : [
                         { "Fixed" : [[0.00, 0.0], 1.00] },
@@ -332,9 +250,14 @@ mod tests {
                         { "Fixed" : [[0.00, 0.99], 0.01] },
                     ],
                     "cond_ftheta" : {
-                        "none": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "possible": { "Fixed" : [[0.45, 0.45], 0.10] },
-                        "rates": [[1.0, 1.0], [1.0, 1.0]]
+                        "fb0": [
+                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                        ],
+                        "fb1": [
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        ]
                     },
                     "cond_ftheta_fphi" : [
                         { "Fixed" : [[0.00, 0.0], 1.00] },
@@ -355,9 +278,14 @@ mod tests {
                         { "Fixed" : [[0.25, 0.65], 0.10] },
                     ],
                     "cond_ktheta" : {
-                        "none": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "possible": { "Fixed" : [[0.45, 0.45], 0.10] },
-                        "rates": [[1.0, 1.0], [1.0, 1.0]]
+                        "kb0": [
+                            { "Fixed" : [[0.95, 0.00], 0.05] },
+                            { "Fixed" : [[0.45, 0.45], 0.10] },
+                        ],
+                        "kb1": [
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        ]
                     },
                     "cond_ktheta_kphi" : [
                         { "Fixed" : [[0.00, 0.0], 1.00] },
@@ -397,56 +325,60 @@ mod tests {
                         "LocalFile": "./test/graph/graph.txt",
                     },
                 },
-                "info_contents": [
+                "info_objects": [
                     { "Misinfo": { "psi": ([0.00, 0.99], 0.01) } },
                     { "Corrective": { "psi": ([0.99, 0.00], 0.01), "s": ([0.0, 1.0], 0.0) } }
                 ],
-                "event_table": [
+                "events": [
                     {
                         "time": 0,
                         "informs": [
-                            { "agent_idx": 0, "info_content_idx": 0, },
-                            { "agent_idx": 1, "info_content_idx": 0, },
+                            { "agent_idx": 0, "info_obj_idx": 0, },
+                            { "agent_idx": 1, "info_obj_idx": 0, },
                         ],
                     },
                     {
                         "time": 1,
                         "informs": [
-                            { "agent_idx": 2, "info_content_idx": 1, },
+                            { "agent_idx": 2, "info_obj_idx": 1, },
                         ]
                     },
                 ],
+                "observer": {
+                    "observer_pop_rate": 0.0,
+                    "observed_info": ([0.0, 1.0], 0.0)
+                }
             }
         );
-        let general = serde_json::from_value::<General>(g).unwrap();
-        let runtime = serde_json::from_value::<Runtime>(runtime).unwrap();
-        let agent_params = serde_json::from_value::<AgentParams<f32>>(agent_params).unwrap();
-        let scenario = serde_json::from_value::<Scenario<f32>>(scenario).unwrap();
+        let general = serde_json::from_value::<General>(g)?;
+        let runtime = serde_json::from_value::<Runtime>(runtime)?;
+        let agent_params = serde_json::from_value::<AgentParams<f32>>(agent_params)?;
+        let scenario = Scenario::try_from(serde_json::from_value::<ScenarioParam<f32>>(scenario)?)?;
         println!("{:?}", general);
         println!("{:?}", runtime);
         println!("{:?}", agent_params.initial_opinions);
         println!("{:?}", scenario.graph);
-        println!("{:?}", scenario.event_table);
-        println!("{:?}", scenario.info_contents);
+        println!("{:?}", scenario.info_objects);
+        println!("{:?}", scenario.table);
+        Ok(())
     }
 
     #[test]
-    fn test_toml_config() {
+    fn test_toml_config() -> anyhow::Result<()> {
         let general = toml::from_str::<General>(
             r#"
         [output]
         "#,
-        )
-        .unwrap();
+        )?;
         let runtime = toml::from_str::<Runtime>(
             r#"
             seed_state = 0
             num_parallel = 1
             iteration_count = 1
         "#,
-        )
-        .unwrap();
-        let agent_params = toml::from_str::<AgentParams<f32>>(r#"
+        )?;
+        let agent_params = toml::from_str::<AgentParams<f32>>(
+            r#"
             delay_selfish       = { Fixed = 0 }
             access_prob         = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
             friend_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
@@ -491,26 +423,55 @@ mod tests {
             ks   = [[0.0, 0.0], 1.0]
             ko   = [[0.0, 0.0], 1.0]
 
-            [initial_conditions.base.cond_thetad]
-            none = { Fixed = [[0.95, 0.00], 0.05] }
-            possible = { Fixed = [[0.45, 0.45], 0.10] }
-            rates = [[1.0, 1.0], [1.0, 1.0]]
-            avoid_u_rates = [1.0, 1.0, 1.0]
-
             [initial_conditions.base.cond_theta]
-            none = { Fixed = [[0.95, 0.00], 0.05] }
-            possible = { Fixed = [[0.45, 0.45], 0.10] }
-            rates = [[1.0, 1.0], [1.0, 1.0]]
+            b0 = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.45, 0.45], 0.10] },
+            ]
+            b1 = [
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+            ]
+
+            [initial_conditions.base.cond_thetad]
+            a0b0 = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.45, 0.45], 0.10] },
+            ]
+            a0b1 = [
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+            ]
+            a1 = [
+                [
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                ],
+                [
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                ],
+            ]
 
             [initial_conditions.friend.cond_ftheta]
-            none = { Fixed = [[0.95, 0.00], 0.05] }
-            possible = { Fixed = [[0.45, 0.45], 0.10] }
-            rates = [[1.0, 1.0], [1.0, 1.0]]
+            fb0 = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.45, 0.45], 0.10] },
+            ]
+            fb1 = [
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+            ]
 
             [initial_conditions.social.cond_ktheta]
-            none = { Fixed = [[0.95, 0.00], 0.05] }
-            possible = { Fixed = [[0.45, 0.45], 0.10] }
-            rates = [[1.0, 1.0], [1.0, 1.0]]
+            kb0 = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.45, 0.45], 0.10] },
+            ]
+            kb1 = [
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+            ]
 
             [initial_conditions.base]
             cond_o = [
@@ -583,44 +544,44 @@ mod tests {
             lambda = { base = 2.25 }
             gamma  = { base = 0.61 }
             delta  = { base = 0.69 }
-            "#).unwrap();
-        let scenario = toml::from_str::<Scenario<f32>>(
+            "#,
+        )?;
+        let scenario: Scenario<_> = toml::from_str::<ScenarioParam<f32>>(
             r#"
             graph = { directed = false, location = { LocalFile = "./test/graph/graph.txt" } }
-            info_contents = [
+            info_objects = [
                 { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
                 { Corrective = { psi = [[0.99, 0.00], 0.01], s = [[0.0, 1.0], 0.0] } }
             ]
-            [[event_table]]
+            [[events]]
             time = 0
             informs = [
-                { agent_idx = 0, info_content_idx = 0 },
-                { agent_idx = 1, info_content_idx = 0 },
+                { agent_idx = 0, info_obj_idx = 0 },
+                { agent_idx = 1, info_obj_idx = 0 },
             ]
-            [[event_table]]
+            [[events]]
             time = 1
-            informs = [{ agent_idx = 2, info_content_idx = 1 }]
+            informs = [{ agent_idx = 2, info_obj_idx = 1 }]
+
+            [observer]
+            observer_pop_rate = 0.01
+            observed_info = [[0.00, 0.99], 0.01]
             "#,
-        )
-        .unwrap();
+        )?
+        .try_into()?;
 
         println!("{:?}", general);
         println!("{:?}", runtime);
-        println!("{:?}", scenario.graph);
         println!("{:?}", agent_params.initial_opinions);
         println!("{:?}", agent_params.initial_conditions.base.cond_theta);
         println!(
             "{:?}",
             agent_params.initial_conditions.social.cond_ktheta_kphi
         );
-        println!(
-            "{:?}",
-            scenario
-                .info_contents
-                .into_iter()
-                .map(|i| i.label)
-                .collect::<Vec<_>>()
-        );
-        println!("{:?}", scenario.event_table);
+        println!("{:?}", scenario.graph);
+        println!("{:?}", scenario.info_objects);
+        println!("{:?}", scenario.table);
+
+        Ok(())
     }
 }

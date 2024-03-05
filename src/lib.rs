@@ -4,24 +4,24 @@ mod cpt;
 mod dist;
 mod info;
 mod opinion;
+mod scenario;
 mod stat;
 mod value;
 
 use std::{collections::BTreeMap, iter::Sum, path::Path, sync::mpsc, thread};
 
 use approx::UlpsEq;
-use config::{ConfigData, General, Runtime, Scenario};
 use graph_lib::prelude::Graph;
-use num_traits::{Float, FromPrimitive, NumAssign};
+use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use agent::{Agent, AgentParams};
-use info::{Info, InfoLabel};
-use stat::{FileWriters, InfoData, InfoStat, Stat};
-
-use crate::stat::{AgentStat, PopData, PopStat};
+use config::{ConfigData, General, Runtime};
+use info::{Info, InfoBuilder, InfoLabel};
+use scenario::{Scenario, ScenarioParam};
+use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
 
 pub struct Runner<P, V>
 where
@@ -43,7 +43,17 @@ where
 impl<P, V> Runner<P, V>
 where
     P: AsRef<Path>,
-    V: Float + NumAssign + UlpsEq + Default + Sum + std::fmt::Debug + SampleUniform + Send + Sync,
+    V: Float
+        + NumAssign
+        + UlpsEq
+        + FromPrimitive
+        + ToPrimitive
+        + Default
+        + Sum
+        + std::fmt::Debug
+        + SampleUniform
+        + Send
+        + Sync,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -61,10 +71,10 @@ where
         for<'de> V: serde::Deserialize<'de>,
     {
         Ok(Self {
-            general: ConfigData::try_new(general_path)?,
-            runtime: ConfigData::try_new(runtime_path)?,
-            agent_params: ConfigData::try_new(agent_params_path)?,
-            scenario: ConfigData::try_new(scenario_path)?,
+            general: ConfigData::try_new::<General>(general_path)?,
+            runtime: ConfigData::try_new::<Runtime>(runtime_path)?,
+            agent_params: ConfigData::try_new::<AgentParams<V>>(agent_params_path)?,
+            scenario: ConfigData::try_new::<ScenarioParam<V>>(scenario_path)?,
             identifier,
             overwriting,
         })
@@ -93,7 +103,7 @@ where
 
     pub fn run(&mut self) -> anyhow::Result<()>
     where
-        V: FromPrimitive + Sync,
+        V: FromPrimitive + ToPrimitive + Sync,
         <V as SampleUniform>::Sampler: Sync,
     {
         let (sender, receiver) = mpsc::channel::<Stat>();
@@ -112,9 +122,6 @@ where
             println!("finished writing.");
         });
 
-        let num_nodes = V::from_usize(self.scenario.data.graph.node_count()).unwrap();
-        let mean_degree = V::from_usize(self.scenario.data.graph.edge_count()).unwrap() / num_nodes;
-
         let mut rng = SmallRng::seed_from_u64(self.runtime.data.seed_state);
         let rngs = (0..(self.runtime.data.num_parallel))
             .map(|_| SmallRng::from_rng(&mut rng))
@@ -128,8 +135,6 @@ where
                     &self.agent_params.data,
                     &self.scenario.data,
                     &mut rng,
-                    num_nodes,
-                    mean_degree,
                     sender.clone(),
                 );
                 let num_par = num_par as u32;
@@ -161,8 +166,7 @@ where
     agent_params: &'a AgentParams<V>,
     scenario: &'a Scenario<V>,
     rng: &'a mut R,
-    num_nodes: V,
-    mean_degree: V,
+    info_builder: InfoBuilder<V>,
     agents: Vec<Agent<V>>,
     sender: mpsc::Sender<Stat>,
 }
@@ -170,7 +174,7 @@ where
 impl<'a, V, R> Environment<'a, V, R>
 where
     R: Rng,
-    V: Float + UlpsEq + SampleUniform + NumAssign,
+    V: Float + UlpsEq + SampleUniform + NumAssign + FromPrimitive + ToPrimitive,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -180,22 +184,19 @@ where
         agent_params: &'a AgentParams<V>,
         scenario: &'a Scenario<V>,
         rng: &'a mut R,
-        num_nodes: V,
-        mean_degree: V,
         sender: mpsc::Sender<Stat>,
     ) -> Self
     where
         V: Default + NumAssign,
     {
-        let agents = (0..scenario.graph.node_count())
+        let agents = (0..scenario.num_nodes)
             .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
             agent_params,
             scenario,
             rng,
-            num_nodes,
-            mean_degree,
+            info_builder: InfoBuilder::new(),
             agents,
             sender,
         }
@@ -214,7 +215,8 @@ where
         let mut infos = Vec::<Info<V>>::new();
         let mut receivers = Vec::new();
         let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
-        let mut event_table = self.scenario.event_table.0.clone();
+        let info_objects = &self.scenario.info_objects;
+        let mut event_table = self.scenario.table.clone();
         let mut agents_willing_selfish = Vec::<usize>::new();
         let mut senders = Vec::new();
 
@@ -229,9 +231,11 @@ where
             let mut pop_data = PopData::default();
 
             if let Some(informms) = event_table.remove(&t) {
-                for (agent_idx, info_content_idx) in informms {
+                for (agent_idx, info_object_idx) in informms {
                     let info_idx = infos.len();
-                    let info = Info::new(info_idx, &self.scenario.info_contents[info_content_idx]);
+                    let info = self
+                        .info_builder
+                        .build(info_idx, &info_objects[info_object_idx]);
                     info_data_map.entry(info.content.label).or_default();
 
                     log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
@@ -266,8 +270,9 @@ where
                 log::info!("Agent {agent_idx} (sharer) <- {info_label}");
 
                 let friend_receipt_prob = V::one()
-                    - (V::one() - V::from_usize(info.num_shared()).unwrap() / self.num_nodes)
-                        .powf(self.mean_degree);
+                    - (V::one()
+                        - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
+                        .powf(self.scenario.mean_degree);
                 log::info!("r^i_m = {friend_receipt_prob:?}");
 
                 if self.rng.gen::<V>() > agent.access_prob() {
@@ -304,10 +309,7 @@ where
                 }
             }
 
-            for (info_label, d) in &mut info_data_map {
-                info_stat.push(num_par, num_iter, t, d, info_label);
-                *d = InfoData::default();
-            }
+            // update selfish states of agents
             agents_willing_selfish.retain(|&agent_idx| {
                 let agent = &mut self.agents[agent_idx];
                 if agent.progress_selfish_status() {
@@ -317,6 +319,35 @@ where
                 }
                 agent.is_willing_selfish()
             });
+
+            // register observer agents
+            if let Some(observer) = &self.scenario.observer {
+                if pop_data.num_selfish > 0 {
+                    let observer_prob =
+                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
+                    log::info!("q = {observer_prob:?}");
+                    // E[k] = observer.k
+                    let k = observer.k.trunc().to_usize().unwrap()
+                        + if observer.k.fract() > self.rng.gen() {
+                            1
+                        } else {
+                            0
+                        };
+                    for agent_idx in rand::seq::index::sample(self.rng, self.scenario.num_nodes, k)
+                    {
+                        if observer_prob > self.rng.gen() {
+                            let informs = event_table.entry(t + 1).or_default();
+                            // senders of observed info have priority over existing senders.
+                            informs.push_front((agent_idx, observer.observed_info_obj_idx));
+                        }
+                    }
+                }
+            }
+
+            for (info_label, d) in &mut info_data_map {
+                info_stat.push(num_par, num_iter, t, d, info_label);
+                *d = InfoData::default();
+            }
             pop_stat.push(num_par, num_iter, t, pop_data);
             t += 1;
         }
@@ -333,7 +364,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn test_exec() {
+    fn test_exec() -> anyhow::Result<()> {
         let general_path = "./test/config/general.toml";
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
@@ -345,16 +376,16 @@ mod tests {
             scenario_path,
             "run_test".to_string(),
             true,
-        )
-        .unwrap();
-        runner.run().unwrap();
+        )?;
+        runner.run()?;
 
-        let mut reader = fs::File::open("./test/run_test_info_out.arrow").unwrap();
-        let metadata = read_file_metadata(&mut reader).unwrap();
+        let mut reader = fs::File::open("./test/run_test_info_out.arrow")?;
+        let metadata = read_file_metadata(&mut reader)?;
         let metadata = metadata.schema.metadata;
         assert_eq!(metadata["general"], general_path);
         assert_eq!(metadata["runtime"], runtime_path);
         assert_eq!(metadata["agent_params"], agent_params_path);
         assert_eq!(metadata["scenario"], scenario_path);
+        Ok(())
     }
 }

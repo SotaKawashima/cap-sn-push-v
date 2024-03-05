@@ -1,6 +1,6 @@
 graph = { directed = true, location = { LocalFile = "./test/graph/graph.txt" } }
 
-info_contents = [
+info_objects = [
     # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
     { Misinfo = { psi = [[0.00, 0.80], 0.20] } },
     { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 0.99 ], 0.01 ] } },
@@ -8,37 +8,14 @@ info_contents = [
     # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
 ]
 
-[[scenario.event_table]]
+[[events]]
 time = 0
-informs = [
-    { agent_idx = 0, info_content_idx = 0 },
-    # { agent_idx = 1, info_content_idx = 0 },
-]
+informs = [{ agent_idx = 0, info_obj_idx = 0 }]
 
-[[scenario.event_table]]
+[[events]]
 time = 1
-informs = [{ agent_idx = 6, info_content_idx = 1 }]
-# informs = [{ agent_idx = 6, info_content_idx = 2 }]
-[[event_table]]
-time = 0
-informs = [
-    { agent_idx = 0, info_content_idx = 0 },
-]
+informs = [{ agent_idx = 6, info_obj_idx = 1 }]
 
-[[event_table]]
-time = 1
-informs = [
-    { agent_idx = 1, info_content_idx = 1 },
-]
-
-# [[scenario.event_table]]
-# time = 4
-# informs = [
-#     { agent_idx = 31, info_content_idx = 1 },
-# ]
-
-# [[scenario.event_table]]
-# time = 3
-# informs = [
-#     { agent_idx = 43, info_content_idx = 2 },
-# ]
+[observer]
+observer_pop_rate = 0.08
+observed_info = [[0.0, 1.0], 0.0]

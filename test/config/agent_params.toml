@@ -67,15 +67,36 @@ cond_thetad_phi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.99, 0.0], 0.01] },
 ]
+
 [initial_conditions.base.cond_theta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.50, 0.40], 0.10] }
-rates = [[1.0, 0.5], [1.0, 0.1]]
+b0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.50, 0.40], 0.10] },
+]
+b1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+]
+
 [initial_conditions.base.cond_thetad]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.30, 0.60], 0.10] }
-rates = [[1.0, 0.5], [1.0, 0.1]]
-avoid_u_rates = [2.0, 0.5, 0.1]
+a0b0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.30, 0.60], 0.10] },
+]
+a0b1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+]
+a1 = [
+    [
+        { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+        { belief = { base = 1.0 }, uncertainty = { base = 2.0 } },
+    ],
+    [
+        { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+        { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+    ],
+]
 
 [initial_conditions.friend]
 cond_fpsi = [
@@ -96,10 +117,16 @@ cond_ftheta_fphi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.90, 0.0], 0.10] }
 ]
+
 [initial_conditions.friend.cond_ftheta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.45, 0.45], 0.10] }
-rates = [[1.0, 0.5], [1.0, 0.1]]
+fb0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.45, 0.45], 0.10] },
+]
+fb1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+]
 
 [initial_conditions.social]
 cond_kpsi = [
@@ -118,10 +145,16 @@ cond_ktheta_kphi = [
     { Fixed = [[0.00, 0.0], 1.00] },
     { Fixed = [[0.90, 0.0], 0.10] },
 ]
+
 [initial_conditions.social.cond_ktheta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.45, 0.45], 0.10] }
-rates = [[1.0, 0.5], [1.0, 0.1]]
+kb0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.45, 0.45], 0.10] },
+]
+kb1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+]
 
 [trust_params]
 misinfo    = { base = 0.7 }
