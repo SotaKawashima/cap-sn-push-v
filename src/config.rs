@@ -306,10 +306,12 @@ mod tests {
                 "observed": { "base": 0.0, "error": { "dist": "Standard", "low": 0.0, "high": 1.0 } },
                 "inhibitive": { "base": 0.0, "error": { "dist": "Standard", "low": 0.5, "high": 1.0 } },
             },
+            "loss_params": {
+                "x0": {"base": -1.0},
+                "x1_of_x0": {"base": -10.0},
+                "y_of_x0": {"base": -0.001},
+            },
             "cpt_params": {
-                "x0": {"base": -2.0},
-                "x1": {"base": -50.0},
-                "y":  {"base": -0.001},
                 "alpha":  { "base": 0.88 },
                 "beta":   { "base": 0.88 },
                 "lambda": { "base": 2.25 },
@@ -535,10 +537,12 @@ mod tests {
             observed   = { base = 0.0, error = { dist = "Standard" } }
             inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
+            [loss_params]
+            x0 = { base = -1.0 }
+            x1_of_x0 = { base = -10.0 }
+            y_of_x0  = { base = -0.01 }
+
             [cpt_params]
-            x0 = { base = -2.0 }
-            x1 = { base = -50.0 }
-            y  = { base = -0.001 }
             alpha  = { base = 0.88 }
             beta   = { base = 0.88 }
             lambda = { base = 2.25 }

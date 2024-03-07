@@ -162,10 +162,12 @@ corrective = { base = 0.95 } #, error = { dist = { Beta = { alpha = 4.5, beta = 
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
+[loss_params]
+x0 = { base = -1.0 }
+x1_of_x0 = { base = -8.0 }
+y_of_x0 = { base = -0.01 }
+
 [cpt_params]
-x0     = { base = -1.0 }
-x1     = { base = -8.0 }
-y      = { base = -0.01 }
 alpha  = { base = 0.88 }
 beta   = { base = 0.88 }
 lambda = { base = 2.25 }

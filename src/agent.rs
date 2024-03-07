@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    cpt::{CptParams, Prospect, CPT},
+    decision::{CptParams, LossParams, Prospect, CPT},
     dist::{IValue, IValueParam},
     info::{Info, TrustParams},
     opinion::{
@@ -45,6 +45,7 @@ where
     #[serde_as(as = "TryFromInto<IValueParam<V>>")]
     pub delay_selfish: IValue<V>,
     pub trust_params: TrustParams<V>,
+    pub loss_params: LossParams<V>,
     pub cpt_params: CptParams<V>,
 }
 
@@ -187,8 +188,8 @@ where
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
+        self.prospect.reset_with(&agent_params.loss_params, rng);
         self.cpt.reset_with(&agent_params.cpt_params, rng);
-        self.prospect.reset_with(&agent_params.cpt_params, rng);
 
         self.conds = ConditionalOpinions::from_init(&agent_params.initial_conditions, rng);
 
@@ -325,7 +326,7 @@ where
 mod tests {
     use crate::{
         agent::{ActionStatus, Agent, AgentParams},
-        cpt::CptParams,
+        decision::{CptParams, LossParams},
         dist::IValue,
         info::{InfoBuilder, InfoObject, TrustParams},
         opinion::{
@@ -612,14 +613,16 @@ mod tests {
                 inhibitive: EValue::fixed(0.13),
             },
             cpt_params: CptParams {
-                x0: EValue::fixed(1.0),
-                x1: EValue::fixed(1.1),
-                y: EValue::fixed(1.2),
                 alpha: EValue::fixed(1.3),
                 beta: EValue::fixed(1.4),
                 lambda: EValue::fixed(1.5),
                 gamma: EValue::fixed(1.6),
                 delta: EValue::fixed(1.7),
+            },
+            loss_params: LossParams {
+                x0: EValue::fixed(-1.0),
+                x1_of_x0: EValue::fixed(1.1),
+                y_of_x0: EValue::fixed(1.2),
             },
         };
 

@@ -1,6 +1,6 @@
 mod agent;
 pub mod config;
-mod cpt;
+mod decision;
 mod dist;
 mod info;
 mod opinion;

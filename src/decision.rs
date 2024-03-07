@@ -180,7 +180,7 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct CptParams<V>
+pub struct LossParams<V>
 where
     V: Float,
     Open01: Distribution<V>,
@@ -189,9 +189,20 @@ where
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
     pub x0: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub x1: EValue<V>,
+    pub x1_of_x0: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub y: EValue<V>,
+    pub y_of_x0: EValue<V>,
+}
+
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct CptParams<V>
+where
+    V: Float,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+{
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
     pub alpha: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
@@ -233,22 +244,22 @@ where
         self.sharing = sharing;
     }
 
-    pub fn reset_with(&mut self, params: &CptParams<V>, rng: &mut impl Rng)
+    pub fn reset_with(&mut self, loss_params: &LossParams<V>, rng: &mut impl Rng)
     where
         V: SampleUniform,
         Open01: Distribution<V>,
         Standard: Distribution<V>,
     {
-        let x0 = params.x0.sample(rng);
-        let x1 = params.x1.sample(rng);
-        let y = params.y.sample(rng);
+        let x0 = loss_params.x0.sample(rng);
+        let x1 = x0 * loss_params.x1_of_x0.sample(rng);
+        let y = x0 * loss_params.y_of_x0.sample(rng);
         self.reset(x0, x1, y);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::cpt::{LevelSet, CPT};
+    use crate::decision::{LevelSet, CPT};
     use approx::{assert_ulps_eq, relative_eq, ulps_eq};
     use std::ops::Deref;
     use subjective_logic::{

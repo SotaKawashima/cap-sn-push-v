@@ -71,14 +71,34 @@ cond_thetad_phi = [
 ]
 
 [initial_conditions.base.cond_theta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.50, 0.40], 0.10] }
-rates = [[1.0, 1.0], [1.0, 1.0]]
+b0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.50, 0.40], 0.10] },
+]
+b1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+]
+
 [initial_conditions.base.cond_thetad]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.50, 0.40], 0.10] }
-rates = [[1.0, 1.0], [1.0, 1.0]]
-avoid_u_rates = [2.0, 0.5, 0.1]
+a0b0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.50, 0.40], 0.10] },
+]
+a0b1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+]
+a1 = [
+    [
+        { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+        { belief = { base = 1.0 }, uncertainty = { base = 2.0 } },
+    ],
+    [
+        { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
+        { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
+    ],
+]
 
 [initial_conditions.friend]
 cond_fpsi = [
@@ -105,9 +125,14 @@ cond_ftheta_fphi = [
     { Dirichlet = {alpha = [27.0, 0.3, 2.7]} }, # sum_alpha = 30, exp = [0.9, 0.01, 0.09]
 ]
 [initial_conditions.friend.cond_ftheta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Fixed = [[0.20, 0.75], 0.05] }
-rates = [[2.5, 1.0], [0.75, 1.0]]
+fb0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.20, 0.75], 0.05] },
+]
+fb1 = [
+    { belief = { base = 0.5 }, uncertainty = { base = 1.0 } },
+    { belief = { base = 1.25 }, uncertainty = { base = 1.0 } },
+]
 
 [initial_conditions.social]
 cond_kpsi = [
@@ -133,9 +158,14 @@ cond_ktheta_kphi = [
     { Dirichlet = {alpha = [27.0, 0.3, 2.7]} }, # sum_alpha = 30, exp = [0.9, 0.01, 0.09]
 ]
 [initial_conditions.social.cond_ktheta]
-none = { Fixed = [[0.95, 0.00], 0.05] }
-possible = { Dirichlet = {alpha = [10.5, 10.5, 9.0]} }
-rates = [[1.0, 1.0], [0.952, 1.0]]
+kb0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Dirichlet = {alpha = [10.5, 10.5, 9.0]} },
+]
+kb1 = [
+    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+    { belief = { base = 1.05 }, uncertainty = { base = 1.0 } },
+]
 
 [trust_params]
 misinfo    = { base = 0.7 }
@@ -145,10 +175,12 @@ corrective = { base = 0.9 } #, error = { dist = { Beta = { alpha = 4.5, beta = 1
 observed   = { base = 0.0, error = { dist = { Beta = { alpha = 13.6, beta = 2.4 } } } }
 inhibitive = { base = 0.0, error = { dist = { Beta = { alpha =  7.0, beta = 3.0 } } } }
 
+[loss_params]
+x0 = { base = -2.0 }
+x1_of_x0 = { base = -8.0 }
+y_of_x0 = { base = -0.01 }
+
 [cpt_params]
-x0     = { base = -2.0 }
-x1     = { base = -8.0 }
-y      = { base = -0.01 }
 alpha  = { base = 0.88 }
 beta   = { base = 0.88 }
 lambda = { base = 2.25 }
