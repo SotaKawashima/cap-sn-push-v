@@ -71,14 +71,10 @@ cond_thetad_phi = [
 ]
 
 [initial_conditions.base.cond_theta]
-b0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Fixed = [[0.50, 0.40], 0.10] },
-]
-b1 = [
-    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-]
+b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+b1psi1 = { Fixed = [[0.50, 0.40], 0.10] }
+b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
+b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
 
 [initial_conditions.base.cond_thetad]
 a0b0 = [
@@ -125,14 +121,10 @@ cond_ftheta_fphi = [
     { Dirichlet = {alpha = [27.0, 0.3, 2.7]} }, # sum_alpha = 30, exp = [0.9, 0.01, 0.09]
 ]
 [initial_conditions.friend.cond_ftheta]
-fb0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Fixed = [[0.20, 0.75], 0.05] },
-]
-fb1 = [
-    { belief = { base = 0.5 }, uncertainty = { base = 1.0 } },
-    { belief = { base = 1.25 }, uncertainty = { base = 1.0 } },
-]
+fb0fpsi0 = { Fixed = [[0.95, 0.00], 0.05] }
+fb1fpsi1 = { Fixed = [[0.20, 0.75], 0.05] }
+fb1fpsi0 = { belief = { base = 0.5 }, uncertainty = { base = 1.0 } }
+fb0fpsi1 = { belief = { base = 1.25 }, uncertainty = { base = 1.0 } }
 
 [initial_conditions.social]
 cond_kpsi = [
@@ -158,14 +150,10 @@ cond_ktheta_kphi = [
     { Dirichlet = {alpha = [27.0, 0.3, 2.7]} }, # sum_alpha = 30, exp = [0.9, 0.01, 0.09]
 ]
 [initial_conditions.social.cond_ktheta]
-kb0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Dirichlet = {alpha = [10.5, 10.5, 9.0]} },
-]
-kb1 = [
-    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-    { belief = { base = 1.05 }, uncertainty = { base = 1.0 } },
-]
+kb0kpsi0 = { Fixed = [[0.95, 0.00], 0.05] }
+kb1kpsi1 = { Dirichlet = {alpha = [10.5, 10.5, 9.0]} }
+kb1kpsi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
+kb0kpsi1 = { belief = { base = 1.05 }, uncertainty = { base = 1.0 } }
 
 [trust_params]
 misinfo    = { base = 0.7 }

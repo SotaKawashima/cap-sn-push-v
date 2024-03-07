@@ -414,10 +414,14 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETA], V>>; PSI]")]
-    pub b0: [SimplexDist<V, THETA>; PSI],
-    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; PSI]")]
-    pub b1: [RelativeParam<EValue<V>>; PSI],
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; THETA], V>>")]
+    pub b0psi0: SimplexDist<V, THETA>,
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; THETA], V>>")]
+    pub b1psi1: SimplexDist<V, THETA>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub b0psi1: RelativeParam<EValue<V>>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub b1psi0: RelativeParam<EValue<V>>,
 }
 
 #[serde_as]
@@ -431,10 +435,14 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    #[serde_as(as = "[TryFromInto<SimplexParam<[V; F_THETA], V>>; F_PSI]")]
-    pub fb0: [SimplexDist<V, F_THETA>; F_PSI],
-    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; F_PSI]")]
-    pub fb1: [RelativeParam<EValue<V>>; F_PSI],
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; F_THETA], V>>")]
+    pub fb0fpsi0: SimplexDist<V, F_THETA>,
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; F_THETA], V>>")]
+    pub fb1fpsi1: SimplexDist<V, F_THETA>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub fb0fpsi1: RelativeParam<EValue<V>>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub fb1fpsi0: RelativeParam<EValue<V>>,
 }
 
 #[serde_as]
@@ -448,10 +456,14 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    #[serde_as(as = "[TryFromInto<SimplexParam<[V; K_THETA], V>>; K_PSI]")]
-    pub kb0: [SimplexDist<V, K_THETA>; K_PSI],
-    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; K_PSI]")]
-    pub kb1: [RelativeParam<EValue<V>>; K_PSI],
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; K_THETA], V>>")]
+    pub kb0kpsi0: SimplexDist<V, K_THETA>,
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; K_THETA], V>>")]
+    pub kb1kpsi1: SimplexDist<V, K_THETA>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub kb0kpsi1: RelativeParam<EValue<V>>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub kb1kpsi0: RelativeParam<EValue<V>>,
 }
 
 impl<V> Distribution<HigherArr2<Simplex<V, THETA>, B, PSI>> for CondThetaDist<V>
@@ -463,9 +475,11 @@ where
     Open01: Distribution<V>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, THETA>, B, PSI> {
-        let [b00, b01] = array::from_fn(|i| self.b0[i].sample(rng));
-        let [b10, b11] = array::from_fn(|i| self.b1[i].sample(rng).to_simplex(&b01));
-        harr2![[b00, b01], [b10, b11]]
+        let b0psi0 = self.b0psi0.sample(rng);
+        let b1psi1 = self.b1psi1.sample(rng);
+        let b0psi1 = self.b0psi1.sample(rng).to_simplex(&b1psi1);
+        let b1psi0 = self.b1psi0.sample(rng).to_simplex(&b1psi1);
+        harr2![[b0psi0, b0psi1], [b1psi0, b1psi1]]
     }
 }
 
@@ -478,9 +492,11 @@ where
     Open01: Distribution<V>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, F_THETA>, F_B, F_PSI> {
-        let [b00, b01] = array::from_fn(|i| self.fb0[i].sample(rng));
-        let [b10, b11] = array::from_fn(|i| self.fb1[i].sample(rng).to_simplex(&b01));
-        harr2![[b00, b01], [b10, b11]]
+        let fb0fpsi0 = self.fb0fpsi0.sample(rng);
+        let fb1fpsi1 = self.fb1fpsi1.sample(rng);
+        let fb0fpsi1 = self.fb0fpsi1.sample(rng).to_simplex(&fb1fpsi1);
+        let fb1fpsi0 = self.fb1fpsi0.sample(rng).to_simplex(&fb1fpsi1);
+        harr2![[fb0fpsi0, fb0fpsi1], [fb1fpsi0, fb1fpsi1]]
     }
 }
 
@@ -493,9 +509,11 @@ where
     Open01: Distribution<V>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr2<Simplex<V, K_THETA>, K_B, K_PSI> {
-        let [b00, b01] = array::from_fn(|i| self.kb0[i].sample(rng));
-        let [b10, b11] = array::from_fn(|i| self.kb1[i].sample(rng).to_simplex(&b01));
-        harr2![[b00, b01], [b10, b11]]
+        let kb0kpsi0 = self.kb0kpsi0.sample(rng);
+        let kb1kpsi1 = self.kb1kpsi1.sample(rng);
+        let kb0kpsi1 = self.kb0kpsi1.sample(rng).to_simplex(&kb1kpsi1);
+        let kb1kpsi0 = self.kb1kpsi0.sample(rng).to_simplex(&kb1kpsi1);
+        harr2![[kb0kpsi0, kb0kpsi1], [kb1kpsi0, kb1kpsi1]]
     }
 }
 
@@ -1310,30 +1328,26 @@ mod tests {
     fn test_cond_theta() {
         let rng = &mut thread_rng();
         let cond_dist = CondThetaDist {
-            b0: [
-                SimplexParam::Fixed([0.95, 0.00], 0.05).try_into().unwrap(),
-                SimplexParam::Dirichlet {
-                    alpha: vec![10.5, 10.5, 9.0],
-                    zeros: None,
-                }
-                .try_into()
-                .unwrap(),
-            ],
-            b1: [
-                RelativeParam {
-                    belief: EValue::fixed(1.2),
-                    uncertainty: EValue::fixed(1.0),
-                },
-                RelativeParam {
-                    belief: EValue::fixed(1.5),
-                    uncertainty: EValue::fixed(1.0),
-                },
-            ],
+            b0psi0: SimplexParam::Fixed([0.95, 0.00], 0.05).try_into().unwrap(),
+            b1psi1: SimplexParam::Dirichlet {
+                alpha: vec![10.5, 10.5, 9.0],
+                zeros: None,
+            }
+            .try_into()
+            .unwrap(),
+            b0psi1: RelativeParam {
+                belief: EValue::fixed(1.2),
+                uncertainty: EValue::fixed(1.0),
+            },
+            b1psi0: RelativeParam {
+                belief: EValue::fixed(1.5),
+                uncertainty: EValue::fixed(1.0),
+            },
         };
         for cond in cond_dist.sample_iter(rng).take(10) {
-            let pw = &cond[[0, 1]];
-            let pw1 = &cond[[1, 0]];
-            let pw2 = &cond[[1, 1]];
+            let pw = &cond[[1, 1]];
+            let pw1 = &cond[[0, 1]];
+            let pw2 = &cond[[1, 0]];
             let k = pw.b()[1] / (1.0 - *pw.u());
             assert!(1.2 > 1.0 / k || ulps_eq!(k * 1.2, pw1.b()[1] / (1.0 - *pw1.u())));
             assert!(1.5 > 1.0 / k || ulps_eq!(k * 1.5, pw2.b()[1] / (1.0 - *pw2.u())));

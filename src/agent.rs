@@ -422,20 +422,16 @@ mod tests {
                     ],
                     // B,\Psi => \Theta
                     cond_theta: CondThetaDist {
-                        b0: [
-                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        ],
-                        b1: [
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                        ],
+                        b0psi0: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        b1psi1: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        b0psi1: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                        b1psi0: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
                     },
                     // \Phi => \Theta
                     cond_theta_phi: [
@@ -510,20 +506,16 @@ mod tests {
                     ],
                     // FB,F\Psi => F\Theta
                     cond_ftheta: CondFThetaDist {
-                        fb0: [
-                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        ],
-                        fb1: [
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                        ],
+                        fb0fpsi0: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        fb1fpsi1: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        fb0fpsi1: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                        fb1fpsi0: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
                     },
                     // F\Phi => F\Theta
                     cond_ftheta_fphi: [
@@ -549,20 +541,16 @@ mod tests {
                     ],
                     // KB,K\Psi => K\Theta
                     cond_ktheta: CondKThetaDist {
-                        kb0: [
-                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        ],
-                        kb1: [
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                        ],
+                        kb0kpsi0: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        kb1kpsi1: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        kb0kpsi1: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                        kb1kpsi0: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
                     },
                     // K\Phi => K\Theta
                     cond_ktheta_kphi: [

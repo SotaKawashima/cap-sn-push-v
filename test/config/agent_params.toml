@@ -69,14 +69,10 @@ cond_thetad_phi = [
 ]
 
 [initial_conditions.base.cond_theta]
-b0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Fixed = [[0.50, 0.40], 0.10] },
-]
-b1 = [
-    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
-    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
-]
+b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+b1psi1 = { Fixed = [[0.50, 0.40], 0.10] }
+b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 0.5 } }
+b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 0.1 } }
 
 [initial_conditions.base.cond_thetad]
 a0b0 = [
@@ -119,14 +115,10 @@ cond_ftheta_fphi = [
 ]
 
 [initial_conditions.friend.cond_ftheta]
-fb0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Fixed = [[0.45, 0.45], 0.10] },
-]
-fb1 = [
-    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
-    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
-]
+fb0fpsi0 = { Fixed = [[0.95, 0.00], 0.05] }
+fb1fpsi1 = { Fixed = [[0.45, 0.45], 0.10] }
+fb1fpsi0 = { belief = { base = 1.0 }, uncertainty = { base = 0.5 } }
+fb0fpsi1 = { belief = { base = 1.0 }, uncertainty = { base = 0.1 } }
 
 [initial_conditions.social]
 cond_kpsi = [
@@ -147,14 +139,10 @@ cond_ktheta_kphi = [
 ]
 
 [initial_conditions.social.cond_ktheta]
-kb0 = [
-    { Fixed = [[0.95, 0.00], 0.05] },
-    { Fixed = [[0.45, 0.45], 0.10] },
-]
-kb1 = [
-    { belief = { base = 1.0 }, uncertainty = { base = 0.5 } },
-    { belief = { base = 1.0 }, uncertainty = { base = 0.1 } },
-]
+kb0kpsi0 = { Fixed = [[0.95, 0.00], 0.05] }
+kb1kpsi1 = { Fixed = [[0.45, 0.45], 0.10] }
+kb1kpsi0 = { belief = { base = 1.0 }, uncertainty = { base = 0.5 } }
+kb0kpsi1 = { belief = { base = 1.0 }, uncertainty = { base = 0.1 } }
 
 [trust_params]
 misinfo    = { base = 0.7 }
