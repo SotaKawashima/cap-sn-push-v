@@ -101,7 +101,7 @@ where
         ])
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()>
+    pub fn run(self) -> anyhow::Result<()>
     where
         V: FromPrimitive + ToPrimitive + Sync,
         <V as SampleUniform>::Sampler: Sync,
@@ -369,7 +369,7 @@ mod tests {
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
         let scenario_path = "./test/config/scenario.toml";
-        let mut runner = Runner::<_, f32>::try_new(
+        let runner = Runner::<_, f32>::try_new(
             general_path,
             runtime_path,
             agent_params_path,

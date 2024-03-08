@@ -445,20 +445,16 @@ mod tests {
                     ],
                     // B,\Psi,A => \Theta'
                     cond_thetad: CondThetadDist {
-                        a0b0: [
-                            SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                            SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        ],
-                        a0b1: [
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                            RelativeParam {
-                                belief: EValue::fixed(1.0),
-                                uncertainty: EValue::fixed(1.0),
-                            },
-                        ],
+                        a0b0psi0: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
+                        a0b1psi1: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
+                        a0b0psi1: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                        a0b1psi0: RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
                         a1: harr2![
                             [
                                 RelativeParam {

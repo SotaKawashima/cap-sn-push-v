@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = Cli::parse();
-    let mut executor = Runner::<PathBuf, f32>::try_new(
+    let executor = Runner::<PathBuf, f32>::try_new(
         args.general,
         args.runtime,
         args.agent_params,

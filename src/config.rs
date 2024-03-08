@@ -208,14 +208,10 @@ mod tests {
                         { "Fixed" : [[0.00, 0.95], 0.05] },
                     ],
                     "cond_thetad" : {
-                        "a0b0": [
-                            { "Fixed" : [[0.95, 0.00], 0.05] },
-                            { "Fixed" : [[0.45, 0.45], 0.10] },
-                        ],
-                        "a0b1": [
-                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
-                            { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
-                        ],
+                        "a0b0psi0": { "Fixed" : [[0.95, 0.00], 0.05] },
+                        "a0b1psi1": { "Fixed" : [[0.45, 0.45], 0.10] },
+                        "a0b0psi1": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        "a0b1psi0": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
                         "a1": [
                             [
                                 { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
@@ -420,14 +416,10 @@ mod tests {
             b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
 
             [initial_conditions.base.cond_thetad]
-            a0b0 = [
-                { Fixed = [[0.95, 0.00], 0.05] },
-                { Fixed = [[0.45, 0.45], 0.10] },
-            ]
-            a0b1 = [
-                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-            ]
+            a0b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+            a0b1psi1 = { Fixed = [[0.45, 0.45], 0.10] }
+            a0b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
+            a0b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
             a1 = [
                 [
                     { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },

@@ -528,15 +528,14 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    // pub none: SimplexDist<V, N>,
-    // pub possible: SimplexDist<V, N>,
-    // pub avoid_u_rates: [V; 3],
-    /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-    // pub rates: [(V, V); 2],
-    #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETAD], V>>; PSI]")]
-    pub a0b0: [SimplexDist<V, THETAD>; PSI],
-    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; PSI]")]
-    pub a0b1: [RelativeParam<EValue<V>>; PSI],
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; THETAD], V>>")]
+    pub a0b0psi0: SimplexDist<V, THETAD>,
+    #[serde_as(as = "TryFromInto<SimplexParam<[V; THETAD], V>>")]
+    pub a0b1psi1: SimplexDist<V, THETAD>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub a0b0psi1: RelativeParam<EValue<V>>,
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub a0b1psi0: RelativeParam<EValue<V>>,
     #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
     pub a1: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
 }
@@ -550,19 +549,21 @@ where
     Open01: Distribution<V>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HigherArr3<Simplex<V, THETAD>, B, PSI, A> {
-        let [a0b00, a0b01] = array::from_fn(|i| self.a0b0[i].sample(rng));
-        let [a0b10, a0b11] = array::from_fn(|i| self.a0b1[i].sample(rng).to_simplex(&a0b01));
+        let a0b0psi0 = self.a0b0psi0.sample(rng);
+        let a0b1psi1 = self.a0b1psi1.sample(rng);
+        let a0b0psi1 = self.a0b0psi1.sample(rng).to_simplex(&a0b1psi1);
+        let a0b1psi0 = self.a0b1psi0.sample(rng).to_simplex(&a0b1psi1);
         // a -> b -> psi
         harr3![
-            [[a0b00.clone(), a0b01.clone()], [a0b10, a0b11]],
+            [[a0b0psi0.clone(), a0b0psi1], [a0b1psi0, a0b1psi1]],
             [
                 [
-                    self.a1[[0, 0]].sample(rng).to_simplex(&a0b00),
-                    self.a1[[0, 1]].sample(rng).to_simplex(&a0b00),
+                    self.a1[[0, 0]].sample(rng).to_simplex(&a0b0psi0),
+                    self.a1[[0, 1]].sample(rng).to_simplex(&a0b0psi0),
                 ],
                 [
-                    self.a1[[1, 0]].sample(rng).to_simplex(&a0b00),
-                    self.a1[[1, 1]].sample(rng).to_simplex(&a0b00),
+                    self.a1[[1, 0]].sample(rng).to_simplex(&a0b0psi0),
+                    self.a1[[1, 1]].sample(rng).to_simplex(&a0b0psi0),
                 ]
             ]
         ]
@@ -1178,8 +1179,6 @@ impl<V: Float> SocialConditionalOpinions<V> {
 
 #[cfg(test)]
 mod tests {
-    use std::array;
-
     use approx::ulps_eq;
     use rand::thread_rng;
     use rand_distr::Distribution;
@@ -1357,16 +1356,6 @@ mod tests {
     #[test]
     fn test_cond_thetad() {
         let rng = &mut thread_rng();
-        let a0b1 = [
-            RelativeParam {
-                belief: EValue::fixed(1.2f32),
-                uncertainty: EValue::fixed(0.98),
-            },
-            RelativeParam {
-                belief: EValue::fixed(1.5),
-                uncertainty: EValue::fixed(1.01),
-            },
-        ];
         let a1 = harr2![
             [
                 RelativeParam {
@@ -1389,43 +1378,52 @@ mod tests {
                 },
             ]
         ];
-        let a0b1_: [RelativeParam<_>; 2] = array::from_fn(|i| a0b1[i].sample(rng));
         let a1_: HigherArr2<RelativeParam<_>, 2, 2> = HigherArr2::from_fn(|i| a1[i].sample(rng));
 
         let cond_dist = CondThetadDist {
-            a0b0: [
-                SimplexParam::Dirichlet {
-                    alpha: vec![27.0, 3.0],
-                    zeros: Some(vec![1]),
-                }
-                .try_into()
-                .unwrap(),
-                SimplexParam::Dirichlet {
-                    alpha: vec![10.5, 10.5, 9.0],
-                    zeros: None,
-                }
-                .try_into()
-                .unwrap(),
-            ],
-            a0b1,
+            a0b0psi0: SimplexParam::Dirichlet {
+                alpha: vec![27.0, 3.0],
+                zeros: Some(vec![1]),
+            }
+            .try_into()
+            .unwrap(),
+            a0b1psi1: SimplexParam::Dirichlet {
+                alpha: vec![10.5, 10.5, 9.0],
+                zeros: None,
+            }
+            .try_into()
+            .unwrap(),
+            a0b0psi1: RelativeParam {
+                belief: EValue::fixed(1.5),
+                uncertainty: EValue::fixed(1.01),
+            },
+            a0b1psi0: RelativeParam {
+                belief: EValue::fixed(1.2f32),
+                uncertainty: EValue::fixed(0.98),
+            },
             a1,
         };
-        for cond in cond_dist.sample_iter(rng).take(10) {
-            let a0b0 = [&cond[[0, 0, 0]], &cond[[0, 0, 1]]];
-            let a0b1 = [&cond[[0, 1, 0]], &cond[[0, 1, 1]]];
+        let rs = [
+            cond_dist.a0b0psi1.sample(rng),
+            cond_dist.a0b1psi0.sample(rng),
+        ];
+        for cond in (&cond_dist).sample_iter(rng).take(10) {
+            let a0b0psi0 = &cond[[0, 0, 0]];
+            let a0b1psi1 = &cond[[0, 1, 1]];
+            let a0ws = [&cond[[0, 0, 1]], &cond[[0, 1, 0]]];
             let a1 = [
                 &cond[[1, 0, 0]],
                 &cond[[1, 0, 1]],
                 &cond[[1, 1, 0]],
                 &cond[[1, 1, 1]],
             ];
-            let pu = *a0b0[1].u();
-            let k = a0b0[1].b()[1] / (1.0 - pu);
-            let nu = *a0b0[0].u();
+            let pu = *a0b1psi1.u();
+            let k = a0b1psi1.b()[1] / (1.0 - pu);
+            let nu = *a0b0psi0.u();
 
-            assert_eq!(a0b0[0].b()[1], 0.0);
-            assert!(*a0b0[0].u() > 0.0);
-            for (rp, pw) in a0b1_.iter().zip(a0b1) {
+            assert_eq!(a0b0psi0.b()[1], 0.0);
+            assert!(*a0b0psi0.u() > 0.0);
+            for (rp, pw) in rs.iter().zip(a0ws) {
                 assert!(
                     rp.belief > 1.0 / k || ulps_eq!(k * rp.belief, pw.b()[1] / (1.0 - *pw.u()))
                 );
