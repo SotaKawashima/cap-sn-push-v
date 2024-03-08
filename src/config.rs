@@ -185,13 +185,17 @@ mod tests {
             },
             "initial_conditions": {
                 "base": {
-                    "cond_o" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
+                    "cond_a" : [
+                        { "Fixed" : [[0.95, 0.00], 0.05] },
+                        { "Fixed" : [[0.00, 0.95], 0.05] },
                     ],
                     "cond_b" : [
                         { "Fixed" : [[0.90, 0.00], 0.10] },
                         { "Fixed" : [[0.00, 0.99], 0.01] },
+                    ],
+                    "cond_o" : [
+                        { "Fixed" : [[1.0, 0.00], 0.00] },
+                        { "Fixed" : [[0.0, 0.70], 0.30] },
                     ],
                     "cond_theta" : {
                         "b0psi0": { "Fixed" : [[0.95, 0.00], 0.05] },
@@ -199,20 +203,8 @@ mod tests {
                         "b0psi1": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
                         "b1psi0": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
                     },
-                    "cond_theta_phi" : [
-                        { "Fixed" : [[0.00, 0.0], 1.00] },
-                        { "Fixed" : [[0.99, 0.0], 0.01] }
-                    ],
-                    "cond_a" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.00, 0.95], 0.05] },
-                    ],
                     "cond_thetad" : {
-                        "a0b0psi0": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "a0b1psi1": { "Fixed" : [[0.45, 0.45], 0.10] },
-                        "a0b0psi1": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
-                        "a0b1psi0": { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
-                        "a1": [
+                        "a0": [
                             [
                                 { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
                                 { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
@@ -223,9 +215,13 @@ mod tests {
                             ],
                         ]
                     },
-                    "cond_thetad_phi" : [
+                    "cond_theta_phi" : [
                         { "Fixed" : [[0.00, 0.0], 1.00] },
-                        { "Fixed" : [[0.99, 0.0], 0.01] },
+                        { "Fixed" : [[0.99, 0.0], 0.01] }
+                    ],
+                    "cond_thetad_phi" : [
+                        { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
+                        { "belief": { "base" : 1.0 }, "uncertainty": { "base" : 1.0 } },
                     ],
                 },
                 "friend": {
@@ -409,28 +405,6 @@ mod tests {
             ks   = [[0.0, 0.0], 1.0]
             ko   = [[0.0, 0.0], 1.0]
 
-            [initial_conditions.base.cond_theta]
-            b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
-            b1psi1 = { Fixed = [[0.45, 0.45], 0.10] }
-            b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
-            b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
-
-            [initial_conditions.base.cond_thetad]
-            a0b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
-            a0b1psi1 = { Fixed = [[0.45, 0.45], 0.10] }
-            a0b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
-            a0b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
-            a1 = [
-                [
-                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-                ],
-                [
-                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
-                ],
-            ]
-
             [initial_conditions.friend.cond_ftheta]
             fb0fpsi0 = { Fixed = [[0.95, 0.00], 0.05] }
             fb1fpsi1 = { Fixed = [[0.45, 0.45], 0.10] }
@@ -444,26 +418,43 @@ mod tests {
             kb1kpsi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
 
             [initial_conditions.base]
-            cond_o = [
-                { Fixed = [[1.0, 0.00], 0.00] },
-                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            cond_a = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Fixed = [[0.00, 0.95], 0.05] },
             ]
             cond_b = [
                 { Fixed = [[0.90, 0.00], 0.10] },
                 { Fixed = [[0.00, 0.99], 0.01] },
             ]
+            cond_o = [
+                { Fixed = [[1.0, 0.00], 0.00] },
+                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            ]
             cond_theta_phi= [
                 { Fixed = [[0.00, 0.0], 1.00] },
                 { Fixed = [[0.99, 0.0], 0.01] }
             ]
-            cond_a = [
-                { Fixed = [[0.95, 0.00], 0.05] },
-                { Fixed = [[0.00, 0.95], 0.05] },
-            ]
             cond_thetad_phi = [
-                { Fixed = [[0.00, 0.0], 1.00] },
-                { Fixed = [[0.99, 0.0], 0.01] },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
             ]
+            [initial_conditions.base.cond_theta]
+            b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+            b1psi1 = { Fixed = [[0.45, 0.45], 0.10] }
+            b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
+            b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0 } }
+            [initial_conditions.base.cond_thetad]
+            a0 = [
+                [
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                ],
+                [
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                    { belief = { base = 1.0 }, uncertainty = { base = 1.0 } },
+                ]
+            ]
+
             [initial_conditions.friend]
             cond_fpsi = [
                 { Fixed = [[0.99, 0.00], 0.01] },

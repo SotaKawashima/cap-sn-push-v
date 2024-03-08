@@ -433,29 +433,9 @@ mod tests {
                             uncertainty: EValue::fixed(1.0),
                         },
                     },
-                    // \Phi => \Theta
-                    cond_theta_phi: [
-                        SimplexDist::Fixed(Simplex::new([0.7, 0.3], 0.0)),
-                        SimplexDist::Fixed(Simplex::new([0.3, 0.7], 0.0)),
-                    ],
-                    // F\Theta => A
-                    cond_a: [
-                        SimplexDist::Fixed(Simplex::new([0.6, 0.4], 0.0)),
-                        SimplexDist::Fixed(Simplex::new([0.4, 0.6], 0.0)),
-                    ],
                     // B,\Psi,A => \Theta'
                     cond_thetad: CondThetadDist {
-                        a0b0psi0: SimplexDist::Fixed(Simplex::new([0.95, 0.00], 0.05)),
-                        a0b1psi1: SimplexDist::Fixed(Simplex::new([0.50, 0.40], 0.10)),
-                        a0b0psi1: RelativeParam {
-                            belief: EValue::fixed(1.0),
-                            uncertainty: EValue::fixed(1.0),
-                        },
-                        a0b1psi0: RelativeParam {
-                            belief: EValue::fixed(1.0),
-                            uncertainty: EValue::fixed(1.0),
-                        },
-                        a1: harr2![
+                        a0: harr2![
                             [
                                 RelativeParam {
                                     belief: EValue::fixed(1.0),
@@ -478,10 +458,26 @@ mod tests {
                             ]
                         ],
                     },
+                    // \Phi => \Theta
+                    cond_theta_phi: [
+                        SimplexDist::Fixed(Simplex::new([0.7, 0.3], 0.0)),
+                        SimplexDist::Fixed(Simplex::new([0.3, 0.7], 0.0)),
+                    ],
                     // \Phi => \Theta'
                     cond_thetad_phi: [
-                        SimplexDist::Fixed(Simplex::new([0.4, 0.6], 0.0)),
+                        RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                        RelativeParam {
+                            belief: EValue::fixed(1.0),
+                            uncertainty: EValue::fixed(1.0),
+                        },
+                    ],
+                    // F\Theta => A
+                    cond_a: [
                         SimplexDist::Fixed(Simplex::new([0.6, 0.4], 0.0)),
+                        SimplexDist::Fixed(Simplex::new([0.4, 0.6], 0.0)),
                     ],
                 },
                 friend: InitialFriendConditions {
