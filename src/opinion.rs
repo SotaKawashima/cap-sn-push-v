@@ -11,11 +11,11 @@ use serde_with::{serde_as, TryFromInto};
 use std::{array, iter::Sum, ops::AddAssign};
 use subjective_logic::{
     errors::InvalidValueError,
-    harr2, harr3,
+    harr2,
     mul::{
         op::{Abduction, Deduction, Fuse, FuseAssign, FuseOp},
         prod::{HigherArr2, HigherArr3, Product2, Product3},
-        Discount, Opinion, Opinion1d, Projection, Simplex,
+        Discount, IndexedContainer, Opinion, Opinion1d, Projection, Simplex,
     },
 };
 
@@ -280,14 +280,12 @@ where
     pub cond_o: [SimplexDist<V, O>; B],
     /// $B,\Psi \Rightarrow \Theta$
     pub cond_theta: CondThetaDist<V>,
-    /// $B,\Psi,A \Rightarrow \Theta'$
-    pub cond_thetad: CondThetadDist<V>,
+    /// relative paramter of $B,\Psi,A \Rightarrow \Theta'$ and $\Phi \Rightarrow \Theta'$
+    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
+    pub rel_cond_thetad: RelativeParam<EValue<V>>,
     /// $\Phi \Rightarrow \Theta$
     #[serde_as(as = "[TryFromInto<SimplexParam<[V; THETA], V>>; PHI]")]
     pub cond_theta_phi: [SimplexDist<V, THETA>; PHI],
-    /// $\Phi \Rightarrow \Theta'$
-    #[serde_as(as = "[TryFromInto<RelativeParam<EValueParam<V>>>; PHI]")]
-    pub cond_thetad_phi: [RelativeParam<EValue<V>>; PHI],
 }
 
 #[serde_as]
@@ -515,59 +513,59 @@ where
     }
 }
 
-#[serde_as]
-#[derive(Debug, serde::Deserialize)]
-#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct CondThetadDist<V>
-where
-    V: Float + UlpsEq + AddAssign,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
-    pub a0: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
-    // #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
-    // pub a1: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
-}
+// #[serde_as]
+// #[derive(Debug, serde::Deserialize)]
+// #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+// pub struct CondThetadDist<V>
+// where
+//     V: Float + UlpsEq + AddAssign,
+//     Standard: Distribution<V>,
+//     StandardNormal: Distribution<V>,
+//     Exp1: Distribution<V>,
+//     Open01: Distribution<V>,
+// {
+//     // #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
+//     // pub a0: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
+//     // #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
+//     // pub a1: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
+// }
 
-impl<V> CondThetadDist<V>
-where
-    V: Float + AddAssign + UlpsEq,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(
-        &self,
-        rng: &mut R,
-        cond: &HigherArr2<Simplex<V, THETA>, B, PSI>,
-    ) -> HigherArr3<Simplex<V, THETAD>, B, PSI, A> {
-        // a -> b -> psi
-        let a000 = self.a0[[0, 0]]
-            .sample(rng)
-            .to_simplex(&cond[[0, 0]])
-            .unwrap();
-        let a001 = self.a0[[0, 1]]
-            .sample(rng)
-            .to_simplex(&cond[[0, 1]])
-            .unwrap();
-        let a010 = self.a0[[1, 0]]
-            .sample(rng)
-            .to_simplex(&cond[[1, 0]])
-            .unwrap();
-        let a011 = self.a0[[1, 1]]
-            .sample(rng)
-            .to_simplex(&cond[[1, 1]])
-            .unwrap();
-        harr3![
-            [[a000.clone(), a001], [a010, a011]],
-            [[a000.clone(), a000.clone()], [a000.clone(), a000]]
-        ]
-    }
-}
+// impl<V> CondThetadDist<V>
+// where
+//     V: Float + AddAssign + UlpsEq,
+//     Standard: Distribution<V>,
+//     StandardNormal: Distribution<V>,
+//     Exp1: Distribution<V>,
+//     Open01: Distribution<V>,
+// {
+//     fn sample<R: Rng + ?Sized>(
+//         &self,
+//         rng: &mut R,
+//         cond: &HigherArr2<Simplex<V, THETA>, B, PSI>,
+//     ) -> HigherArr3<Simplex<V, THETAD>, B, PSI, A> {
+//         // a -> b -> psi
+//         let a000 = self.a0[[0, 0]]
+//             .sample(rng)
+//             .to_simplex(&cond[[0, 0]])
+//             .unwrap();
+//         let a001 = self.a0[[0, 1]]
+//             .sample(rng)
+//             .to_simplex(&cond[[0, 1]])
+//             .unwrap();
+//         let a010 = self.a0[[1, 0]]
+//             .sample(rng)
+//             .to_simplex(&cond[[1, 0]])
+//             .unwrap();
+//         let a011 = self.a0[[1, 1]]
+//             .sample(rng)
+//             .to_simplex(&cond[[1, 1]])
+//             .unwrap();
+//         harr3![
+//             [[a000.clone(), a001], [a010, a011]],
+//             [[a000.clone(), a000.clone()], [a000.clone(), a000]]
+//         ]
+//     }
+// }
 
 #[derive(Debug, Default)]
 pub struct ConditionalOpinions<V: Float> {
@@ -1127,14 +1125,14 @@ impl<V: Float> BaseConditionalOpinions<V> {
         Open01: Distribution<V>,
     {
         let cond_theta = init.cond_theta.sample(rng);
-        let cond_thetad = init.cond_thetad.sample(rng, &cond_theta);
-        let cond_theta_phi = array::from_fn(|i| init.cond_theta_phi[i].sample(rng));
-        let cond_thetad_phi = array::from_fn(|i| {
-            init.cond_thetad_phi[i]
-                .sample(rng)
-                .to_simplex(&cond_theta_phi[i])
-                .unwrap()
+        let r = init.rel_cond_thetad.sample(rng);
+        let cond_thetad = HigherArr3::from_fn(|i| match i {
+            [0, i, j] => r.to_simplex(&cond_theta[[i, j]]).unwrap(),
+            _ => r.to_simplex(&cond_theta[[0, 0]]).unwrap(),
         });
+        // init.cond_thetad.sample(rng, &cond_theta);
+        let cond_theta_phi = array::from_fn(|i| init.cond_theta_phi[i].sample(rng));
+        let cond_thetad_phi = array::from_fn(|i| r.to_simplex(&cond_theta_phi[i]).unwrap());
         Self {
             cond_o: array::from_fn(|i| init.cond_o[i].sample(rng)),
             cond_b: array::from_fn(|i| init.cond_b[i].sample(rng)),
@@ -1190,11 +1188,12 @@ mod tests {
     use approx::ulps_eq;
     use rand::thread_rng;
     use rand_distr::Distribution;
-    use subjective_logic::{harr2, mul::Simplex};
+    use subjective_logic::mul::{prod::HigherArr3, IndexedContainer, Simplex};
 
-    use crate::value::EValue;
-
-    use super::{CondThetaDist, CondThetadDist, RelativeParam, SimplexDist, SimplexParam};
+    use super::{
+        BaseConditionalOpinions, CondThetaDist, InitialBaseConditions, RelativeParam, SimplexDist,
+        SimplexParam, A, B, PSI, THETAD,
+    };
 
     #[test]
     fn test_simplex_dist_conversion() {
@@ -1346,91 +1345,98 @@ mod tests {
     }
 
     #[test]
-    fn test_cond_theta() {
+    fn test_cond_theta() -> anyhow::Result<()> {
         let mut rng = thread_rng();
-        let cond_dist = CondThetaDist {
-            b0psi0: SimplexParam::Fixed([0.95, 0.00], 0.05).try_into().unwrap(),
-            b1psi1: SimplexParam::Dirichlet {
-                alpha: vec![10.5, 10.5, 9.0],
-                zeros: None,
-            }
-            .try_into()
-            .unwrap(),
-            b0psi1: RelativeParam {
-                belief: EValue::fixed(1.2),
-                uncertainty: EValue::fixed(1.0),
-            },
-            b1psi0: RelativeParam {
-                belief: EValue::fixed(1.5),
-                uncertainty: EValue::fixed(1.0),
-            },
-        };
+        let cond_dist = toml::from_str::<CondThetaDist<f32>>(
+            r#"
+            b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+            b1psi1 = { Dirichlet = { alpha = [10.5, 10.5, 9.0]} }
+            b0psi1 = { belief = { base = 1.2 }, uncertainty = { base = 1.0 } }
+            b1psi0 = { belief = { base = 1.5 }, uncertainty = { base = 1.0 } }
+        "#,
+        )?;
 
-        let condd_dist = CondThetadDist {
-            a0: harr2![
-                [
-                    RelativeParam {
-                        belief: EValue::fixed(1.0),
-                        uncertainty: EValue::fixed(1.0),
-                    },
-                    RelativeParam {
-                        belief: EValue::fixed(1.5),
-                        uncertainty: EValue::fixed(1.01),
-                    }
-                ],
-                [
-                    RelativeParam {
-                        belief: EValue::fixed(1.25),
-                        uncertainty: EValue::fixed(0.98),
-                    },
-                    RelativeParam {
-                        belief: EValue::fixed(1.2f32),
-                        uncertainty: EValue::fixed(0.98),
-                    }
-                ]
-            ],
-        };
-
-        let a0rs = [
-            condd_dist.a0[[0, 0]].sample(&mut rng),
-            condd_dist.a0[[0, 1]].sample(&mut rng),
-            condd_dist.a0[[1, 0]].sample(&mut rng),
-            condd_dist.a0[[1, 1]].sample(&mut rng),
+        let rs = [
+            cond_dist.b0psi1.sample(&mut rng),
+            cond_dist.b1psi0.sample(&mut rng),
         ];
 
         for cond in cond_dist.sample_iter(&mut rng).take(10) {
-            let nw = &cond[[0, 0]];
-            let pw1 = &cond[[0, 1]];
-            let pw2 = &cond[[1, 0]];
-            let pw = &cond[[1, 1]];
-            let k = pw.b()[1] / (1.0 - *pw.u());
-            assert!(1.2 > 1.0 / k || ulps_eq!(k * 1.2, pw1.b()[1] / (1.0 - *pw1.u())));
-            assert!(1.5 > 1.0 / k || ulps_eq!(k * 1.5, pw2.b()[1] / (1.0 - *pw2.u())));
-
-            let theta = [nw, pw1, pw2, pw];
-
-            let condd = condd_dist.sample(&mut thread_rng(), &cond);
-            let a0ws = [
-                &condd[[0, 0, 0]],
-                &condd[[0, 0, 1]],
-                &condd[[0, 1, 0]],
-                &condd[[0, 1, 1]],
-            ];
-            let a1ws = [
-                &condd[[1, 0, 0]],
-                &condd[[1, 0, 1]],
-                &condd[[1, 1, 0]],
-                &condd[[1, 1, 1]],
-            ];
-            for ((rp, pw), tw) in a0rs.iter().zip(a0ws).zip(theta) {
-                let k = tw.b()[1] / (1.0 - *tw.u());
-                assert!(
-                    rp.belief > 1.0 / k || ulps_eq!(k * rp.belief, pw.b()[1] / (1.0 - *pw.u()))
-                );
-            }
-            for w in a1ws {
-                assert_eq!(a0ws[0], w);
+            let w = &cond[[1, 1]];
+            let wds = [&cond[[0, 1]], &cond[[1, 0]]];
+            let x = w.b()[1] / (1.0 - *w.u());
+            for (wd, r) in wds.into_iter().zip(&rs) {
+                let xd = wd.b()[1] / (1.0 - *wd.u());
+                assert!(r.belief > 1.0 / x || ulps_eq!(x * r.belief, xd));
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_base_cond() -> anyhow::Result<()> {
+        let s = r#"
+            psi  = [[0.0, 0.0], 1.0]
+            phi  = [[0.0, 0.0], 1.0]
+            s    = [[0.0, 0.0], 1.0]
+            o    = [[0.0, 0.0], 1.0]
+            cond_a = [
+                { Fixed = [[0.95, 0.00], 0.05] },
+                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            ]
+            cond_b = [
+                { Fixed = [[0.90, 0.00], 0.10] },
+                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            ]
+            cond_o = [
+                { Fixed = [[1.0, 0.00], 0.00] },
+                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            ]
+            cond_theta_phi= [
+                { Fixed = [[0.00, 0.0], 1.00] },
+                { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+            ]
+            [cond_theta]
+            b0psi0 = { Fixed = [[0.95, 0.00], 0.05] }
+            b1psi1 = { Dirichlet = { alpha = [5.0, 5.0, 1.0]} }
+            b0psi1 = { belief = { base = 1.0 }, uncertainty = { base = 1.0, error = {dist = "Standard", low = -0.2, high = 0.2 } } }
+            b1psi0 = { belief = { base = 1.0 }, uncertainty = { base = 1.0, error = {dist = "Standard", low = -0.2, high = 0.2 } } }
+            [rel_cond_thetad]
+            belief = { base = 1.1 }
+            uncertainty = { base = 1.1 }
+        "#;
+
+        let mut rng = thread_rng();
+
+        let init_base_cond = toml::from_str::<InitialBaseConditions<f32>>(s)?;
+
+        let r = init_base_cond.rel_cond_thetad.sample(&mut rng);
+        for _ in 0..10 {
+            let base_cond = BaseConditionalOpinions::from_init(&init_base_cond, &mut rng);
+            for k in HigherArr3::<Simplex<f32, THETAD>, A, B, PSI>::keys() {
+                let wd = &base_cond.cond_thetad[k];
+                let w = match &k {
+                    &[0, i, j] => &base_cond.cond_theta[[i, j]],
+                    _ => &base_cond.cond_theta[[0, 0]],
+                };
+                let xd = wd.b()[1] / (1.0 - *wd.u());
+                let x = w.b()[1] / (1.0 - *w.u());
+                assert!(r.belief > 1.0 / x || ulps_eq!(x * r.belief, xd));
+            }
+            for (w, wd) in base_cond
+                .cond_theta_phi
+                .iter()
+                .zip(&base_cond.cond_thetad_phi)
+            {
+                if w.is_vacuous() {
+                    assert!(wd.is_vacuous());
+                } else {
+                    let xd = wd.b()[1] / (1.0 - *wd.u());
+                    let x = w.b()[1] / (1.0 - *w.u());
+                    assert!(r.belief > 1.0 / x || ulps_eq!(x * r.belief, xd));
+                }
+            }
+        }
+        Ok(())
     }
 }
