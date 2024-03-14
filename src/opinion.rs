@@ -18,6 +18,7 @@ use subjective_logic::{
         Discount, IndexedContainer, Opinion, Opinion1d, Projection, Simplex,
     },
 };
+use tracing::debug;
 
 pub const PSI: usize = 2;
 pub const PHI: usize = 2;
@@ -662,9 +663,7 @@ impl<V: Float> TempOpinions<V> {
     where
         V: NumAssign + fmt::Debug,
     {
-        let p = self.theta.projection();
-        log::debug!("P_TH : {:?}", p);
-        p
+        self.theta.projection()
     }
 }
 
@@ -877,8 +876,8 @@ impl<V: Float> FriendOpinions<V> {
             .abduce(&conds.cond_fo, base_rates.fb)
             .unwrap_or_else(|| Opinion::vacuous_with(base_rates.fb));
 
-        log::debug!("w_FB@ : {:?}", fb_abd.simplex);
-        log::debug!("w_FB% : {:?}", fb.simplex);
+        debug!(target: "FB||FS", b = ?fb.simplex.b(), u = ?fb.simplex.u());
+        debug!(target: "FB~|FO", b = ?fb_abd.simplex.b(), u = ?fb_abd.simplex.u());
         // Use aleatory cummulative fusion
         FuseOp::ACm.fuse_assign(&mut fb, &fb_abd);
         fb
@@ -951,7 +950,6 @@ impl<V: Float> Opinions<V> {
     where
         V: UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
     {
-        log::debug!("b_B|PTH_1: {:?}", conds.base.cond_b[1].belief);
         let fpsi_ded = FriendOpinions::deduce_fpsi(&self.op.s, &conds.friend, &base_rates.friend);
         let kb = self.sop.compute_kb(&conds.social, &base_rates.social);
         let kpsi = SocialOpinions::compute_kpsi(
@@ -967,11 +965,11 @@ impl<V: Float> Opinions<V> {
         let b = self.op.compute_b(&ktheta, &conds.base, &base_rates.base);
         let theta = self.op.compute_theta(&b, &conds.base, &base_rates.base);
 
-        log::debug!(" w_PSI  : {:?}", self.op.psi.simplex);
-        log::debug!(" w_KPSI : {:?}", kpsi.simplex);
-        log::debug!(" w_FPSI': {:?}", fpsi_ded.simplex);
-        log::debug!(" w_KB   : {:?}", kb.simplex);
-        log::debug!(" w_B    : {:?}", b.simplex);
+        debug!(target: "   PSI", b = ?self.op.psi.simplex.b(), u = ?self.op.psi.simplex.u());
+        debug!(target: "  KPSI", b = ?kpsi.simplex.b()       , u = ?kpsi.simplex.u());
+        debug!(target: " FPSId", b = ?fpsi_ded.simplex.b()   , u = ?fpsi_ded.simplex.u());
+        debug!(target: "    KB", b = ?kb.simplex.b()         , u = ?kb.simplex.u());
+        debug!(target: "     B", b = ?b.simplex.b()          , u = ?b.simplex.u());
 
         TempOpinions { theta, b, fpsi_ded }
     }
@@ -986,7 +984,7 @@ impl<V: Float> Opinions<V> {
         base_rates: &GlobalBaseRates<V>,
     ) -> (FriendOpinions<V>, [HigherArr2<V, A, THETAD>; 2])
     where
-        V: UlpsEq + Sum + Default + fmt::Debug + NumAssign,
+        V: UlpsEq + Sum + Default + NumAssign + fmt::Debug,
     {
         // current opinions
         let fb = self.fop.compute_fb(&conds.friend, &base_rates.friend);
@@ -1016,21 +1014,21 @@ impl<V: Float> Opinions<V> {
 
         let ps = [a_thetad.projection(), pred_fa_thetad.projection()];
 
-        log::debug!(" w_FS    : {:?}", self.fop.fs.simplex);
-        log::debug!("~w_FS    : {:?}", pred_fop.fs.simplex);
-        log::debug!(" w_FPSI  : {:?}", fpsi.simplex);
-        log::debug!("~w_FPSI  : {:?}", pred_fpsi.simplex);
-        log::debug!(" w_FB    : {:?}", fb.simplex);
-        log::debug!("~w_FB    : {:?}", pred_fb.simplex);
-        log::debug!(" w_FTH   : {:?}", ftheta.simplex);
-        log::debug!("~w_FTH   : {:?}", pred_ftheta.simplex);
-        log::debug!(" w_A     : {:?}", a.simplex);
-        log::debug!("~w_A     : {:?}", pred_a.simplex);
-        log::debug!(" w_TH    : {:?}", temp.theta.simplex);
-        log::debug!(" w_TH'   : {:?}", thetad.simplex);
-        log::debug!("~w_TH'   : {:?}", pred_thetad.simplex);
-        log::debug!(" P_A,TH' : {:?}", ps[0]);
-        log::debug!("~P_A,TH' : {:?}", ps[1]);
+        debug!(target: "    FS", b = ?self.fop.fs.simplex.b(), u = ?self.fop.fs.simplex.u());
+        debug!(target: "   ~FS", b = ?pred_fop.fs.simplex.b(), u = ?pred_fop.fs.simplex.u());
+        debug!(target: "  FPSI", b = ?fpsi.simplex.b(),        u = ?fpsi.simplex.u());
+        debug!(target: " ~FPSI", b = ?pred_fpsi.simplex.b(),   u = ?pred_fpsi.simplex.u());
+        debug!(target: "    FB", b = ?fb.simplex.b(),          u = ?fb.simplex.u());
+        debug!(target: "   ~FB", b = ?pred_fb.simplex.b(),     u = ?pred_fb.simplex.u());
+        debug!(target: "   FTH", b = ?ftheta.simplex.b(),      u = ?ftheta.simplex.u());
+        debug!(target: "  ~FTH", b = ?pred_ftheta.simplex.b(), u = ?pred_ftheta.simplex.u());
+        debug!(target: "     A", b = ?a.simplex.b(),           u = ?a.simplex.u());
+        debug!(target: "    ~A", b = ?pred_a.simplex.b(),      u = ?pred_a.simplex.u());
+        debug!(target: "    TH", b = ?temp.theta.simplex.b(),  u = ?temp.theta.simplex.u());
+        debug!(target: "   THd", b = ?thetad.simplex.b(),      u = ?thetad.simplex.u());
+        debug!(target: "  ~THd", b = ?pred_thetad.simplex.b(), u = ?pred_thetad.simplex.u());
+        debug!(target: " A,THd", P = ?ps[0]);
+        debug!(target: "~A,THd", P = ?ps[1]);
 
         (pred_fop, ps)
     }

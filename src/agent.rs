@@ -9,6 +9,7 @@ use std::{
     fmt,
     iter::Sum,
 };
+use tracing::{debug, info};
 
 use crate::{
     decision::{CptParams, LossParams, Prospect, CPT},
@@ -130,7 +131,6 @@ impl DelayActionStatus {
     }
 
     fn progress(&mut self) -> bool {
-        log::debug!("{:?}", self);
         match self {
             Self::Willing(0) => {
                 *self = Self::Done;
@@ -215,7 +215,9 @@ where
     }
 
     pub fn progress_selfish_status(&mut self) -> bool {
-        self.selfish_status.progress()
+        let p = self.selfish_status.progress();
+        debug!(target: "selfsh", status = ?self.selfish_status);
+        p
     }
 
     #[inline]
@@ -264,7 +266,7 @@ where
             );
             let values: [V; 2] =
                 array::from_fn(|i| self.cpt.valuate(&self.prospect.sharing[i], &ps[i]));
-            log::info!("V_Y : {:?}", values);
+            info!(target: "     Y", V = ?values);
             sharing_status.decide(values);
             if sharing_status.is_done() {
                 new_ops.replace_pred_fop(pred_new_fop);
@@ -315,10 +317,11 @@ where
             return;
         }
         let p = temp_ops.get_theta_projection();
+        debug!(target: "    TH", P = ?p);
         let values: [V; 2] = array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p));
-        log::info!("V_X : {:?}", values);
+        info!(target: "     X", V = ?values);
         self.selfish_status.decide(values, self.delay_selfish);
-        log::info!("selfish: {:?}", self.selfish_status);
+        info!(target: "selfsh", status = ?self.selfish_status);
     }
 }
 

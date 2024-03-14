@@ -22,6 +22,7 @@ use config::{ConfigData, General, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
 use scenario::{Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
+use tracing::{info, span, Level};
 
 pub struct Runner<P, V>
 where
@@ -139,6 +140,8 @@ where
                 );
                 let num_par = num_par as u32;
                 for num_iter in 0..(self.runtime.data.iteration_count) {
+                    let span = span!(Level::INFO, "tr", "p" = num_par, "i" = num_iter);
+                    let _guard = span.enter();
                     env.execute(num_par, num_iter);
                 }
             });
@@ -206,8 +209,6 @@ where
     where
         V: FromPrimitive + Sum + Default + std::fmt::Debug,
     {
-        log::info!("#i: {num_iter}");
-
         for agent in &mut self.agents {
             agent.reset_with(self.agent_params, self.rng);
         }
@@ -227,7 +228,8 @@ where
 
         while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
         {
-            log::info!("t = {t}");
+            let span = span!(Level::INFO, "st", t);
+            let _guard = span.enter();
             let mut pop_data = PopData::default();
 
             if let Some(informms) = event_table.remove(&t) {
@@ -238,7 +240,9 @@ where
                         .build(info_idx, &info_objects[info_object_idx]);
                     info_data_map.entry(info.content.label).or_default();
 
-                    log::info!("Agent {agent_idx} (informer) <- {}", info.content.label);
+                    let span = span!(Level::INFO, "IA", "#" = agent_idx);
+                    let _guard = span.enter();
+                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_object_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
                     agent.set_info_opinions(&info, &self.agent_params.base_rates);
@@ -267,13 +271,15 @@ where
                 let info_data = info_data_map.get_mut(&info_label).unwrap();
                 info_data.received();
 
-                log::info!("Agent {agent_idx} (sharer) <- {info_label}");
+                let span = span!(Level::INFO, "SA", "#" = agent_idx);
+                let _guard = span.enter();
 
                 let friend_receipt_prob = V::one()
                     - (V::one()
                         - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
                         .powf(self.scenario.mean_degree);
-                log::info!("r^i_m = {friend_receipt_prob:?}");
+
+                info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
 
                 if self.rng.gen::<V>() > agent.access_prob() {
                     continue;
@@ -312,8 +318,9 @@ where
             // update selfish states of agents
             agents_willing_selfish.retain(|&agent_idx| {
                 let agent = &mut self.agents[agent_idx];
+                let span = span!(Level::INFO, "Ag", "#" = agent_idx);
+                let _guard = span.enter();
                 if agent.progress_selfish_status() {
-                    log::info!("Agent {agent_idx} : done selfish");
                     agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
                     pop_data.selfish();
                 }
@@ -323,9 +330,6 @@ where
             // register observer agents
             if let Some(observer) = &self.scenario.observer {
                 if pop_data.num_selfish > 0 {
-                    let observer_prob =
-                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
-                    log::info!("q = {observer_prob:?}");
                     // E[k] = observer.k
                     let k = observer.k.trunc().to_usize().unwrap()
                         + if observer.k.fract() > self.rng.gen() {
@@ -333,6 +337,8 @@ where
                         } else {
                             0
                         };
+                    let observer_prob =
+                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
                     for agent_idx in rand::seq::index::sample(self.rng, self.scenario.num_nodes, k)
                     {
                         if observer_prob > self.rng.gen() {

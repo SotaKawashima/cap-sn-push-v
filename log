@@ -1,0 +1,342 @@
+   Compiling cap-sn v0.15.0 (/Users/masaakimiyashita/dev/cap-sn)
+    Finished dev [unoptimized + debuginfo] target(s) in 2.09s
+     Running `target/debug/cap-sn -g test/config/general.toml -r test/config/runtime.toml -a test/config/agent_params.toml -s test/config/scenario.toml test -o`
+2024-03-14T04:29:42.641010Z  INFO exec{num_par=0 num_iter=0}: cap_sn: t = 0
+2024-03-14T04:29:42.641049Z  INFO exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn: received misinfo
+2024-03-14T04:29:42.641078Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.641150Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.8], uncertainty: 0.19999999 }
+2024-03-14T04:29:42.641164Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.641173Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.641183Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.641192Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.641211Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.641223Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641291Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.641303Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641363Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641376Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641385Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.641394Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~w_FPSI: b=[0.4829765, 0.1588348] u=0.3581887
+2024-03-14T04:29:42.641403Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641412Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641421Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.641430Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~w_FTH: b=[0.4571367, 0.07877676] u=0.46408653
+2024-03-14T04:29:42.641439Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.641448Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~w_A: b=[0.43427986, 0.07483793] u=0.49088222
+2024-03-14T04:29:42.641457Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}:  w_TH: b=[0.53997207, 0.3520551] u=0.10797292
+2024-03-14T04:29:42.641466Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}:  w_THd: b=[0.54014796, 0.3518616] u=0.10799053
+2024-03-14T04:29:42.641475Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~w_THd: b=[0.5707226, 0.325613] u=0.10366443
+2024-03-14T04:29:42.641484Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: A,THd: P=HigherArr2(HA2([HA1([0.64769876, 0.3517516]), HA1([0.00035620818, 0.00019344919])]))
+2024-03-14T04:29:42.641495Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: ~A,THd: P=HigherArr2(HA2([HA1([0.6210152, 0.299953]), HA1([0.053291723, 0.025740132])]))
+2024-03-14T04:29:42.641507Z DEBUG exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::agent: P_TH : [0.6478614, 0.35213858]
+2024-03-14T04:29:42.641518Z  INFO exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::agent: V_X : [2.1547012, -2.25]
+2024-03-14T04:29:42.641527Z  INFO exec{num_par=0 num_iter=0}:informer{id=0}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.641580Z  INFO exec{num_par=0 num_iter=0}: cap_sn: t = 1
+2024-03-14T04:29:42.641595Z  INFO exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn: received corrective
+2024-03-14T04:29:42.641605Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.641660Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.99, 0.0], uncertainty: 0.00999999 }
+2024-03-14T04:29:42.641668Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.24999997, 0.64350164], uncertainty: 0.10649836 }
+2024-03-14T04:29:42.641676Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.19800141], uncertainty: 0.10199858 }
+2024-03-14T04:29:42.641683Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.641690Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.431032, 0.25484207], uncertainty: 0.31412596 }
+2024-03-14T04:29:42.641706Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.641714Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641776Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion: b=[5.9604645e-8, 0.44352004] u=0.55647993
+2024-03-14T04:29:42.641786Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641842Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641850Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~FS: b=[0.0, 0.63360006] u=0.36639994
+2024-03-14T04:29:42.641858Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: FPSI: b=[0.7, 0.19800141] u=0.10199858
+2024-03-14T04:29:42.641866Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~w_FPSI: b=[0.68909913, 0.16549546] u=0.14540546
+2024-03-14T04:29:42.641874Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.641881Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~w_FB: b=[5.9604645e-8, 0.44352004] u=0.55647993
+2024-03-14T04:29:42.641889Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}:  w_FTH: b=[0.45889574, 0.09813129] u=0.44297302
+2024-03-14T04:29:42.641897Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~w_FTH: b=[0.46339035, 0.2544854] u=0.28212434
+2024-03-14T04:29:42.641905Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}:  w_A: b=[0.435951, 0.093224734] u=0.4708243
+2024-03-14T04:29:42.641913Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~w_A: b=[0.4402208, 0.2417611] u=0.31801808
+2024-03-14T04:29:42.641920Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}:  w_TH: b=[0.83895487, 0.10769332] u=0.05335185
+2024-03-14T04:29:42.641928Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}:  w_THd: b=[0.84933394, 0.09762577] u=0.053040147
+2024-03-14T04:29:42.641935Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~w_THd: b=[0.86581737, 0.08164035] u=0.05254224
+2024-03-14T04:29:42.641943Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: A,THd: P=HigherArr2(HA2([HA1([0.81797993, 0.08853655]), HA1([0.08435328, 0.009130235])]))
+2024-03-14T04:29:42.641951Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: ~A,THd: P=HigherArr2(HA2([HA1([0.68449223, 0.060882974]), HA1([0.23382679, 0.020798001])]))
+2024-03-14T04:29:42.641961Z DEBUG exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::agent: P_TH : [0.89226544, 0.10773458]
+2024-03-14T04:29:42.641970Z  INFO exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::agent: V_X : [1.2044286, -2.25]
+2024-03-14T04:29:42.641977Z  INFO exec{num_par=0 num_iter=0}:informer{id=6}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.641993Z  INFO exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn: received misinfo
+2024-03-14T04:29:42.642001Z  INFO exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.642013Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.642072Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.642082Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.642089Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.642096Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.642104Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.642120Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.642129Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642190Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.642199Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642254Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642262Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642270Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.642278Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.642286Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642293Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642301Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.642308Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.642316Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.642323Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.642331Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.642338Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.642347Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.642355Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.642365Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.642380Z  INFO exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.642390Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.642399Z  INFO exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.642407Z  INFO exec{num_par=0 num_iter=0}:sharer{id=3}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.642423Z  INFO exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn: received misinfo
+2024-03-14T04:29:42.642431Z  INFO exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.642443Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.642504Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.642517Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.642526Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.642535Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.642543Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.642560Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.642570Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642640Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.642650Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642713Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642724Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642732Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.642741Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.642750Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642759Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.642768Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.642776Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.642785Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.642793Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.642802Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.642811Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.642819Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.642828Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.642837Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.642850Z  INFO exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.642859Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.642868Z  INFO exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.642876Z  INFO exec{num_par=0 num_iter=0}:sharer{id=5}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.642891Z  INFO exec{num_par=0 num_iter=0}:sharer{id=4}: cap_sn: received misinfo
+2024-03-14T04:29:42.642899Z  INFO exec{num_par=0 num_iter=0}:sharer{id=4}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.642913Z  INFO exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn: received misinfo
+2024-03-14T04:29:42.642922Z  INFO exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.642933Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.642994Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.643010Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.643019Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.643027Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.643035Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.643053Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.643062Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643131Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.643142Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643204Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643216Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643225Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.643233Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.643242Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643251Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643259Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.643268Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.643276Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.643285Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.643294Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.643302Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.643311Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.643319Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.643328Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.643340Z  INFO exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.643350Z DEBUG exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.643359Z  INFO exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.643367Z  INFO exec{num_par=0 num_iter=0}:sharer{id=2}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.643696Z  INFO exec{num_par=0 num_iter=1}: cap_sn: t = 0
+2024-03-14T04:29:42.643713Z  INFO exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn: received misinfo
+2024-03-14T04:29:42.643725Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.643788Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.8], uncertainty: 0.19999999 }
+2024-03-14T04:29:42.643798Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.643807Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.643820Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.643829Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.643846Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.643856Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.643926Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.643937Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644001Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644010Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644020Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.644029Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~w_FPSI: b=[0.4829765, 0.1588348] u=0.3581887
+2024-03-14T04:29:42.644037Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644046Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644055Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.644063Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~w_FTH: b=[0.4571367, 0.07877676] u=0.46408653
+2024-03-14T04:29:42.644072Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.644081Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~w_A: b=[0.43427986, 0.07483793] u=0.49088222
+2024-03-14T04:29:42.644090Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}:  w_TH: b=[0.53997207, 0.3520551] u=0.10797292
+2024-03-14T04:29:42.644100Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}:  w_THd: b=[0.54014796, 0.3518616] u=0.10799053
+2024-03-14T04:29:42.644109Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~w_THd: b=[0.5707226, 0.325613] u=0.10366443
+2024-03-14T04:29:42.644118Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: A,THd: P=HigherArr2(HA2([HA1([0.64769876, 0.3517516]), HA1([0.00035620818, 0.00019344919])]))
+2024-03-14T04:29:42.644128Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: ~A,THd: P=HigherArr2(HA2([HA1([0.6210152, 0.299953]), HA1([0.053291723, 0.025740132])]))
+2024-03-14T04:29:42.644140Z DEBUG exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::agent: P_TH : [0.6478614, 0.35213858]
+2024-03-14T04:29:42.644150Z  INFO exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::agent: V_X : [2.1547012, -2.25]
+2024-03-14T04:29:42.644158Z  INFO exec{num_par=0 num_iter=1}:informer{id=0}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.644176Z  INFO exec{num_par=0 num_iter=1}: cap_sn: t = 1
+2024-03-14T04:29:42.644190Z  INFO exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn: received corrective
+2024-03-14T04:29:42.644201Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.644262Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.99, 0.0], uncertainty: 0.00999999 }
+2024-03-14T04:29:42.644271Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.24999997, 0.64350164], uncertainty: 0.10649836 }
+2024-03-14T04:29:42.644280Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.19800141], uncertainty: 0.10199858 }
+2024-03-14T04:29:42.644288Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.644300Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.431032, 0.25484207], uncertainty: 0.31412596 }
+2024-03-14T04:29:42.644317Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.644327Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644397Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion: b=[5.9604645e-8, 0.44352004] u=0.55647993
+2024-03-14T04:29:42.644409Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644473Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644483Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~FS: b=[0.0, 0.63360006] u=0.36639994
+2024-03-14T04:29:42.644492Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: FPSI: b=[0.7, 0.19800141] u=0.10199858
+2024-03-14T04:29:42.644500Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~w_FPSI: b=[0.68909913, 0.16549546] u=0.14540546
+2024-03-14T04:29:42.644509Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644517Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~w_FB: b=[5.9604645e-8, 0.44352004] u=0.55647993
+2024-03-14T04:29:42.644526Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}:  w_FTH: b=[0.45889574, 0.09813129] u=0.44297302
+2024-03-14T04:29:42.644535Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~w_FTH: b=[0.46339035, 0.2544854] u=0.28212434
+2024-03-14T04:29:42.644543Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}:  w_A: b=[0.435951, 0.093224734] u=0.4708243
+2024-03-14T04:29:42.644553Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~w_A: b=[0.4402208, 0.2417611] u=0.31801808
+2024-03-14T04:29:42.644562Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}:  w_TH: b=[0.83895487, 0.10769332] u=0.05335185
+2024-03-14T04:29:42.644572Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}:  w_THd: b=[0.84933394, 0.09762577] u=0.053040147
+2024-03-14T04:29:42.644580Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~w_THd: b=[0.86581737, 0.08164035] u=0.05254224
+2024-03-14T04:29:42.644590Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: A,THd: P=HigherArr2(HA2([HA1([0.81797993, 0.08853655]), HA1([0.08435328, 0.009130235])]))
+2024-03-14T04:29:42.644601Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: ~A,THd: P=HigherArr2(HA2([HA1([0.68449223, 0.060882974]), HA1([0.23382679, 0.020798001])]))
+2024-03-14T04:29:42.644613Z DEBUG exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::agent: P_TH : [0.89226544, 0.10773458]
+2024-03-14T04:29:42.644622Z  INFO exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::agent: V_X : [1.2044286, -2.25]
+2024-03-14T04:29:42.644631Z  INFO exec{num_par=0 num_iter=1}:informer{id=6}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.644647Z  INFO exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn: received misinfo
+2024-03-14T04:29:42.644656Z  INFO exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.644668Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.644730Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.644740Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.644749Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.644757Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.644765Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.644784Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.644797Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644871Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.644881Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644942Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644952Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644961Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.644970Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.644978Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644987Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.644995Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.645003Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.645012Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.645021Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.645030Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.645039Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.645048Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.645057Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.645067Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.645080Z  INFO exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.645090Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.645099Z  INFO exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.645107Z  INFO exec{num_par=0 num_iter=1}:sharer{id=3}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.645122Z  INFO exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn: received misinfo
+2024-03-14T04:29:42.645131Z  INFO exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.645143Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.645207Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.645217Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.645225Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.645233Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.645241Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.645259Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.645269Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645345Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.645355Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645421Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645432Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645441Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.645450Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.645459Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645467Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645476Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.645485Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.645494Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.645503Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.645512Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.645521Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.645530Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.645539Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.645549Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.645562Z  INFO exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.645572Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.645581Z  INFO exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.645590Z  INFO exec{num_par=0 num_iter=1}:sharer{id=5}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.645604Z  INFO exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn: received misinfo
+2024-03-14T04:29:42.645612Z  INFO exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.645623Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.645684Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.645693Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.645702Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.645710Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.645717Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.645735Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.645744Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645813Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.645823Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645887Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645897Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645906Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.645914Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.645923Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645931Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.645940Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.645949Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.645957Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.645966Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.645974Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.645983Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.645991Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.646000Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.646009Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.646021Z  INFO exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.646030Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.646039Z  INFO exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.646046Z  INFO exec{num_par=0 num_iter=1}:sharer{id=2}: cap_sn::agent: selfish: NotYet
+2024-03-14T04:29:42.646061Z  INFO exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn: received misinfo
+2024-03-14T04:29:42.646068Z  INFO exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn: r^i_m = 0.0
+2024-03-14T04:29:42.646080Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion: b_B|PTH_1: [0.0, 0.8]
+2024-03-14T04:29:42.646141Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion:  w_PSI  : SimplexBase { belief: [0.0, 0.56], uncertainty: 0.44 }
+2024-03-14T04:29:42.646150Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion:  w_KPSI : SimplexBase { belief: [0.25, 0.00016426429], uncertainty: 0.7498357 }
+2024-03-14T04:29:42.646158Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion:  w_FPSI': SimplexBase { belief: [0.7, 0.0001414556], uncertainty: 0.2998585 }
+2024-03-14T04:29:42.646166Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion:  w_KB   : SimplexBase { belief: [0.0, 0.0], uncertainty: 1.0 }
+2024-03-14T04:29:42.646174Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion:  w_B    : SimplexBase { belief: [0.40499985, 0.00028328455], uncertainty: 0.5947168 }
+2024-03-14T04:29:42.646191Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.646201Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646270Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion: b=[0.0, 5.820766e-11] u=1.0
+2024-03-14T04:29:42.646280Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::opinion: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646343Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646353Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~FS: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646366Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: FPSI: b=[0.7, 0.0001414556] u=0.2998585
+2024-03-14T04:29:42.646375Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~w_FPSI: b=[0.56486225, 0.06930468] u=0.36583307
+2024-03-14T04:29:42.646384Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}:  w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646392Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~w_FB: b=[0.0, 0.0] u=1.0
+2024-03-14T04:29:42.646401Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}:  w_FTH: b=[0.4499998, 0.0002474817] u=0.54975265
+2024-03-14T04:29:42.646409Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~w_FTH: b=[0.45311075, 0.034476902] u=0.51241237
+2024-03-14T04:29:42.646418Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}:  w_A: b=[0.42749977, 0.00023510761] u=0.5722651
+2024-03-14T04:29:42.646426Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~w_A: b=[0.43045527, 0.032753058] u=0.53679174
+2024-03-14T04:29:42.646435Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}:  w_TH: b=[0.5279803, 0.24655463] u=0.22546491
+2024-03-14T04:29:42.646444Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}:  w_THd: b=[0.52810353, 0.24641913] u=0.22547728
+2024-03-14T04:29:42.646524Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~w_THd: b=[0.54182225, 0.23840652] u=0.21977141
+2024-03-14T04:29:42.646565Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: A,THd: P=HigherArr2(HA2([HA1([0.75299245, 0.2464579]), HA1([0.0004141155, 0.00013554191])]))
+2024-03-14T04:29:42.646595Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: ~A,THd: P=HigherArr2(HA2([HA1([0.73495764, 0.2302838]), HA1([0.026465982, 0.008292569])]))
+2024-03-14T04:29:42.646639Z  INFO exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::agent: V_Y : [1.7870455, 1.554281]
+2024-03-14T04:29:42.646670Z DEBUG exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::agent: P_TH : [0.753271, 0.24672905]
+2024-03-14T04:29:42.646699Z  INFO exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::agent: V_X : [1.8005942, -2.25]
+2024-03-14T04:29:42.646757Z  INFO exec{num_par=0 num_iter=1}:sharer{id=4}: cap_sn::agent: selfish: NotYet

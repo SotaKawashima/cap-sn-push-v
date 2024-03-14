@@ -130,8 +130,8 @@ inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } 
 
 [loss_params]
 x0 = { base = -1.0 }
-x1_of_x0 = { base = -8.0 }
-y_of_x0 = { base = -0.01 }
+x1_of_x0 = { base = 8.0 }
+y_of_x0 = { base = 0.01 }
 
 [cpt_params]
 alpha  = { base = 0.88 }

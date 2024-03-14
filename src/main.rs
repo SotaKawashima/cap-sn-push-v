@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use cap_sn::{
     config::{DataFormat, FileReadError},
     Runner,
 };
 use clap::Parser;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(clap::Parser)]
 struct Cli {
@@ -52,7 +53,10 @@ impl TryFrom<InputConfig> for DataFormat {
 }
 
 fn main() -> anyhow::Result<()> {
-    env_logger::init();
+    tracing_subscriber::Registry::default()
+        .with(tracing_subscriber::fmt::Layer::default().with_writer(io::stderr))
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()?;
 
     let args = Cli::parse();
     let executor = Runner::<PathBuf, f32>::try_new(
