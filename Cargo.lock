@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "cap-sn"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "anyhow",
  "approx",
@@ -1062,8 +1062,8 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "subjective-logic"
-version = "0.8.2"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.8.2#db8d9eed59b73d01217269818be13323bc31ba3b"
+version = "0.8.3"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.8.3#d710d95c88411d8ebc467c99186865060b2c02e6"
 dependencies = [
  "approx",
  "num-traits",

@@ -876,8 +876,8 @@ impl<V: Float> FriendOpinions<V> {
             .abduce(&conds.cond_fo, base_rates.fb)
             .unwrap_or_else(|| Opinion::vacuous_with(base_rates.fb));
 
-        debug!(target: "FB||FS", b = ?fb.simplex.b(), u = ?fb.simplex.u());
-        debug!(target: "FB~|FO", b = ?fb_abd.simplex.b(), u = ?fb_abd.simplex.u());
+        debug!(target: "FB||FS", w = ?fb);
+        debug!(target: "FB~|FO", w = ?fb_abd);
         // Use aleatory cummulative fusion
         FuseOp::ACm.fuse_assign(&mut fb, &fb_abd);
         fb
@@ -898,11 +898,14 @@ impl<V: Float> FriendOpinions<V> {
         base_rates: &FriendBaseRates<V>,
     ) -> Opinion1d<V, F_THETA>
     where
-        V: UlpsEq + NumAssign + Sum + Default,
+        V: UlpsEq + NumAssign + Sum + Default + fmt::Debug,
     {
         let mut ftheta = Opinion::product2(fb, fpsi)
             .deduce(&conds.cond_ftheta)
             .unwrap_or_else(|| Opinion::<_, V>::vacuous_with(base_rates.ftheta));
+
+        debug!(target: "FTH||0", w = ?ftheta);
+
         let ftheta_ded_2 = self
             .fphi
             .deduce(&conds.cond_ftheta_fphi)
@@ -965,12 +968,13 @@ impl<V: Float> Opinions<V> {
         let b = self.op.compute_b(&ktheta, &conds.base, &base_rates.base);
         let theta = self.op.compute_theta(&b, &conds.base, &base_rates.base);
 
-        debug!(target: "   PSI", b = ?self.op.psi.simplex.b(), u = ?self.op.psi.simplex.u());
-        debug!(target: "  KPSI", b = ?kpsi.simplex.b()       , u = ?kpsi.simplex.u());
-        debug!(target: " FPSId", b = ?fpsi_ded.simplex.b()   , u = ?fpsi_ded.simplex.u());
-        debug!(target: "    KB", b = ?kb.simplex.b()         , u = ?kb.simplex.u());
-        debug!(target: "     B", b = ?b.simplex.b()          , u = ?b.simplex.u());
-        debug!(target: "    TH", b = ?theta.simplex.b()      , u = ?theta.simplex.u());
+        debug!(target: "     S", w = ?self.op.s);
+        debug!(target: "   PSI", w = ?self.op.psi);
+        debug!(target: "  KPSI", w = ?kpsi);
+        debug!(target: " FPSId", w = ?fpsi_ded);
+        debug!(target: "    KB", w = ?kb);
+        debug!(target: "     B", w = ?b);
+        debug!(target: "    TH", w = ?theta);
 
         TempOpinions { theta, b, fpsi_ded }
     }
@@ -1015,18 +1019,18 @@ impl<V: Float> Opinions<V> {
 
         let ps = [a_thetad.projection(), pred_fa_thetad.projection()];
 
-        debug!(target: "    FS", b = ?self.fop.fs.simplex.b(), u = ?self.fop.fs.simplex.u());
-        debug!(target: "   ~FS", b = ?pred_fop.fs.simplex.b(), u = ?pred_fop.fs.simplex.u());
-        debug!(target: "  FPSI", b = ?fpsi.simplex.b(),        u = ?fpsi.simplex.u());
-        debug!(target: " ~FPSI", b = ?pred_fpsi.simplex.b(),   u = ?pred_fpsi.simplex.u());
-        debug!(target: "    FB", b = ?fb.simplex.b(),          u = ?fb.simplex.u());
-        debug!(target: "   ~FB", b = ?pred_fb.simplex.b(),     u = ?pred_fb.simplex.u());
-        debug!(target: "   FTH", b = ?ftheta.simplex.b(),      u = ?ftheta.simplex.u());
-        debug!(target: "  ~FTH", b = ?pred_ftheta.simplex.b(), u = ?pred_ftheta.simplex.u());
-        debug!(target: "     A", b = ?a.simplex.b(),           u = ?a.simplex.u());
-        debug!(target: "    ~A", b = ?pred_a.simplex.b(),      u = ?pred_a.simplex.u());
-        debug!(target: "   THd", b = ?thetad.simplex.b(),      u = ?thetad.simplex.u());
-        debug!(target: "  ~THd", b = ?pred_thetad.simplex.b(), u = ?pred_thetad.simplex.u());
+        debug!(target: "    FS", w = ?self.fop.fs);
+        debug!(target: "   ~FS", w = ?pred_fop.fs);
+        debug!(target: "  FPSI", w = ?fpsi);
+        debug!(target: " ~FPSI", w = ?pred_fpsi);
+        debug!(target: "    FB", w = ?fb);
+        debug!(target: "   ~FB", w = ?pred_fb);
+        debug!(target: "   FTH", w = ?ftheta);
+        debug!(target: "  ~FTH", w = ?pred_ftheta);
+        debug!(target: "     A", w = ?a.simplex);
+        debug!(target: "    ~A", w = ?pred_a);
+        debug!(target: "   THd", w = ?thetad);
+        debug!(target: "  ~THd", w = ?pred_thetad);
         debug!(target: " A,THd", P = ?ps[0]);
         debug!(target: "~A,THd", P = ?ps[1]);
 
@@ -1109,15 +1113,15 @@ impl<V: Float> ConditionalOpinions<V> {
         let friend = FriendConditionalOpinions::from_init(&init.friend, rng);
         let social = SocialConditionalOpinions::from_init(&init.social, rng);
 
-        debug!(target: " TH|0,1", b = ?base.cond_theta[[0, 1]].b(),    u = ?base.cond_theta[[0, 1]].u());
-        debug!(target: " TH|1,0", b = ?base.cond_theta[[1, 0]].b(),    u = ?base.cond_theta[[1, 0]].u());
-        debug!(target: " TH|1,1", b = ?base.cond_theta[[1, 1]].b(),    u = ?base.cond_theta[[1, 1]].u());
-        debug!(target: "FTH|0,1", b = ?friend.cond_ftheta[[0, 1]].b(), u = ?friend.cond_ftheta[[0, 1]].u());
-        debug!(target: "FTH|1,0", b = ?friend.cond_ftheta[[1, 0]].b(), u = ?friend.cond_ftheta[[1, 0]].u());
-        debug!(target: "FTH|1,1", b = ?friend.cond_ftheta[[1, 1]].b(), u = ?friend.cond_ftheta[[1, 1]].u());
-        debug!(target: "KTH|0,1", b = ?social.cond_ktheta[[0, 1]].b(), u = ?social.cond_ktheta[[0, 1]].u());
-        debug!(target: "KTH|1,0", b = ?social.cond_ktheta[[1, 0]].b(), u = ?social.cond_ktheta[[1, 0]].u());
-        debug!(target: "KTH|1,1", b = ?social.cond_ktheta[[1, 1]].b(), u = ?social.cond_ktheta[[1, 1]].u());
+        debug!(target: " TH|0,1", w = ?base.cond_theta[[0, 1]]);
+        debug!(target: " TH|1,0", w = ?base.cond_theta[[1, 0]]);
+        debug!(target: " TH|1,1", w = ?base.cond_theta[[1, 1]]);
+        debug!(target: "FTH|0,1", w = ?friend.cond_ftheta[[0, 1]]);
+        debug!(target: "FTH|1,0", w = ?friend.cond_ftheta[[1, 0]]);
+        debug!(target: "FTH|1,1", w = ?friend.cond_ftheta[[1, 1]]);
+        debug!(target: "KTH|0,1", w = ?social.cond_ktheta[[0, 1]]);
+        debug!(target: "KTH|1,0", w = ?social.cond_ktheta[[1, 0]]);
+        debug!(target: "KTH|1,1", w = ?social.cond_ktheta[[1, 1]]);
 
         Self {
             base,
