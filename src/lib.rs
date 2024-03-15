@@ -209,7 +209,9 @@ where
     where
         V: FromPrimitive + Sum + Default + std::fmt::Debug,
     {
-        for agent in &mut self.agents {
+        for (idx, agent) in self.agents.iter_mut().enumerate() {
+            let span = span!(Level::DEBUG, "init A", "#" = idx);
+            let _guard = span.enter();
             agent.reset_with(self.agent_params, self.rng);
         }
 

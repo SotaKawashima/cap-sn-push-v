@@ -970,6 +970,7 @@ impl<V: Float> Opinions<V> {
         debug!(target: " FPSId", b = ?fpsi_ded.simplex.b()   , u = ?fpsi_ded.simplex.u());
         debug!(target: "    KB", b = ?kb.simplex.b()         , u = ?kb.simplex.u());
         debug!(target: "     B", b = ?b.simplex.b()          , u = ?b.simplex.u());
+        debug!(target: "    TH", b = ?theta.simplex.b()      , u = ?theta.simplex.u());
 
         TempOpinions { theta, b, fpsi_ded }
     }
@@ -1024,7 +1025,6 @@ impl<V: Float> Opinions<V> {
         debug!(target: "  ~FTH", b = ?pred_ftheta.simplex.b(), u = ?pred_ftheta.simplex.u());
         debug!(target: "     A", b = ?a.simplex.b(),           u = ?a.simplex.u());
         debug!(target: "    ~A", b = ?pred_a.simplex.b(),      u = ?pred_a.simplex.u());
-        debug!(target: "    TH", b = ?temp.theta.simplex.b(),  u = ?temp.theta.simplex.u());
         debug!(target: "   THd", b = ?thetad.simplex.b(),      u = ?thetad.simplex.u());
         debug!(target: "  ~THd", b = ?pred_thetad.simplex.b(), u = ?pred_thetad.simplex.u());
         debug!(target: " A,THd", P = ?ps[0]);
@@ -1084,7 +1084,7 @@ where
 impl<V: Float> ConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq,
+        V: Float + AddAssign + UlpsEq + fmt::Debug,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -1105,10 +1105,24 @@ impl<V: Float> ConditionalOpinions<V> {
         //     cond_kpsi
         // };
 
+        let base = BaseConditionalOpinions::from_init(&init.base, rng);
+        let friend = FriendConditionalOpinions::from_init(&init.friend, rng);
+        let social = SocialConditionalOpinions::from_init(&init.social, rng);
+
+        debug!(target: " TH|0,1", b = ?base.cond_theta[[0, 1]].b(),    u = ?base.cond_theta[[0, 1]].u());
+        debug!(target: " TH|1,0", b = ?base.cond_theta[[1, 0]].b(),    u = ?base.cond_theta[[1, 0]].u());
+        debug!(target: " TH|1,1", b = ?base.cond_theta[[1, 1]].b(),    u = ?base.cond_theta[[1, 1]].u());
+        debug!(target: "FTH|0,1", b = ?friend.cond_ftheta[[0, 1]].b(), u = ?friend.cond_ftheta[[0, 1]].u());
+        debug!(target: "FTH|1,0", b = ?friend.cond_ftheta[[1, 0]].b(), u = ?friend.cond_ftheta[[1, 0]].u());
+        debug!(target: "FTH|1,1", b = ?friend.cond_ftheta[[1, 1]].b(), u = ?friend.cond_ftheta[[1, 1]].u());
+        debug!(target: "KTH|0,1", b = ?social.cond_ktheta[[0, 1]].b(), u = ?social.cond_ktheta[[0, 1]].u());
+        debug!(target: "KTH|1,0", b = ?social.cond_ktheta[[1, 0]].b(), u = ?social.cond_ktheta[[1, 0]].u());
+        debug!(target: "KTH|1,1", b = ?social.cond_ktheta[[1, 1]].b(), u = ?social.cond_ktheta[[1, 1]].u());
+
         Self {
-            base: BaseConditionalOpinions::from_init(&init.base, rng),
-            friend: FriendConditionalOpinions::from_init(&init.friend, rng),
-            social: SocialConditionalOpinions::from_init(&init.social, rng),
+            base,
+            friend,
+            social,
         }
     }
 }

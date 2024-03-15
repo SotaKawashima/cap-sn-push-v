@@ -182,7 +182,7 @@ where
 
     pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
     where
-        V: NumAssign + Sum + Default,
+        V: NumAssign + Sum + Default + fmt::Debug,
         R: Rng,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -198,7 +198,6 @@ where
         // } else {
         //     V::zero()
         // },
-
         self.reset(
             agent_params.delay_selfish.sample(rng),
             agent_params.access_prob.sample(rng),
