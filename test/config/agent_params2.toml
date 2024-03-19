@@ -1,6 +1,6 @@
 delay_selfish       = { Fixed = 1 }
 access_prob         = { base = 1.0 } # , error = { dist = { Beta = { alpha = 7.0, beta = 3.0 } } } }
-friend_access_prob  = { base = 1.0 }
+friend_access_prob  = { base = 0.0 }
 # friend_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 4.0, beta = 4.0 } } } }
 social_access_prob  = { base = 0.5 }
 # social_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 4.0, beta = 4.0 } } } }
@@ -126,7 +126,7 @@ cond_fb = [
     # { Fixed = [[0.90, 0.05], 0.05] },
     { Fixed = [[0.0, 0.0], 1.0] },
     # { Dirichlet = { alpha = [0.05, 8], zeros = [0] } },
-    { Dirichlet = { alpha = [0.01, 3, 7] } },
+    { Dirichlet = { alpha = [1, 3, 7] } },
     # { Fixed = [[0.10, 0.10], 0.80] },
 ]
 cond_ftheta_fphi = [
@@ -164,7 +164,7 @@ cond_ko = [
 cond_kb = [
     { Fixed = [[0.0, 0.0], 1.0] },
     # { Dirichlet = { alpha = [1, 8], zeros = [0] } },
-    { Dirichlet = { alpha = [0.01, 1, 8] } },
+    { Dirichlet = { alpha = [1, 1, 8] } },
     # { Fixed = [[0.1, 0.1], 0.8] },
 ]
 cond_ktheta_kphi = [

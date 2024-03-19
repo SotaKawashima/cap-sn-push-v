@@ -18,7 +18,7 @@ use subjective_logic::{
         Discount, IndexedContainer, Opinion, Opinion1d, Projection, Simplex,
     },
 };
-use tracing::debug;
+use tracing::{debug, span, Level};
 
 pub const PSI: usize = 2;
 pub const PHI: usize = 2;
@@ -836,12 +836,14 @@ impl<V: Float> SocialOpinions<V> {
 impl<V: Float> FriendOpinions<V> {
     fn new(&self, info: &Info<V>, trust: V) -> Self
     where
-        V: UlpsEq + NumAssign,
+        V: UlpsEq + NumAssign + fmt::Debug,
     {
         // compute friends opinions
         let fo = FuseOp::Wgh.fuse(&self.fo, &info.content.o.discount(trust));
         let fs = FuseOp::Wgh.fuse(&self.fs, &info.content.s.discount(trust));
         let fphi = FuseOp::Wgh.fuse(&self.fphi, &info.content.phi.discount(trust));
+
+        debug!(target: "    FS", w = ?fs);
 
         Self { fo, fs, fphi }
     }
@@ -914,6 +916,35 @@ impl<V: Float> FriendOpinions<V> {
 
         ftheta
     }
+
+    fn compute_p_a_thetad(
+        &self,
+        op: &BaseOpinions<V>,
+        temp: &TempOpinions<V>,
+        info: &Info<V>,
+        friend_trust: V,
+        conds: &ConditionalOpinions<V>,
+        base_rates: &GlobalBaseRates<V>,
+    ) -> HigherArr2<V, A, THETAD>
+    where
+        V: UlpsEq + NumAssign + Sum + Default + fmt::Debug,
+    {
+        let fb = self.compute_fb(&conds.friend, &base_rates.friend);
+        debug!(target: "    FB", w = ?fb);
+        let fpsi = FriendOpinions::compute_fpsi(info, &temp.fpsi_ded, friend_trust);
+        debug!(target: "  FPSI", w = ?fpsi);
+        let ftheta = self.compute_ftheta(&fb, &fpsi, &conds.friend, &base_rates.friend);
+        debug!(target: "   FTH", w = ?ftheta);
+        let a = op.compute_a(&ftheta, &conds.base, &base_rates.base);
+        debug!(target: "     A", w = ?a);
+        let thetad = op.compute_thetad(&a, &temp.b, &conds.base, &base_rates.base);
+        debug!(target: "   THd", w = ?thetad);
+
+        let a_thetad = Opinion::product2(a.as_ref(), thetad.as_ref());
+        let p = a_thetad.projection();
+        debug!(target: " A,THd", P = ?p);
+        p
+    }
 }
 
 impl<V: Float> Opinions<V> {
@@ -934,7 +965,7 @@ impl<V: Float> Opinions<V> {
 
     pub fn new(&self, info: &Info<V>, trust: V, friend_trust: V, social_trust: V) -> Self
     where
-        V: UlpsEq + NumAssign,
+        V: UlpsEq + NumAssign + fmt::Debug,
     {
         let op = self.op.new(info, trust);
         let sop = self.sop.new(info, friend_trust);
@@ -992,48 +1023,22 @@ impl<V: Float> Opinions<V> {
         V: UlpsEq + Sum + Default + NumAssign + fmt::Debug,
     {
         // current opinions
-        let fb = self.fop.compute_fb(&conds.friend, &base_rates.friend);
-        let fpsi = FriendOpinions::compute_fpsi(info, &temp.fpsi_ded, friend_trust);
-        let ftheta = self
-            .fop
-            .compute_ftheta(&fb, &fpsi, &conds.friend, &base_rates.friend);
-        let a = self.op.compute_a(&ftheta, &conds.base, &base_rates.base);
-        let thetad = self
-            .op
-            .compute_thetad(&a, &temp.b, &conds.base, &base_rates.base);
-        let a_thetad = Opinion::product2(a.as_ref(), thetad.as_ref());
+        let span = span!(Level::DEBUG, "pred-curr");
+        let _guard = span.enter();
+        let p_a_thetad =
+            self.fop
+                .compute_p_a_thetad(&self.op, temp, info, friend_trust, conds, base_rates);
+        drop(_guard);
 
         // predict  opinions in case of sharing
+        let span = span!(Level::DEBUG, "pred-pred");
+        let _guard = span.enter();
         let pred_fop = self.fop.new(info, pred_friend_trust);
-        let pred_fb = pred_fop.compute_fb(&conds.friend, &base_rates.friend);
-        let pred_fpsi = FriendOpinions::compute_fpsi(info, &temp.fpsi_ded, pred_friend_trust);
-        let pred_ftheta =
-            pred_fop.compute_ftheta(&pred_fb, &pred_fpsi, &conds.friend, &base_rates.friend);
-        let pred_a = self
-            .op
-            .compute_a(&pred_ftheta, &conds.base, &base_rates.base);
-        let pred_thetad = self
-            .op
-            .compute_thetad(&pred_a, &temp.b, &conds.base, &base_rates.base);
-        let pred_fa_thetad = Opinion::product2(pred_ftheta.as_ref(), pred_thetad.as_ref());
+        let p_pred_a_thetad =
+            pred_fop.compute_p_a_thetad(&self.op, temp, info, pred_friend_trust, conds, base_rates);
+        drop(_guard);
 
-        let ps = [a_thetad.projection(), pred_fa_thetad.projection()];
-
-        debug!(target: "    FS", w = ?self.fop.fs);
-        debug!(target: "   ~FS", w = ?pred_fop.fs);
-        debug!(target: "  FPSI", w = ?fpsi);
-        debug!(target: " ~FPSI", w = ?pred_fpsi);
-        debug!(target: "    FB", w = ?fb);
-        debug!(target: "   ~FB", w = ?pred_fb);
-        debug!(target: "   FTH", w = ?ftheta);
-        debug!(target: "  ~FTH", w = ?pred_ftheta);
-        debug!(target: "     A", w = ?a);
-        debug!(target: "    ~A", w = ?pred_a);
-        debug!(target: "   THd", w = ?thetad);
-        debug!(target: "  ~THd", w = ?pred_thetad);
-        debug!(target: " A,THd", P = ?ps[0]);
-        debug!(target: "~A,THd", P = ?ps[1]);
-
+        let ps = [p_a_thetad, p_pred_a_thetad];
         (pred_fop, ps)
     }
 

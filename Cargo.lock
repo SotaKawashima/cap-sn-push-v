@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "cap-sn"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "approx",
