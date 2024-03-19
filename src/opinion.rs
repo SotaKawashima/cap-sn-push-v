@@ -1027,7 +1027,7 @@ impl<V: Float> Opinions<V> {
         debug!(target: "   ~FB", w = ?pred_fb);
         debug!(target: "   FTH", w = ?ftheta);
         debug!(target: "  ~FTH", w = ?pred_ftheta);
-        debug!(target: "     A", w = ?a.simplex);
+        debug!(target: "     A", w = ?a);
         debug!(target: "    ~A", w = ?pred_a);
         debug!(target: "   THd", w = ?thetad);
         debug!(target: "  ~THd", w = ?pred_thetad);
