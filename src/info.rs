@@ -6,29 +6,29 @@ use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
-use subjective_logic::mul::Simplex;
+use subjective_logic::mul::labeled::SimplexD1;
 
 use crate::{
-    opinion::{O, PHI, PSI, S},
+    opinion::{Phi, Psi, O, S},
     value::{EValue, EValueParam},
 };
 
 #[derive(Debug, Clone)]
 pub struct InfoContent<'a, V: Float> {
     pub label: InfoLabel,
-    pub psi: &'a Simplex<V, PSI>,
-    pub s: &'a Simplex<V, S>,
-    pub o: &'a Simplex<V, O>,
-    pub phi: &'a Simplex<V, PHI>,
+    pub psi: &'a SimplexD1<Psi, V>,
+    pub s: &'a SimplexD1<S, V>,
+    pub o: &'a SimplexD1<O, V>,
+    pub phi: &'a SimplexD1<Phi, V>,
 }
 
 impl<'a, V: Float> InfoContent<'a, V> {
     pub fn new(
         label: InfoLabel,
-        psi: &'a Simplex<V, PSI>,
-        s: &'a Simplex<V, S>,
-        o: &'a Simplex<V, O>,
-        phi: &'a Simplex<V, PHI>,
+        psi: &'a SimplexD1<Psi, V>,
+        s: &'a SimplexD1<S, V>,
+        o: &'a SimplexD1<O, V>,
+        phi: &'a SimplexD1<Phi, V>,
     ) -> Self {
         Self {
             label,
@@ -93,22 +93,22 @@ where
     V: Float + UlpsEq + AddAssign,
 {
     Misinfo {
-        #[serde_as(as = "TryFromInto<([V; PSI], V)>")]
-        psi: Simplex<V, PSI>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        psi: SimplexD1<Psi, V>,
     },
     Corrective {
-        #[serde_as(as = "TryFromInto<([V; PSI], V)>")]
-        psi: Simplex<V, PSI>,
-        #[serde_as(as = "TryFromInto<([V; S], V)>")]
-        s: Simplex<V, S>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        psi: SimplexD1<Psi, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        s: SimplexD1<S, V>,
     },
     Observed {
-        #[serde_as(as = "TryFromInto<([V; O], V)>")]
-        o: Simplex<V, O>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        o: SimplexD1<O, V>,
     },
     Inhibitive {
-        #[serde_as(as = "TryFromInto<([V; PHI], V)>")]
-        phi: Simplex<V, PSI>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        phi: SimplexD1<Phi, V>,
     },
 }
 
@@ -143,10 +143,10 @@ impl Display for InfoLabel {
 }
 
 pub struct InfoBuilder<V: Float> {
-    vacuous_psi: Simplex<V, PSI>,
-    vacuous_s: Simplex<V, S>,
-    vacuous_o: Simplex<V, O>,
-    vacuous_phi: Simplex<V, PHI>,
+    vacuous_psi: SimplexD1<Psi, V>,
+    vacuous_s: SimplexD1<S, V>,
+    vacuous_o: SimplexD1<O, V>,
+    vacuous_phi: SimplexD1<Phi, V>,
 }
 
 impl<V> InfoBuilder<V>
@@ -155,10 +155,10 @@ where
 {
     pub fn new() -> Self {
         Self {
-            vacuous_psi: Simplex::vacuous(),
-            vacuous_s: Simplex::vacuous(),
-            vacuous_o: Simplex::vacuous(),
-            vacuous_phi: Simplex::vacuous(),
+            vacuous_psi: SimplexD1::vacuous(),
+            vacuous_s: SimplexD1::vacuous(),
+            vacuous_o: SimplexD1::vacuous(),
+            vacuous_phi: SimplexD1::vacuous(),
         }
     }
 

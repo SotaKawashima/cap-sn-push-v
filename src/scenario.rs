@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
 use std::collections::{BTreeMap, VecDeque};
 use std::{fs::File, io, ops::AddAssign};
-use subjective_logic::mul::Simplex;
+use subjective_logic::mul::labeled::SimplexD1;
 
 use crate::info::InfoObject;
 use crate::opinion::O;
@@ -87,8 +87,8 @@ pub struct Inform {
 #[derive(Debug, serde::Deserialize)]
 struct ObserverParam<V: Float + UlpsEq + AddAssign> {
     observer_pop_rate: V,
-    #[serde_as(as = "TryFromInto<([V; O], V)>")]
-    observed_info: Simplex<V, O>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    observed_info: SimplexD1<O, V>,
 }
 
 #[derive(Debug)]

@@ -1,7 +1,4 @@
-use std::{
-    iter::Sum,
-    ops::{AddAssign, Deref},
-};
+use std::{iter::Sum, ops::AddAssign};
 
 use approx::{ulps_eq, UlpsEq};
 use num_traits::Float;
@@ -9,12 +6,13 @@ use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Open01, Standard};
 use serde_with::{serde_as, TryFromInto};
 use subjective_logic::{
-    harr2,
-    mul::{prod::HigherArr2, IndexedContainer},
+    iter::Container,
+    marr_d1, marr_d2,
+    multi_array::labeled::{MArrD1, MArrD2},
 };
 
 use crate::{
-    opinion::{F_B, THETA},
+    opinion::{Theta, FB},
     value::{EValue, EValueParam},
 };
 
@@ -84,7 +82,7 @@ where
     }
 
     /// Computes Choquet integral of a positive function
-    fn positive_valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
+    fn positive_valuate<P: Container<Idx, Output = V>, Idx: Copy>(
         &self,
         positive_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
@@ -101,7 +99,7 @@ where
     }
 
     /// Computes Choquet integral of a negative function
-    fn negative_valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
+    fn negative_valuate<P: Container<Idx, Output = V>, Idx: Copy>(
         &self,
         negative_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
@@ -118,7 +116,7 @@ where
     }
 
     /// Computes CPT
-    pub fn valuate<P: IndexedContainer<Idx, Output = V>, Idx: Copy>(
+    pub fn valuate<P: Container<Idx, Output = V>, Idx: Copy>(
         &self,
         level_sets: &LevelSet<Idx, V>,
         prob: &P,
@@ -137,11 +135,11 @@ pub struct LevelSet<Idx, V> {
 impl<Idx, V: Float> LevelSet<Idx, V> {
     pub fn new<T>(outcome: &T) -> Self
     where
-        T: IndexedContainer<Idx, Output = V>,
+        T: Container<Idx, Output = V>,
         for<'a> &'a T: IntoIterator<Item = &'a V>,
         Idx: Copy,
     {
-        let mut pos = T::keys()
+        let mut pos = T::indexes()
             .zip(outcome)
             .filter(|(_, &o)| o > V::zero())
             .collect::<Vec<_>>();
@@ -157,7 +155,7 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
                 }
             }
         }
-        let mut neg = T::keys()
+        let mut neg = T::indexes()
             .zip(outcome)
             .filter(|(_, &o)| o < V::zero())
             .collect::<Vec<_>>();
@@ -218,7 +216,7 @@ where
 #[derive(Default)]
 pub struct Prospect<V: Float> {
     pub selfish: [LevelSet<usize, V>; 2],
-    pub sharing: [LevelSet<[usize; 2], V>; 2],
+    pub sharing: [LevelSet<(usize, usize), V>; 2],
 }
 
 impl<V> Prospect<V>
@@ -226,18 +224,19 @@ where
     V: Float,
 {
     pub fn reset(&mut self, x0: V, x1: V, y: V) {
-        let selfish_outcome_maps: [[V; THETA]; 2] = [[V::zero(), x1], [x0, x0]];
-        let sharing_outcome_maps: [HigherArr2<V, F_B, THETA>; 2] = [
-            harr2![[V::zero(), x1], [x0, x0]],
-            harr2![[y, x1 + y], [x0 + y, x0 + y]],
+        let selfish_outcome_maps: [MArrD1<Theta, V>; 2] =
+            [marr_d1![V::zero(), x1], marr_d1![x0, x0]];
+        let sharing_outcome_maps: [MArrD2<FB, Theta, V>; 2] = [
+            marr_d2![[V::zero(), x1], [x0, x0]],
+            marr_d2![[y, x1 + y], [x0 + y, x0 + y]],
         ];
         let selfish = [
             LevelSet::new(&selfish_outcome_maps[0]),
             LevelSet::new(&selfish_outcome_maps[1]),
         ];
         let sharing = [
-            LevelSet::new(sharing_outcome_maps[0].deref()),
-            LevelSet::new(sharing_outcome_maps[1].deref()),
+            LevelSet::new(&sharing_outcome_maps[0]),
+            LevelSet::new(&sharing_outcome_maps[1]),
         ];
 
         self.selfish = selfish;
@@ -260,12 +259,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::decision::{LevelSet, CPT};
-    use approx::{assert_ulps_eq, relative_eq, ulps_eq};
-    use std::ops::Deref;
-    use subjective_logic::{
-        harr2,
-        mul::{prod::Product2, Opinion1d, OpinionBase, Projection},
-    };
+    use approx::ulps_eq;
+    use subjective_logic::{domain::Domain, impl_domain, marr_d2};
 
     fn v(o: f32) -> f32 {
         if o.is_sign_negative() {
@@ -319,13 +314,19 @@ mod tests {
         assert!(ulps_eq!(a, c));
     }
 
+    struct X;
+    impl_domain!(X = 2);
+
+    struct Y;
+    impl_domain!(Y = 3);
+
     #[test]
     fn test_cpt_prod() {
-        let outcome = harr2![[6.0, 2.0, 4.0], [-3.0, -1.0, -5.0]];
-        let prob = harr2![
+        let outcome = marr_d2!(X, Y; [[6.0, 2.0, 4.0], [-3.0, -1.0, -5.0]]);
+        let prob = marr_d2!(X, Y; [
             [1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
             [1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0]
-        ];
+        ]);
         let cpt = CPT {
             alpha: 0.88,
             beta: 0.88,
@@ -333,7 +334,7 @@ mod tests {
             gamma: 0.61,
             delta: 0.69,
         };
-        let ls = LevelSet::<_, f32>::new(outcome.deref());
+        let ls = LevelSet::<_, f32>::new(&outcome);
         let a = cpt.valuate(&ls, &prob);
         let b = v(2.0) * (wp(1.0 / 2.0) - wp(1.0 / 3.0))
             + v(4.0) * (wp(1.0 / 3.0) - wp(1.0 / 6.0))
@@ -356,53 +357,5 @@ mod tests {
 
         assert!(ulps_eq!(a, b));
         assert!(ulps_eq!(a, c));
-    }
-
-    #[test]
-    fn test_nan() {
-        let fa = Opinion1d::<f32, 2>::new(
-            [0.090361536, 0.082669996],
-            0.8269686,
-            [0.9991985, 0.0008016379],
-        );
-        let theta = Opinion1d::<f32, 3>::new(
-            [0.009244099, 0.37928966, 0.41457662],
-            0.19688994,
-            [0.99831605, 0.00080163794, 0.0008825256],
-        );
-        let fatheta = OpinionBase::product2(&fa, &theta);
-
-        println!("fa {}", fa.b().into_iter().sum::<f32>() + fa.u());
-        println!("fa {}", fa.base_rate.into_iter().sum::<f32>());
-        println!("th {}", theta.b().into_iter().sum::<f32>() + theta.u());
-        println!("th {}", theta.base_rate.into_iter().sum::<f32>());
-        println!(
-            "fath {}",
-            fatheta.b().into_iter().sum::<f32>() + fatheta.u()
-        );
-        println!("fath {}", fatheta.base_rate.into_iter().sum::<f32>());
-
-        assert_ulps_eq!(fa.projection().into_iter().sum::<f32>(), 1.0);
-        assert_ulps_eq!(theta.projection().into_iter().sum::<f32>(), 1.0);
-
-        let p = fatheta.projection();
-        let sump = p.into_iter().sum::<f32>();
-        println!("{}", sump);
-        let x0 = -0.1;
-        let x1 = -2.0;
-        let y = -0.01;
-        let sharing_outcome_maps = harr2![[y, x1 + y, y], [x0 + y, x0 + y, x0 + y]];
-        let level_sets = LevelSet::<_, f32>::new(sharing_outcome_maps.deref());
-        let cpt = CPT {
-            alpha: 0.88,
-            beta: 0.88,
-            lambda: 2.25,
-            gamma: 0.61,
-            delta: 0.69,
-        };
-        let a = p.into_iter().sum::<f32>();
-        println!("{}, {}", a, relative_eq!(a, 1.0));
-        println!("{:?}", level_sets);
-        println!("V-={}", cpt.negative_valuate(&level_sets.negative, &p));
     }
 }
