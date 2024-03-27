@@ -1097,9 +1097,10 @@ impl<V: Float> Opinions<V> {
 
         debug!(target: "     S", w = ?self.op.s);
         debug!(target: "   PSI", w = ?self.op.psi);
-        debug!(target: "  KPSI", w = ?kpsi);
         debug!(target: " FPSId", w = ?fpsi_ded);
         debug!(target: "    KB", w = ?kb);
+        debug!(target: "  KPSI", w = ?kpsi);
+        debug!(target: "   KTH", w = ?ktheta);
         debug!(target: "     B", w = ?b);
         debug!(target: "    TH", w = ?theta);
 
