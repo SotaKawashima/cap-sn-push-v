@@ -1,4 +1,4 @@
-graph = { directed = true, location = { LocalFile = "./test/graph/graph0.txt" } }
+graph = { directed = true, location = { LocalFile = "./test/graph/graph1.txt" } }
 
 info_objects = [
     { Misinfo = { psi = [[0.00, 0.95], 0.05] } },

@@ -1087,8 +1087,8 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "subjective-logic"
-version = "0.6.0"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.9.0#6c8189066b816e3e71151784c51956b2863a0a89"
+version = "0.9.1"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.9.1#24a2b8cfb41a09ffdf866bd007107c6e5c695eb3"
 dependencies = [
  "approx",
  "itertools",
