@@ -1,4 +1,4 @@
-use std::{iter::Sum, ops::AddAssign};
+use std::{fmt, iter::Sum, ops::AddAssign};
 
 use approx::{ulps_eq, UlpsEq};
 use num_traits::Float;
@@ -10,6 +10,7 @@ use subjective_logic::{
     marr_d1, marr_d2,
     multi_array::labeled::{MArrD1, MArrD2},
 };
+use tracing::debug;
 
 use crate::{
     opinion::{Theta, FB},
@@ -221,7 +222,7 @@ pub struct Prospect<V: Float> {
 
 impl<V> Prospect<V>
 where
-    V: Float,
+    V: Float + fmt::Debug,
 {
     pub fn reset(&mut self, x0: V, x1: V, y: V) {
         let selfish_outcome_maps: [MArrD1<Theta, V>; 2] =
@@ -239,6 +240,8 @@ where
             LevelSet::new(&sharing_outcome_maps[1]),
         ];
 
+        debug!(target: "X outcomes", x = ?selfish_outcome_maps);
+        debug!(target: "Y outcomes", x = ?sharing_outcome_maps);
         self.selfish = selfish;
         self.sharing = sharing;
     }

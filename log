@@ -1,0 +1,225 @@
+    Finished dev [unoptimized + debuginfo] target(s) in 0.07s
+     Running `target/debug/cap-sn -g test/config/general.toml -r test/config/runtime.toml -a test/config/agent_params2.toml -s test/config/scenario.toml test -o`
+2024-03-29T10:29:50.719107Z  INFO tr{p=0 i=0}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.719758Z  INFO tr{p=0 i=0}:st{t=0}:IA{#=0}:      X: V=[-1.6095097, -2.25]
+2024-03-29T10:29:50.719775Z  INFO tr{p=0 i=0}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.720028Z  INFO tr{p=0 i=0}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.720352Z  INFO tr{p=0 i=0}:st{t=1}:IA{#=6}:      X: V=[-1.5227727, -2.25]
+2024-03-29T10:29:50.720365Z  INFO tr{p=0 i=0}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.720385Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.720708Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=5}:      Y: V=[-2.374249, -2.3761935]
+2024-03-29T10:29:50.720723Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=5}:      X: V=[-2.1916585, -2.25]
+2024-03-29T10:29:50.720733Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.720750Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.721065Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=2}:      Y: V=[-1.8932738, -1.8952514]
+2024-03-29T10:29:50.721082Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=2}:      X: V=[-1.7522069, -2.25]
+2024-03-29T10:29:50.721092Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.721110Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.721421Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=4}:      Y: V=[-1.2672426, -1.2692823]
+2024-03-29T10:29:50.721436Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=4}:      X: V=[-0.7564698, -2.25]
+2024-03-29T10:29:50.721445Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.721461Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.721750Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=3}:      Y: V=[-2.1176965, -2.119559]
+2024-03-29T10:29:50.721765Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=3}:      X: V=[-2.251855, -2.25]
+2024-03-29T10:29:50.721775Z  INFO tr{p=0 i=0}:st{t=1}:SA{#=3}: selfsh: status=Willing(1)
+2024-03-29T10:29:50.722446Z  INFO tr{p=0 i=1}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.722764Z  INFO tr{p=0 i=1}:st{t=0}:IA{#=0}:      X: V=[-2.089601, -2.25]
+2024-03-29T10:29:50.722777Z  INFO tr{p=0 i=1}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.722806Z  INFO tr{p=0 i=1}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.723120Z  INFO tr{p=0 i=1}:st{t=1}:IA{#=6}:      X: V=[-1.3422728, -2.25]
+2024-03-29T10:29:50.723133Z  INFO tr{p=0 i=1}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.723152Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.723462Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=2}:      Y: V=[-1.6354778, -1.6374263]
+2024-03-29T10:29:50.723478Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=2}:      X: V=[-1.4240533, -2.25]
+2024-03-29T10:29:50.723488Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.723505Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.723825Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=5}:      Y: V=[-1.3487926, -1.350936]
+2024-03-29T10:29:50.723842Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=5}:      X: V=[-0.9822444, -2.25]
+2024-03-29T10:29:50.723853Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.723871Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.724194Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=4}:      Y: V=[-2.845053, -2.8469079]
+2024-03-29T10:29:50.724210Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=4}:      X: V=[-2.5676975, -2.25]
+2024-03-29T10:29:50.724221Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=4}: selfsh: status=Willing(1)
+2024-03-29T10:29:50.724239Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.724555Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=3}:      Y: V=[-2.6095781, -2.611553]
+2024-03-29T10:29:50.724571Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=3}:      X: V=[-2.1968396, -2.25]
+2024-03-29T10:29:50.724592Z  INFO tr{p=0 i=1}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.724641Z  INFO tr{p=0 i=1}:st{t=3}:IA{#=9}:   recv: l=Observed obj#=2 #=2
+2024-03-29T10:29:50.724949Z  INFO tr{p=0 i=1}:st{t=3}:IA{#=9}:      X: V=[-2.0782542, -2.25]
+2024-03-29T10:29:50.724960Z  INFO tr{p=0 i=1}:st{t=3}:IA{#=9}: selfsh: status=NotYet
+2024-03-29T10:29:50.725668Z  INFO tr{p=0 i=2}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.725989Z  INFO tr{p=0 i=2}:st{t=0}:IA{#=0}:      X: V=[-1.5150499, -2.25]
+2024-03-29T10:29:50.726000Z  INFO tr{p=0 i=2}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.726028Z  INFO tr{p=0 i=2}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.726339Z  INFO tr{p=0 i=2}:st{t=1}:IA{#=6}:      X: V=[-2.1515806, -2.25]
+2024-03-29T10:29:50.726351Z  INFO tr{p=0 i=2}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.726369Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.726677Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=3}:      Y: V=[-2.1201553, -2.1222215]
+2024-03-29T10:29:50.726691Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=3}:      X: V=[-1.818147, -2.25]
+2024-03-29T10:29:50.726701Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.726717Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.727011Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=2}:      Y: V=[-2.0353656, -2.037473]
+2024-03-29T10:29:50.727025Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=2}:      X: V=[-1.7093672, -2.25]
+2024-03-29T10:29:50.727034Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.727048Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.727330Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=4}:      Y: V=[-1.0472281, -1.0494772]
+2024-03-29T10:29:50.727343Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=4}:      X: V=[-0.6047839, -2.25]
+2024-03-29T10:29:50.727352Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.727366Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.727645Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=5}:      Y: V=[-1.7145433, -1.7166572]
+2024-03-29T10:29:50.727659Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=5}:      X: V=[-1.4334731, -2.25]
+2024-03-29T10:29:50.727667Z  INFO tr{p=0 i=2}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.728346Z  INFO tr{p=0 i=3}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.728660Z  INFO tr{p=0 i=3}:st{t=0}:IA{#=0}:      X: V=[-2.5516717, -2.25]
+2024-03-29T10:29:50.728671Z  INFO tr{p=0 i=3}:st{t=0}:IA{#=0}: selfsh: status=Willing(1)
+2024-03-29T10:29:50.728708Z  INFO tr{p=0 i=3}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.729079Z  INFO tr{p=0 i=3}:st{t=1}:IA{#=6}:      X: V=[-1.7463353, -2.25]
+2024-03-29T10:29:50.729101Z  INFO tr{p=0 i=3}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.729128Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.729487Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=4}:      Y: V=[-1.733495, -1.7356104]
+2024-03-29T10:29:50.729506Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=4}:      X: V=[-1.4615285, -2.25]
+2024-03-29T10:29:50.729517Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.729537Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.729870Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=5}:      Y: V=[-2.043348, -2.0454051]
+2024-03-29T10:29:50.729887Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=5}:      X: V=[-1.7784606, -2.25]
+2024-03-29T10:29:50.729896Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.729915Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.730240Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=3}:      Y: V=[-1.8499765, -1.8519648]
+2024-03-29T10:29:50.730256Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=3}:      X: V=[-1.7142371, -2.25]
+2024-03-29T10:29:50.730265Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.730283Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.730593Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=2}:      Y: V=[-2.2763531, -2.2783725]
+2024-03-29T10:29:50.730607Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=2}:      X: V=[-1.993351, -2.25]
+2024-03-29T10:29:50.730616Z  INFO tr{p=0 i=3}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.731378Z  INFO tr{p=0 i=4}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.731696Z  INFO tr{p=0 i=4}:st{t=0}:IA{#=0}:      X: V=[-1.4039578, -2.25]
+2024-03-29T10:29:50.731708Z  INFO tr{p=0 i=4}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.731737Z  INFO tr{p=0 i=4}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.732045Z  INFO tr{p=0 i=4}:st{t=1}:IA{#=6}:      X: V=[-1.0031219, -2.25]
+2024-03-29T10:29:50.732056Z  INFO tr{p=0 i=4}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.732073Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.732363Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=4}:      Y: V=[-1.8907834, -1.8928713]
+2024-03-29T10:29:50.732377Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=4}:      X: V=[-1.6242329, -2.25]
+2024-03-29T10:29:50.732386Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.732401Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.732687Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=3}:      Y: V=[-2.5371244, -2.5389903]
+2024-03-29T10:29:50.732700Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=3}:      X: V=[-2.5050254, -2.25]
+2024-03-29T10:29:50.732709Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=3}: selfsh: status=Willing(1)
+2024-03-29T10:29:50.732725Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.733009Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=2}:      Y: V=[-1.7704718, -1.7726198]
+2024-03-29T10:29:50.733022Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=2}:      X: V=[-1.4812844, -2.25]
+2024-03-29T10:29:50.733030Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.733045Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.733329Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=5}:      Y: V=[-1.5716221, -1.5738729]
+2024-03-29T10:29:50.733342Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=5}:      X: V=[-1.2501305, -2.25]
+2024-03-29T10:29:50.733351Z  INFO tr{p=0 i=4}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.734033Z  INFO tr{p=0 i=5}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.734342Z  INFO tr{p=0 i=5}:st{t=0}:IA{#=0}:      X: V=[-1.7718447, -2.25]
+2024-03-29T10:29:50.734353Z  INFO tr{p=0 i=5}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.734379Z  INFO tr{p=0 i=5}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.734675Z  INFO tr{p=0 i=5}:st{t=1}:IA{#=6}:      X: V=[-0.5991964, -2.25]
+2024-03-29T10:29:50.734685Z  INFO tr{p=0 i=5}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.734705Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.734991Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=5}:      Y: V=[-1.98444, -1.986423]
+2024-03-29T10:29:50.735004Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=5}:      X: V=[-1.8382767, -2.25]
+2024-03-29T10:29:50.735013Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.735027Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.735310Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=3}:      Y: V=[-1.9377899, -1.9397511]
+2024-03-29T10:29:50.735323Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=3}:      X: V=[-1.9163072, -2.25]
+2024-03-29T10:29:50.735331Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.735346Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.735628Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=2}:      Y: V=[-1.5140576, -1.5161539]
+2024-03-29T10:29:50.735642Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=2}:      X: V=[-1.2031003, -2.25]
+2024-03-29T10:29:50.735650Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.735664Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.735948Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=4}:      Y: V=[-1.6935637, -1.6955634]
+2024-03-29T10:29:50.735965Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=4}:      X: V=[-1.5043975, -2.25]
+2024-03-29T10:29:50.735974Z  INFO tr{p=0 i=5}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.736631Z  INFO tr{p=0 i=6}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.736918Z  INFO tr{p=0 i=6}:st{t=0}:IA{#=0}:      X: V=[-1.4176965, -2.25]
+2024-03-29T10:29:50.736928Z  INFO tr{p=0 i=6}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.736953Z  INFO tr{p=0 i=6}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.737239Z  INFO tr{p=0 i=6}:st{t=1}:IA{#=6}:      X: V=[-1.2350895, -2.25]
+2024-03-29T10:29:50.737249Z  INFO tr{p=0 i=6}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.737265Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.737551Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=5}:      Y: V=[-1.9590449, -1.9611118]
+2024-03-29T10:29:50.737564Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=5}:      X: V=[-1.7012863, -2.25]
+2024-03-29T10:29:50.737572Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.737587Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.737872Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=4}:      Y: V=[-1.7704365, -1.772619]
+2024-03-29T10:29:50.737885Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=4}:      X: V=[-1.441979, -2.25]
+2024-03-29T10:29:50.737893Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.737908Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.738187Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=2}:      Y: V=[-2.3291173, -2.3311286]
+2024-03-29T10:29:50.738200Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=2}:      X: V=[-2.042041, -2.25]
+2024-03-29T10:29:50.738209Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.738223Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.738503Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=3}:      Y: V=[-1.7654178, -1.7674081]
+2024-03-29T10:29:50.738517Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=3}:      X: V=[-1.6046847, -2.25]
+2024-03-29T10:29:50.738525Z  INFO tr{p=0 i=6}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.739179Z  INFO tr{p=0 i=7}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.739466Z  INFO tr{p=0 i=7}:st{t=0}:IA{#=0}:      X: V=[-1.6387328, -2.25]
+2024-03-29T10:29:50.739476Z  INFO tr{p=0 i=7}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.739500Z  INFO tr{p=0 i=7}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.739788Z  INFO tr{p=0 i=7}:st{t=1}:IA{#=6}:      X: V=[-0.94814235, -2.25]
+2024-03-29T10:29:50.739798Z  INFO tr{p=0 i=7}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.739813Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.740107Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=3}:      Y: V=[-1.4359256, -1.4379885]
+2024-03-29T10:29:50.740120Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=3}:      X: V=[-1.0720642, -2.25]
+2024-03-29T10:29:50.740128Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.740143Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.740424Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=5}:      Y: V=[-1.6042124, -1.6064137]
+2024-03-29T10:29:50.740437Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=5}:      X: V=[-1.2902204, -2.25]
+2024-03-29T10:29:50.740445Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.740460Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.740739Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=4}:      Y: V=[-2.2569818, -2.25885]
+2024-03-29T10:29:50.740752Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=4}:      X: V=[-2.3535302, -2.25]
+2024-03-29T10:29:50.740761Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=4}: selfsh: status=Willing(1)
+2024-03-29T10:29:50.740776Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.741057Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=2}:      Y: V=[-1.6977768, -1.6995384]
+2024-03-29T10:29:50.741079Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=2}:      X: V=[-1.6645318, -2.25]
+2024-03-29T10:29:50.741088Z  INFO tr{p=0 i=7}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.741760Z  INFO tr{p=0 i=8}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.742068Z  INFO tr{p=0 i=8}:st{t=0}:IA{#=0}:      X: V=[-1.6746097, -2.25]
+2024-03-29T10:29:50.742078Z  INFO tr{p=0 i=8}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.742102Z  INFO tr{p=0 i=8}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.742386Z  INFO tr{p=0 i=8}:st{t=1}:IA{#=6}:      X: V=[-1.7226567, -2.25]
+2024-03-29T10:29:50.742395Z  INFO tr{p=0 i=8}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.742411Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.742691Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=2}:      Y: V=[-2.5785298, -2.580529]
+2024-03-29T10:29:50.742704Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=2}:      X: V=[-2.2130616, -2.25]
+2024-03-29T10:29:50.742713Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.742727Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.743008Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=5}:      Y: V=[-1.7711957, -1.7730486]
+2024-03-29T10:29:50.743020Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=5}:      X: V=[-1.7507854, -2.25]
+2024-03-29T10:29:50.743029Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.743043Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.743323Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=3}:      Y: V=[-1.7844284, -1.7863808]
+2024-03-29T10:29:50.743336Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=3}:      X: V=[-1.6538942, -2.25]
+2024-03-29T10:29:50.743344Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=3}: selfsh: status=NotYet
+2024-03-29T10:29:50.743358Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.743637Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=4}:      Y: V=[-2.094859, -2.096872]
+2024-03-29T10:29:50.743650Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=4}:      X: V=[-1.8954432, -2.25]
+2024-03-29T10:29:50.743658Z  INFO tr{p=0 i=8}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.744309Z  INFO tr{p=0 i=9}:st{t=0}:IA{#=0}:   recv: l=Misinfo obj#=0 #=0
+2024-03-29T10:29:50.744597Z  INFO tr{p=0 i=9}:st{t=0}:IA{#=0}:      X: V=[-1.8891261, -2.25]
+2024-03-29T10:29:50.744607Z  INFO tr{p=0 i=9}:st{t=0}:IA{#=0}: selfsh: status=NotYet
+2024-03-29T10:29:50.744631Z  INFO tr{p=0 i=9}:st{t=1}:IA{#=6}:   recv: l=Corrective obj#=1 #=1
+2024-03-29T10:29:50.744961Z  INFO tr{p=0 i=9}:st{t=1}:IA{#=6}:      X: V=[-1.3831124, -2.25]
+2024-03-29T10:29:50.744981Z  INFO tr{p=0 i=9}:st{t=1}:IA{#=6}: selfsh: status=NotYet
+2024-03-29T10:29:50.745005Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=4}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.745362Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=4}:      Y: V=[-2.2879841, -2.2899764]
+2024-03-29T10:29:50.745380Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=4}:      X: V=[-2.064586, -2.25]
+2024-03-29T10:29:50.745390Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=4}: selfsh: status=NotYet
+2024-03-29T10:29:50.745408Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=5}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.745739Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=5}:      Y: V=[-1.8792647, -1.881253]
+2024-03-29T10:29:50.745754Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=5}:      X: V=[-1.7305183, -2.25]
+2024-03-29T10:29:50.745764Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=5}: selfsh: status=NotYet
+2024-03-29T10:29:50.745781Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=2}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.746093Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=2}:      Y: V=[-1.6202734, -1.6223445]
+2024-03-29T10:29:50.746107Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=2}:      X: V=[-1.3415692, -2.25]
+2024-03-29T10:29:50.746116Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=2}: selfsh: status=NotYet
+2024-03-29T10:29:50.746133Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=3}:   recv: l=Misinfo #=0 r=0.0
+2024-03-29T10:29:50.746428Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=3}:      Y: V=[-2.1955307, -2.1974187]
+2024-03-29T10:29:50.746443Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=3}:      X: V=[-2.372237, -2.25]
+2024-03-29T10:29:50.746460Z  INFO tr{p=0 i=9}:st{t=1}:SA{#=3}: selfsh: status=Willing(1)

@@ -58,8 +58,8 @@ pub struct BehaviorByInfo {
 
 #[derive(Default)]
 pub struct Agent<V: Float> {
-    pub cpt: CPT<V>,
-    pub prospect: Prospect<V>,
+    cpt: CPT<V>,
+    prospect: Prospect<V>,
     ops: Opinions<V>,
     conds: ConditionalOpinions<V>,
     access_prob: V,

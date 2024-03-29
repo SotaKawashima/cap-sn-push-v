@@ -1215,16 +1215,6 @@ impl<V: Float> ConditionalOpinions<V> {
         let friend = FriendConditionalOpinions::from_init(&init.friend, rng);
         let social = SocialConditionalOpinions::from_init(&init.social, rng);
 
-        debug!(target: " TH|0,1", w = ?base.cond_theta[(0, 1)]);
-        debug!(target: " TH|1,0", w = ?base.cond_theta[(1, 0)]);
-        debug!(target: " TH|1,1", w = ?base.cond_theta[(1, 1)]);
-        debug!(target: "FTH|0,1", w = ?friend.cond_ftheta[(0, 1)]);
-        debug!(target: "FTH|1,0", w = ?friend.cond_ftheta[(1, 0)]);
-        debug!(target: "FTH|1,1", w = ?friend.cond_ftheta[(1, 1)]);
-        debug!(target: "KTH|0,1", w = ?social.cond_ktheta[(0, 1)]);
-        debug!(target: "KTH|1,0", w = ?social.cond_ktheta[(1, 0)]);
-        debug!(target: "KTH|1,1", w = ?social.cond_ktheta[(1, 1)]);
-
         Self {
             base,
             friend,
@@ -1236,7 +1226,7 @@ impl<V: Float> ConditionalOpinions<V> {
 impl<V: Float> BaseConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialBaseConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq,
+        V: Float + AddAssign + UlpsEq + fmt::Debug,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -1251,14 +1241,26 @@ impl<V: Float> BaseConditionalOpinions<V> {
         // init.cond_thetad.sample(rng, &cond_theta);
         let cond_theta_phi = MArrD1::from_fn(|i| init.cond_theta_phi[i].sample(rng));
         let cond_thetad_phi = MArrD1::from_fn(|i| r.to_simplex(&cond_theta_phi[i]).unwrap().conv());
+        let cond_o = FromFn::from_fn(|i| init.cond_o[i].sample(rng));
+        let cond_b = FromFn::from_fn(|i| init.cond_b[i].sample(rng));
+        let cond_a = FromFn::from_fn(|i| init.cond_a[i].sample(rng));
+
+        debug!(target: "TH||...", w = ?cond_theta);
+        debug!(target: "TH||PHI", w = ?cond_theta_phi);
+        debug!(target: "THd||..", w = ?cond_thetad);
+        debug!(target: "THd||PHI", w = ?cond_thetad_phi);
+        debug!(target: "O||B", w = ?cond_o);
+        debug!(target: "B||KTH", w = ?cond_b);
+        debug!(target: "A||FTH", w = ?cond_a);
+
         Self {
-            cond_o: FromFn::from_fn(|i| init.cond_o[i].sample(rng)),
-            cond_b: FromFn::from_fn(|i| init.cond_b[i].sample(rng)),
             cond_theta,
             cond_theta_phi,
-            cond_a: FromFn::from_fn(|i| init.cond_a[i].sample(rng)),
             cond_thetad,
             cond_thetad_phi,
+            cond_a,
+            cond_b,
+            cond_o,
         }
     }
 }
@@ -1266,18 +1268,30 @@ impl<V: Float> BaseConditionalOpinions<V> {
 impl<V: Float> FriendConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialFriendConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq,
+        V: Float + AddAssign + UlpsEq + fmt::Debug,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
+        let cond_ftheta = init.cond_ftheta.sample(rng);
+        let cond_ftheta_fphi = MArrD1::from_fn(|i| init.cond_ftheta_fphi[i].sample(rng));
+        let cond_fpsi = MArrD1::from_fn(|i| init.cond_fpsi[i].sample(rng));
+        let cond_fb = MArrD1::from_fn(|i| init.cond_fb[i].sample(rng));
+        let cond_fo = MArrD1::from_fn(|i| init.cond_fo[i].sample(rng));
+
+        debug!(target: "FTH||..", w = ?cond_ftheta);
+        debug!(target: "FTH||FPHI", w = ?cond_ftheta_fphi);
+        debug!(target: "FPSI||S", w = ?cond_fpsi);
+        debug!(target: "FB||FS", w = ?cond_fb);
+        debug!(target: "FO||FB", w = ?cond_fo);
+
         Self {
-            cond_fpsi: MArrD1::from_fn(|i| init.cond_fpsi[i].sample(rng)),
-            cond_fo: MArrD1::from_fn(|i| init.cond_fo[i].sample(rng)),
-            cond_fb: MArrD1::from_fn(|i| init.cond_fb[i].sample(rng)),
-            cond_ftheta: init.cond_ftheta.sample(rng),
-            cond_ftheta_fphi: MArrD1::from_fn(|i| init.cond_ftheta_fphi[i].sample(rng)),
+            cond_ftheta,
+            cond_ftheta_fphi,
+            cond_fb,
+            cond_fo,
+            cond_fpsi,
         }
     }
 }
@@ -1285,18 +1299,30 @@ impl<V: Float> FriendConditionalOpinions<V> {
 impl<V: Float> SocialConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialSocialConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq,
+        V: Float + AddAssign + UlpsEq + fmt::Debug,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
+        let cond_ktheta = init.cond_ktheta.sample(rng);
+        let cond_ktheta_kphi = MArrD1::from_fn(|i| init.cond_ktheta_kphi[i].sample(rng));
+        let cond_kpsi = MArrD1::from_fn(|i| init.cond_kpsi[i].sample(rng));
+        let cond_ko = MArrD1::from_fn(|i| init.cond_ko[i].sample(rng));
+        let cond_kb = MArrD1::from_fn(|i| init.cond_kb[i].sample(rng));
+
+        debug!(target: "KTH||..", w = ?cond_ktheta);
+        debug!(target: "KTH||KPHI", w = ?cond_ktheta_kphi);
+        debug!(target: "KPSI||S", w = ?cond_kpsi);
+        debug!(target: "KB||KS", w = ?cond_kb);
+        debug!(target: "KO||KB", w = ?cond_ko);
+
         Self {
-            cond_kpsi: MArrD1::from_fn(|i| init.cond_kpsi[i].sample(rng)),
-            cond_ko: MArrD1::from_fn(|i| init.cond_ko[i].sample(rng)),
-            cond_kb: MArrD1::from_fn(|i| init.cond_kb[i].sample(rng)),
-            cond_ktheta: init.cond_ktheta.sample(rng),
-            cond_ktheta_kphi: MArrD1::from_fn(|i| init.cond_ktheta_kphi[i].sample(rng)),
+            cond_ktheta,
+            cond_ktheta_kphi,
+            cond_kb,
+            cond_ko,
+            cond_kpsi,
         }
     }
 }
