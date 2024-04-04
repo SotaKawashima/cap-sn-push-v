@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::io;
 
 use cap_sn::{
     config::{DataFormat, FileReadError},
@@ -13,16 +13,16 @@ struct Cli {
     identifier: String,
     /// the path of a general config file
     #[arg(short, long)]
-    general: PathBuf,
+    general: String,
     /// the path of a runtime config file
     #[arg(short, long)]
-    runtime: PathBuf,
+    runtime: String,
     /// the path of a agent parameters config file
     #[arg(short, long)]
-    agent_params: PathBuf,
+    agent_params: String,
     /// the path of a scenario config file
     #[arg(short, long)]
-    scenario: PathBuf,
+    scenario: String,
     /// Enable overwriting of a output file
     #[arg(short, long, default_value_t = false)]
     overwriting: bool,
@@ -32,7 +32,7 @@ struct Cli {
 #[group(required = true, multiple = false)]
 struct InputConfig {
     #[arg(short, long)]
-    file_path: Option<PathBuf>,
+    file_path: Option<String>,
     #[arg(short, long)]
     json_data: Option<String>,
     #[arg(short, long)]
@@ -44,7 +44,7 @@ impl TryFrom<InputConfig> for DataFormat {
 
     fn try_from(value: InputConfig) -> Result<Self, Self::Error> {
         match (value.file_path, value.json_data, value.toml_data) {
-            (Some(path), None, None) => DataFormat::read(path),
+            (Some(path), None, None) => DataFormat::read(&path),
             (None, Some(data), None) => Ok(DataFormat::JSON(data)),
             (None, None, Some(data)) => Ok(DataFormat::TOML(data)),
             _ => unreachable!(),
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
         .try_init()?;
 
     let args = Cli::parse();
-    let executor = Runner::<PathBuf, f32>::try_new(
+    let executor = Runner::<f32>::try_new(
         args.general,
         args.runtime,
         args.agent_params,

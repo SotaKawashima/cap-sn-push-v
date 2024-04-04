@@ -8,7 +8,7 @@ mod scenario;
 mod stat;
 mod value;
 
-use std::{collections::BTreeMap, iter::Sum, path::Path, sync::mpsc, thread};
+use std::{collections::BTreeMap, iter::Sum, sync::mpsc, thread};
 
 use approx::UlpsEq;
 use graph_lib::prelude::Graph;
@@ -24,26 +24,24 @@ use scenario::{Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
 use tracing::{info, span, Level};
 
-pub struct Runner<P, V>
+pub struct Runner<V>
 where
-    P: AsRef<Path>,
     V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    general: ConfigData<P, General>,
-    runtime: ConfigData<P, Runtime>,
-    agent_params: ConfigData<P, AgentParams<V>>,
-    scenario: ConfigData<P, Scenario<V>>,
+    general: ConfigData<General>,
+    runtime: ConfigData<Runtime>,
+    agent_params: ConfigData<AgentParams<V>>,
+    scenario: ConfigData<Scenario<V>>,
     identifier: String,
     overwriting: bool,
 }
 
-impl<P, V> Runner<P, V>
+impl<V> Runner<V>
 where
-    P: AsRef<Path>,
     V: Float
         + NumAssign
         + UlpsEq
@@ -61,10 +59,10 @@ where
     Exp1: Distribution<V>,
 {
     pub fn try_new(
-        general_path: P,
-        runtime_path: P,
-        agent_params_path: P,
-        scenario_path: P,
+        general_path: String,
+        runtime_path: String,
+        agent_params_path: String,
+        scenario_path: String,
         identifier: String,
         overwriting: bool,
     ) -> anyhow::Result<Self>
@@ -84,13 +82,13 @@ where
     fn create_metadata(&self) -> BTreeMap<String, String> {
         BTreeMap::from_iter([
             ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-            ("general".to_string(), self.general.get_path_string()),
-            ("runtime".to_string(), self.runtime.get_path_string()),
+            ("general".to_string(), self.general.path.to_string()),
+            ("runtime".to_string(), self.runtime.path.to_string()),
             (
                 "agent_params".to_string(),
-                self.agent_params.get_path_string(),
+                self.agent_params.path.to_string(),
             ),
-            ("scenario".to_string(), self.scenario.get_path_string()),
+            ("scenario".to_string(), self.scenario.path.to_string()),
             (
                 "num_parallel".to_string(),
                 self.runtime.data.num_parallel.to_string(),
@@ -377,11 +375,11 @@ mod tests {
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
         let scenario_path = "./test/config/scenario.toml";
-        let runner = Runner::<_, f32>::try_new(
-            general_path,
-            runtime_path,
-            agent_params_path,
-            scenario_path,
+        let runner = Runner::<f32>::try_new(
+            general_path.to_string(),
+            runtime_path.to_string(),
+            agent_params_path.to_string(),
+            scenario_path.to_string(),
             "run_test".to_string(),
             true,
         )?;

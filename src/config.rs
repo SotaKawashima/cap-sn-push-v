@@ -6,13 +6,13 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_with::serde_as;
 
-pub struct ConfigData<P: AsRef<Path>, T> {
-    pub path: P,
+pub struct ConfigData<T> {
+    pub path: String,
     pub data: T,
 }
 
-impl<P: AsRef<Path>, T> ConfigData<P, T> {
-    pub fn try_new<S>(path: P) -> anyhow::Result<Self>
+impl<T> ConfigData<T> {
+    pub fn try_new<S>(path: String) -> anyhow::Result<Self>
     where
         S: DeserializeOwned,
         S: TryInto<T>,
@@ -20,10 +20,6 @@ impl<P: AsRef<Path>, T> ConfigData<P, T> {
     {
         let data = DataFormat::read(&path)?.parse::<S>()?.try_into()?;
         Ok(Self { path, data })
-    }
-
-    pub fn get_path_string(&self) -> String {
-        self.path.as_ref().to_str().unwrap().to_string()
     }
 }
 
@@ -85,17 +81,27 @@ pub enum FileReadError {
     InvalidExtension(String),
     #[error("{0}")]
     IntoStringError(#[from] std::str::Utf8Error),
-    #[error("{0}")]
-    IOError(#[from] io::Error),
+    #[error("{err}: {path}")]
+    IOError { path: String, err: io::Error },
 }
 
 impl DataFormat {
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, FileReadError> {
-        match path.as_ref().extension() {
+    pub fn read(path: &str) -> Result<Self, FileReadError> {
+        match Path::new(path).extension() {
             None => Err(FileReadError::NoExtension),
             Some(ext) => match <&str>::try_from(ext)? {
-                "json" => Ok(DataFormat::JSON(fs::read_to_string(path)?)),
-                "toml" => Ok(DataFormat::TOML(fs::read_to_string(path)?)),
+                "json" => Ok(DataFormat::JSON(fs::read_to_string(path).map_err(
+                    |err| FileReadError::IOError {
+                        path: path.to_string(),
+                        err,
+                    },
+                )?)),
+                "toml" => Ok(DataFormat::TOML(fs::read_to_string(path).map_err(
+                    |err| FileReadError::IOError {
+                        path: path.to_string(),
+                        err,
+                    },
+                )?)),
                 s => Err(FileReadError::InvalidExtension(s.to_string())),
             },
         }
