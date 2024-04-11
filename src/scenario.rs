@@ -17,11 +17,17 @@ use crate::opinion::O;
 struct GraphInfo {
     directed: bool,
     location: DataLocation,
+    #[serde(default = "default_transposed")]
+    transposed: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
 enum DataLocation {
     LocalFile(String),
+}
+
+fn default_transposed() -> bool {
+    false
 }
 
 impl TryFrom<GraphInfo> for GraphB {
@@ -30,8 +36,11 @@ impl TryFrom<GraphInfo> for GraphB {
     fn try_from(value: GraphInfo) -> Result<Self, Self::Error> {
         match value.location {
             DataLocation::LocalFile(path) => {
-                let builder = ParseBuilder::new(File::open(path)?, DataFormat::EdgeList);
+                let mut builder = ParseBuilder::new(File::open(path)?, DataFormat::EdgeList);
                 if value.directed {
+                    if value.transposed {
+                        builder = builder.transpose();
+                    }
                     Ok(GraphB::Di(builder.parse::<DiGraphB>()?))
                 } else {
                     Ok(GraphB::Ud(builder.parse::<UndiGraphB>()?))

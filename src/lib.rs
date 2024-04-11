@@ -394,4 +394,28 @@ mod tests {
         assert_eq!(metadata["scenario"], scenario_path);
         Ok(())
     }
+
+    #[test]
+    fn test_exec_trans() {
+        let general_path = "./test/config/general.toml";
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path_t = "./test/config/scenario-t.toml";
+        let scenario_path = "./test/config/scenario.toml";
+        let temp = "./test/config/temp";
+        fs::rename(scenario_path, temp).unwrap();
+        fs::rename(scenario_path_t, scenario_path).unwrap();
+
+        let runner = Runner::<f32>::try_new(
+            general_path.to_string(),
+            runtime_path.to_string(),
+            agent_params_path.to_string(),
+            scenario_path.to_string(),
+            "run_test-t".to_string(),
+            true,
+        );
+        let _ = runner.and_then(Runner::run);
+        fs::rename(scenario_path, scenario_path_t).unwrap();
+        fs::rename(temp, scenario_path).unwrap();
+    }
 }
