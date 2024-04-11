@@ -1,11 +1,14 @@
-use arrow2::array::{Array, BooleanArray, PrimitiveArray};
-use arrow2::chunk::Chunk;
-use arrow2::datatypes::Schema;
-use arrow2::datatypes::{DataType, Field};
-use arrow2::io::ipc::write::{Compression, FileWriter, WriteOptions};
-use std::collections::BTreeMap;
+use arrow::array::{ArrayRef, BooleanArray, PrimitiveArray, RecordBatch};
+use arrow::datatypes::SchemaRef;
+use arrow::{
+    datatypes::{DataType, Field, Schema},
+    ipc::writer::{FileWriter, IpcWriteOptions},
+    ipc::CompressionType,
+};
+use std::collections::HashMap;
 use std::fs::File;
-use std::path::PathBuf;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 use crate::config::Output;
 use crate::info::InfoLabel;
@@ -54,20 +57,35 @@ pub struct InfoStat {
     num_fst_viewed: Vec<u32>,
 }
 
-impl TryFrom<&InfoStat> for Chunk<Box<dyn Array>> {
-    type Error = arrow2::error::Error;
+impl StatTrait for InfoStat {
+    fn fields() -> Vec<Field> {
+        vec![
+            Field::new("num_par", DataType::UInt32, false),
+            Field::new("num_iter", DataType::UInt32, false),
+            Field::new("t", DataType::UInt32, false),
+            Field::new("info_label", DataType::UInt8, false),
+            Field::new("num_received", DataType::UInt32, false),
+            Field::new("num_shared", DataType::UInt32, false),
+            Field::new("num_viewed", DataType::UInt32, false),
+            Field::new("num_fst_viewed", DataType::UInt32, false),
+        ]
+    }
 
-    fn try_from(value: &InfoStat) -> Result<Self, Self::Error> {
-        Chunk::try_new(vec![
-            PrimitiveArray::from_slice(&value.num_par).boxed(),
-            PrimitiveArray::from_slice(&value.num_iter).boxed(),
-            PrimitiveArray::from_slice(&value.t).boxed(),
-            PrimitiveArray::from_slice(&value.info_label).boxed(),
-            PrimitiveArray::from_slice(&value.num_received).boxed(),
-            PrimitiveArray::from_slice(&value.num_shared).boxed(),
-            PrimitiveArray::from_slice(&value.num_viewed).boxed(),
-            PrimitiveArray::from_slice(&value.num_fst_viewed).boxed(),
-        ])
+    fn to_columns(self) -> Vec<ArrayRef> {
+        vec![
+            Arc::new(PrimitiveArray::from(self.num_par)),
+            Arc::new(PrimitiveArray::from(self.num_iter)),
+            Arc::new(PrimitiveArray::from(self.t)),
+            Arc::new(PrimitiveArray::from(self.info_label)),
+            Arc::new(PrimitiveArray::from(self.num_received)),
+            Arc::new(PrimitiveArray::from(self.num_shared)),
+            Arc::new(PrimitiveArray::from(self.num_viewed)),
+            Arc::new(PrimitiveArray::from(self.num_fst_viewed)),
+        ]
+    }
+
+    fn label() -> &'static str {
+        "info"
     }
 }
 
@@ -88,26 +106,6 @@ impl InfoStat {
         self.num_viewed.push(d.num_viewed);
         self.num_fst_viewed.push(d.num_fst_viewed);
     }
-
-    fn get_fields() -> Vec<Field> {
-        vec![
-            Field::new("num_par", DataType::UInt32, false),
-            Field::new("num_iter", DataType::UInt32, false),
-            Field::new("t", DataType::UInt32, false),
-            Field::new("info_label", DataType::UInt8, false),
-            Field::new("num_received", DataType::UInt32, false),
-            Field::new("num_shared", DataType::UInt32, false),
-            Field::new("num_viewed", DataType::UInt32, false),
-            Field::new("num_fst_viewed", DataType::UInt32, false),
-        ]
-    }
-
-    fn output_path(output: &Output, identifier: &str) -> PathBuf {
-        output.location.join(format!(
-            "{}.arrow",
-            [&identifier, "info", &output.suffix].join("_")
-        ))
-    }
 }
 
 #[derive(Default)]
@@ -119,16 +117,8 @@ pub struct AgentStat {
     selfish: Vec<bool>,
 }
 
-impl AgentStat {
-    pub fn push_selfish(&mut self, num_par: u32, num_iter: u32, t: u32, agent_idx: usize) {
-        self.num_par.push(num_par);
-        self.num_iter.push(num_iter);
-        self.t.push(t);
-        self.agent_idx.push(agent_idx as u32);
-        self.selfish.push(true);
-    }
-
-    fn get_fields() -> Vec<Field> {
+impl StatTrait for AgentStat {
+    fn fields() -> Vec<Field> {
         vec![
             Field::new("num_par", DataType::UInt32, false),
             Field::new("num_iter", DataType::UInt32, false),
@@ -138,25 +128,28 @@ impl AgentStat {
         ]
     }
 
-    fn output_path(output: &Output, identifier: &str) -> PathBuf {
-        output.location.join(format!(
-            "{}.arrow",
-            [&identifier, "agent", &output.suffix].join("_")
-        ))
+    fn to_columns(self) -> Vec<ArrayRef> {
+        vec![
+            Arc::new(PrimitiveArray::from(self.num_par)),
+            Arc::new(PrimitiveArray::from(self.num_iter)),
+            Arc::new(PrimitiveArray::from(self.t)),
+            Arc::new(PrimitiveArray::from(self.agent_idx)),
+            Arc::new(BooleanArray::from(self.selfish)),
+        ]
+    }
+
+    fn label() -> &'static str {
+        "agent"
     }
 }
 
-impl TryFrom<&AgentStat> for Chunk<Box<dyn Array>> {
-    type Error = arrow2::error::Error;
-
-    fn try_from(value: &AgentStat) -> Result<Self, Self::Error> {
-        Chunk::try_new(vec![
-            PrimitiveArray::from_slice(&value.num_par).boxed(),
-            PrimitiveArray::from_slice(&value.num_iter).boxed(),
-            PrimitiveArray::from_slice(&value.t).boxed(),
-            PrimitiveArray::from_slice(&value.agent_idx).boxed(),
-            BooleanArray::from_slice(&value.selfish).boxed(),
-        ])
+impl AgentStat {
+    pub fn push_selfish(&mut self, num_par: u32, num_iter: u32, t: u32, agent_idx: usize) {
+        self.num_par.push(num_par);
+        self.num_iter.push(num_iter);
+        self.t.push(t);
+        self.agent_idx.push(agent_idx as u32);
+        self.selfish.push(true);
     }
 }
 
@@ -185,15 +178,8 @@ pub struct PopStat {
     num_selfish: Vec<u32>,
 }
 
-impl PopStat {
-    pub fn push(&mut self, num_par: u32, num_iter: u32, t: u32, d: PopData) {
-        self.num_par.push(num_par);
-        self.num_iter.push(num_iter);
-        self.t.push(t);
-        self.num_selfish.push(d.num_selfish);
-    }
-
-    fn get_fields() -> Vec<Field> {
+impl StatTrait for PopStat {
+    fn fields() -> Vec<Field> {
         vec![
             Field::new("num_par", DataType::UInt32, false),
             Field::new("num_iter", DataType::UInt32, false),
@@ -202,24 +188,26 @@ impl PopStat {
         ]
     }
 
-    fn output_path(output: &Output, identifier: &str) -> PathBuf {
-        output.location.join(format!(
-            "{}.arrow",
-            [&identifier, "pop", &output.suffix].join("_")
-        ))
+    fn to_columns(self) -> Vec<ArrayRef> {
+        vec![
+            Arc::new(PrimitiveArray::from(self.num_par)),
+            Arc::new(PrimitiveArray::from(self.num_iter)),
+            Arc::new(PrimitiveArray::from(self.t)),
+            Arc::new(PrimitiveArray::from(self.num_selfish)),
+        ]
+    }
+
+    fn label() -> &'static str {
+        "pop"
     }
 }
 
-impl TryFrom<&PopStat> for Chunk<Box<dyn Array>> {
-    type Error = arrow2::error::Error;
-
-    fn try_from(value: &PopStat) -> Result<Self, Self::Error> {
-        Chunk::try_new(vec![
-            PrimitiveArray::from_slice(&value.num_par).boxed(),
-            PrimitiveArray::from_slice(&value.num_iter).boxed(),
-            PrimitiveArray::from_slice(&value.t).boxed(),
-            PrimitiveArray::from_slice(&value.num_selfish).boxed(),
-        ])
+impl PopStat {
+    pub fn push(&mut self, num_par: u32, num_iter: u32, t: u32, d: PopData) {
+        self.num_par.push(num_par);
+        self.num_iter.push(num_iter);
+        self.t.push(t);
+        self.num_selfish.push(d.num_selfish);
     }
 }
 
@@ -229,10 +217,69 @@ impl From<PopStat> for Stat {
     }
 }
 
+pub trait StatTrait {
+    fn label() -> &'static str;
+    fn fields() -> Vec<Field>;
+    fn to_columns(self) -> Vec<ArrayRef>;
+}
+
+struct MyWriter<T> {
+    writer: FileWriter<File>,
+    schema: SchemaRef,
+    _marker: PhantomData<T>,
+}
+
+impl<T: StatTrait> MyWriter<T> {
+    fn try_new(
+        output: &Output,
+        identifier: &str,
+        metadata: HashMap<String, String>,
+        overwriting: bool,
+        compress: bool,
+    ) -> anyhow::Result<Self> {
+        let output_path = output.location.join(format!(
+            "{}.arrow",
+            [identifier, T::label(), &output.suffix].join("_")
+        ));
+
+        if !overwriting && output_path.exists() {
+            panic!(
+                "{} already exists. If you want to overwrite it, run with the overwriting option.",
+                output_path.display()
+            );
+        }
+
+        let schema = SchemaRef::new(Schema::new_with_metadata(T::fields(), metadata));
+        let writer = FileWriter::try_new_with_options(
+            File::create(output_path)?,
+            &schema,
+            IpcWriteOptions::default().try_with_compression(if compress {
+                Some(CompressionType::ZSTD)
+            } else {
+                None
+            })?,
+        )?;
+        Ok(Self {
+            writer,
+            schema,
+            _marker: PhantomData,
+        })
+    }
+
+    fn write(&mut self, data: T) -> arrow::error::Result<()> {
+        let batch = RecordBatch::try_new(self.schema.clone(), data.to_columns())?;
+        self.writer.write(&batch)
+    }
+
+    fn finish(&mut self) -> arrow::error::Result<()> {
+        self.writer.finish()
+    }
+}
+
 pub struct FileWriters {
-    info: FileWriter<File>,
-    agent: FileWriter<File>,
-    pop: FileWriter<File>,
+    info: MyWriter<InfoStat>,
+    agent: MyWriter<AgentStat>,
+    pop: MyWriter<PopStat>,
 }
 
 impl FileWriters {
@@ -240,74 +287,40 @@ impl FileWriters {
         output: &Output,
         identifier: &str,
         overwriting: bool,
-        metadata: BTreeMap<String, String>,
+        metadata: HashMap<String, String>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
-            info: create_writer(
-                InfoStat::output_path(output, identifier),
-                overwriting,
-                output.compress,
-                InfoStat::get_fields(),
+            info: MyWriter::try_new(
+                output,
+                identifier,
                 metadata.clone(),
-            )?,
-            agent: create_writer(
-                AgentStat::output_path(output, identifier),
                 overwriting,
                 output.compress,
-                AgentStat::get_fields(),
+            )?,
+            agent: MyWriter::try_new(
+                output,
+                identifier,
                 metadata.clone(),
-            )?,
-            pop: create_writer(
-                PopStat::output_path(output, identifier),
                 overwriting,
                 output.compress,
-                PopStat::get_fields(),
-                metadata,
             )?,
+            pop: MyWriter::try_new(output, identifier, metadata, overwriting, output.compress)?,
         })
     }
 
-    pub fn write(&mut self, stat: Stat) -> arrow2::error::Result<()> {
+    pub fn write(&mut self, stat: Stat) -> arrow::error::Result<()> {
         match stat {
-            Stat::Info(ref stat) => self.info.write(&stat.try_into()?, None)?,
-            Stat::Agent(ref stat) => self.agent.write(&stat.try_into()?, None)?,
-            Stat::Pop(ref stat) => self.pop.write(&stat.try_into()?, None)?,
+            Stat::Info(stat) => self.info.write(stat)?,
+            Stat::Agent(stat) => self.agent.write(stat)?,
+            Stat::Pop(stat) => self.pop.write(stat)?,
         }
         Ok(())
     }
 
-    pub fn finish(&mut self) -> arrow2::error::Result<()> {
+    pub fn finish(&mut self) -> arrow::error::Result<()> {
         self.info.finish()?;
         self.agent.finish()?;
         self.pop.finish()?;
         Ok(())
     }
-}
-
-fn create_writer(
-    output_path: PathBuf,
-    overwriting: bool,
-    compress: bool,
-    fields: Vec<Field>,
-    metadata: BTreeMap<String, String>,
-) -> anyhow::Result<FileWriter<File>> {
-    if !overwriting && output_path.exists() {
-        panic!(
-            "{} already exists. If you want to overwrite it, run with the overwriting option.",
-            output_path.display()
-        );
-    }
-
-    let writer = File::create(output_path)?;
-    let compression: Option<Compression> = if compress {
-        Some(Compression::ZSTD)
-    } else {
-        None
-    };
-    Ok(FileWriter::try_new(
-        writer,
-        Schema { fields, metadata },
-        None,
-        WriteOptions { compression },
-    )?)
 }

@@ -8,7 +8,12 @@ mod scenario;
 mod stat;
 mod value;
 
-use std::{collections::BTreeMap, iter::Sum, sync::mpsc, thread};
+use std::{
+    collections::{BTreeMap, HashMap},
+    iter::Sum,
+    sync::mpsc,
+    thread,
+};
 
 use approx::UlpsEq;
 use graph_lib::prelude::Graph;
@@ -79,8 +84,8 @@ where
         })
     }
 
-    fn create_metadata(&self) -> BTreeMap<String, String> {
-        BTreeMap::from_iter([
+    fn create_metadata(&self) -> HashMap<String, String> {
+        HashMap::from_iter([
             ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
             ("general".to_string(), self.general.path.to_string()),
             ("runtime".to_string(), self.runtime.path.to_string()),
@@ -366,7 +371,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::Runner;
-    use arrow2::io::ipc::read::read_file_metadata;
+    use arrow::{compute::concat_batches, ipc::reader::FileReader};
+    use itertools::Itertools;
     use std::fs;
 
     #[test]
@@ -380,14 +386,13 @@ mod tests {
             runtime_path.to_string(),
             agent_params_path.to_string(),
             scenario_path.to_string(),
-            "run_test".to_string(),
+            "run_test1".to_string(),
             true,
         )?;
         runner.run()?;
 
-        let mut reader = fs::File::open("./test/run_test_info_out.arrow")?;
-        let metadata = read_file_metadata(&mut reader)?;
-        let metadata = metadata.schema.metadata;
+        let reader = FileReader::try_new(fs::File::open("./test/run_test_info_out.arrow")?, None)?;
+        let metadata = &reader.schema().metadata;
         assert_eq!(metadata["general"], general_path);
         assert_eq!(metadata["runtime"], runtime_path);
         assert_eq!(metadata["agent_params"], agent_params_path);
@@ -417,5 +422,27 @@ mod tests {
         let _ = runner.and_then(Runner::run);
         fs::rename(scenario_path, scenario_path_t).unwrap();
         fs::rename(temp, scenario_path).unwrap();
+    }
+
+    #[test]
+    fn compare_arrows() -> anyhow::Result<()> {
+        let labels = ["info", "agent", "pop"];
+        for l in labels {
+            let reader = FileReader::try_new(
+                fs::File::open(format!("./test/run_test_{l}_out.arrow"))?,
+                None,
+            )?;
+            let reader_t = FileReader::try_new(
+                fs::File::open(format!("./test/run_test-t_{l}_out.arrow"))?,
+                None,
+            )?;
+            let b = concat_batches(&reader.schema(), &reader.try_collect::<_, Vec<_>, _>()?)?;
+            let b_t = concat_batches(&reader_t.schema(), &reader_t.try_collect::<_, Vec<_>, _>()?)?;
+            assert_eq!(b.num_columns(), b_t.num_columns());
+            for i in 0..b.num_columns() {
+                assert_eq!(b.column(i), b_t.column(i));
+            }
+        }
+        Ok(())
     }
 }
