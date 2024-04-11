@@ -6,7 +6,7 @@ use rand_distr::uniform::SampleUniform;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::{fs::File, io, ops::AddAssign};
 use subjective_logic::mul::labeled::SimplexD1;
 
@@ -72,8 +72,8 @@ where
 {
     pub graph: GraphB,
     pub info_objects: Vec<InfoObject<V>>,
-    /// time -> (agent_idx, info_obj_idx)
-    pub table: BTreeMap<u32, VecDeque<(usize, usize)>>,
+    /// time -> Inform
+    pub table: BTreeMap<u32, VecDeque<Inform>>,
     pub observer: Option<Observer<V>>,
     pub fnum_nodes: V,
     pub mean_degree: V,
@@ -86,10 +86,10 @@ struct Event {
     informs: Vec<Inform>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Inform {
-    agent_idx: usize,
-    info_obj_idx: usize,
+    pub agent_idx: usize,
+    pub info_obj_idx: usize,
 }
 
 #[serde_as]
@@ -129,27 +129,14 @@ where
         let graph = GraphB::try_from(graph)?;
         let mut table = BTreeMap::default();
         for Event { time, informs } in events {
-            table.insert(
-                time,
-                informs
-                    .into_iter()
-                    .map(
-                        |Inform {
-                             agent_idx,
-                             info_obj_idx: info_object_idx,
-                         }| {
-                            // let idx = match info {
-                            //     InfoParam::Idx(idx) => idx,
-                            //     InfoParam::Obj(obj) => {
-                            //         info_objects.push(obj);
-                            //         info_objects.len() - 1
-                            //     }
-                            // };
-                            (agent_idx, info_object_idx)
-                        },
-                    )
-                    .collect(),
-            );
+            match table.entry(time) {
+                btree_map::Entry::Vacant(e) => {
+                    e.insert(VecDeque::from(informs));
+                }
+                btree_map::Entry::Occupied(mut e) => {
+                    e.get_mut().extend(informs);
+                }
+            }
         }
 
         let num_nodes = graph.node_count();

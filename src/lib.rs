@@ -25,7 +25,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use agent::{Agent, AgentParams};
 use config::{ConfigData, General, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
-use scenario::{Scenario, ScenarioParam};
+use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
 use tracing::{info, span, Level};
 
@@ -238,16 +238,20 @@ where
             let mut pop_data = PopData::default();
 
             if let Some(informms) = event_table.remove(&t) {
-                for (agent_idx, info_object_idx) in informms {
+                for Inform {
+                    agent_idx,
+                    info_obj_idx,
+                } in informms
+                {
                     let info_idx = infos.len();
                     let info = self
                         .info_builder
-                        .build(info_idx, &info_objects[info_object_idx]);
+                        .build(info_idx, &info_objects[info_obj_idx]);
                     info_data_map.entry(info.content.label).or_default();
 
                     let span = span!(Level::INFO, "IA", "#" = agent_idx);
                     let _guard = span.enter();
-                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_object_idx, "#" = info_idx);
+                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
                     agent.set_info_opinions(&info, &self.agent_params.base_rates);
@@ -349,7 +353,10 @@ where
                         if observer_prob > self.rng.gen() {
                             let informs = event_table.entry(t + 1).or_default();
                             // senders of observed info have priority over existing senders.
-                            informs.push_front((agent_idx, observer.observed_info_obj_idx));
+                            informs.push_front(Inform {
+                                agent_idx,
+                                info_obj_idx: observer.observed_info_obj_idx,
+                            });
                         }
                     }
                 }
@@ -373,75 +380,154 @@ mod tests {
     use crate::Runner;
     use arrow::{compute::concat_batches, ipc::reader::FileReader};
     use itertools::Itertools;
-    use std::fs;
+    use std::fs::{self, File};
 
-    #[test]
-    fn test_exec() -> anyhow::Result<()> {
-        let general_path = "./test/config/general.toml";
-        let runtime_path = "./test/config/runtime.toml";
-        let agent_params_path = "./test/config/agent_params.toml";
-        let scenario_path = "./test/config/scenario.toml";
+    fn exec(
+        general_path: &str,
+        runtime_path: &str,
+        agent_params_path: &str,
+        scenario_path: &str,
+        identifier: &str,
+    ) -> anyhow::Result<()> {
         let runner = Runner::<f32>::try_new(
             general_path.to_string(),
             runtime_path.to_string(),
             agent_params_path.to_string(),
             scenario_path.to_string(),
-            "run_test1".to_string(),
+            identifier.to_string(),
             true,
         )?;
         runner.run()?;
+        Ok(())
+    }
 
-        let reader = FileReader::try_new(fs::File::open("./test/run_test_info_out.arrow")?, None)?;
+    fn check_metadata(
+        general_path: &str,
+        runtime_path: &str,
+        agent_params_path: &str,
+        scenario_path: &str,
+        reader: &FileReader<File>,
+    ) {
         let metadata = &reader.schema().metadata;
         assert_eq!(metadata["general"], general_path);
         assert_eq!(metadata["runtime"], runtime_path);
         assert_eq!(metadata["agent_params"], agent_params_path);
         assert_eq!(metadata["scenario"], scenario_path);
+    }
+
+    fn compare_arrows(
+        reader_a: FileReader<File>,
+        reader_b: FileReader<File>,
+    ) -> anyhow::Result<()> {
+        let ab = concat_batches(&reader_a.schema(), &reader_a.try_collect::<_, Vec<_>, _>()?)?;
+        let bb = concat_batches(&reader_b.schema(), &reader_b.try_collect::<_, Vec<_>, _>()?)?;
+        assert_eq!(ab.num_columns(), bb.num_columns());
+        for i in 0..ab.num_columns() {
+            assert_eq!(ab.column(i), bb.column(i));
+        }
         Ok(())
     }
 
     #[test]
-    fn test_exec_trans() {
+    fn test_transposed() -> anyhow::Result<()> {
         let general_path = "./test/config/general.toml";
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
-        let scenario_path_t = "./test/config/scenario-t.toml";
         let scenario_path = "./test/config/scenario.toml";
-        let temp = "./test/config/temp";
-        fs::rename(scenario_path, temp).unwrap();
-        fs::rename(scenario_path_t, scenario_path).unwrap();
+        let scenario_path_t = "./test/config/scenario-t.toml";
 
-        let runner = Runner::<f32>::try_new(
-            general_path.to_string(),
-            runtime_path.to_string(),
-            agent_params_path.to_string(),
-            scenario_path.to_string(),
-            "run_test-t".to_string(),
-            true,
-        );
-        let _ = runner.and_then(Runner::run);
-        fs::rename(scenario_path, scenario_path_t).unwrap();
-        fs::rename(temp, scenario_path).unwrap();
+        exec(
+            general_path,
+            runtime_path,
+            agent_params_path,
+            scenario_path,
+            "run_test",
+        )?;
+        exec(
+            general_path,
+            runtime_path,
+            agent_params_path,
+            scenario_path_t,
+            "run_test-t",
+        )?;
+
+        let labels = ["info", "agent", "pop"];
+        for label in labels {
+            let reader_a = FileReader::try_new(
+                fs::File::open(format!("./test/run_test_{label}_out.arrow"))?,
+                None,
+            )?;
+            let reader_b = FileReader::try_new(
+                fs::File::open(format!("./test/run_test-t_{label}_out.arrow"))?,
+                None,
+            )?;
+            check_metadata(
+                general_path,
+                runtime_path,
+                agent_params_path,
+                scenario_path,
+                &reader_a,
+            );
+            check_metadata(
+                general_path,
+                runtime_path,
+                agent_params_path,
+                scenario_path_t,
+                &reader_b,
+            );
+            compare_arrows(reader_a, reader_b)?;
+        }
+        Ok(())
     }
 
     #[test]
-    fn compare_arrows() -> anyhow::Result<()> {
+    fn test_events() -> anyhow::Result<()> {
+        let general_path = "./test/config/general.toml";
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path0 = "./test/config/scenario-e0.toml";
+        let scenario_path1 = "./test/config/scenario-e1.toml";
+
+        exec(
+            general_path,
+            runtime_path,
+            agent_params_path,
+            scenario_path0,
+            "run_test-e0",
+        )?;
+        exec(
+            general_path,
+            runtime_path,
+            agent_params_path,
+            scenario_path1,
+            "run_test-e1",
+        )?;
+
         let labels = ["info", "agent", "pop"];
-        for l in labels {
-            let reader = FileReader::try_new(
-                fs::File::open(format!("./test/run_test_{l}_out.arrow"))?,
+        for label in labels {
+            let reader_a = FileReader::try_new(
+                fs::File::open(format!("./test/run_test-e0_{label}_out.arrow"))?,
                 None,
             )?;
-            let reader_t = FileReader::try_new(
-                fs::File::open(format!("./test/run_test-t_{l}_out.arrow"))?,
+            let reader_b = FileReader::try_new(
+                fs::File::open(format!("./test/run_test-e1_{label}_out.arrow"))?,
                 None,
             )?;
-            let b = concat_batches(&reader.schema(), &reader.try_collect::<_, Vec<_>, _>()?)?;
-            let b_t = concat_batches(&reader_t.schema(), &reader_t.try_collect::<_, Vec<_>, _>()?)?;
-            assert_eq!(b.num_columns(), b_t.num_columns());
-            for i in 0..b.num_columns() {
-                assert_eq!(b.column(i), b_t.column(i));
-            }
+            check_metadata(
+                general_path,
+                runtime_path,
+                agent_params_path,
+                scenario_path0,
+                &reader_a,
+            );
+            check_metadata(
+                general_path,
+                runtime_path,
+                agent_params_path,
+                scenario_path1,
+                &reader_b,
+            );
+            compare_arrows(reader_a, reader_b)?;
         }
         Ok(())
     }
