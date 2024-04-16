@@ -11,6 +11,7 @@ mod value;
 use std::{
     collections::{BTreeMap, HashMap},
     iter::Sum,
+    path::PathBuf,
     sync::mpsc,
     thread,
 };
@@ -23,7 +24,7 @@ use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, S
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use agent::{Agent, AgentParams};
-use config::{ConfigData, General, Runtime};
+use config::{ConfigData, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
@@ -37,12 +38,13 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    general: ConfigData<General>,
     runtime: ConfigData<Runtime>,
     agent_params: ConfigData<AgentParams<V>>,
     scenario: ConfigData<Scenario<V>>,
     identifier: String,
+    output_dir: PathBuf,
     overwriting: bool,
+    compressing: bool,
 }
 
 impl<V> Runner<V>
@@ -64,30 +66,31 @@ where
     Exp1: Distribution<V>,
 {
     pub fn try_new(
-        general_path: String,
         runtime_path: String,
         agent_params_path: String,
         scenario_path: String,
         identifier: String,
+        output_dir: PathBuf,
         overwriting: bool,
+        compressing: bool,
     ) -> anyhow::Result<Self>
     where
         for<'de> V: serde::Deserialize<'de>,
     {
         Ok(Self {
-            general: ConfigData::try_new::<General>(general_path)?,
             runtime: ConfigData::try_new::<Runtime>(runtime_path)?,
             agent_params: ConfigData::try_new::<AgentParams<V>>(agent_params_path)?,
             scenario: ConfigData::try_new::<ScenarioParam<V>>(scenario_path)?,
             identifier,
+            output_dir,
             overwriting,
+            compressing,
         })
     }
 
     fn create_metadata(&self) -> HashMap<String, String> {
         HashMap::from_iter([
             ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-            ("general".to_string(), self.general.path.to_string()),
             ("runtime".to_string(), self.runtime.path.to_string()),
             (
                 "agent_params".to_string(),
@@ -112,9 +115,10 @@ where
     {
         let (sender, receiver) = mpsc::channel::<Stat>();
         let mut writers = FileWriters::try_new(
-            &self.general.data.output,
             &self.identifier,
+            &self.output_dir,
             self.overwriting,
+            self.compressing,
             self.create_metadata(),
         )?;
 
@@ -383,18 +387,18 @@ mod tests {
     use std::fs::{self, File};
 
     fn exec(
-        general_path: &str,
         runtime_path: &str,
         agent_params_path: &str,
         scenario_path: &str,
         identifier: &str,
     ) -> anyhow::Result<()> {
         let runner = Runner::<f32>::try_new(
-            general_path.to_string(),
             runtime_path.to_string(),
             agent_params_path.to_string(),
             scenario_path.to_string(),
             identifier.to_string(),
+            "./test".into(),
+            true,
             true,
         )?;
         runner.run()?;
@@ -402,14 +406,12 @@ mod tests {
     }
 
     fn check_metadata(
-        general_path: &str,
         runtime_path: &str,
         agent_params_path: &str,
         scenario_path: &str,
         reader: &FileReader<File>,
     ) {
         let metadata = &reader.schema().metadata;
-        assert_eq!(metadata["general"], general_path);
         assert_eq!(metadata["runtime"], runtime_path);
         assert_eq!(metadata["agent_params"], agent_params_path);
         assert_eq!(metadata["scenario"], scenario_path);
@@ -430,21 +432,13 @@ mod tests {
 
     #[test]
     fn test_transposed() -> anyhow::Result<()> {
-        let general_path = "./test/config/general.toml";
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
         let scenario_path = "./test/config/scenario.toml";
         let scenario_path_t = "./test/config/scenario-t.toml";
 
+        exec(runtime_path, agent_params_path, scenario_path, "run_test")?;
         exec(
-            general_path,
-            runtime_path,
-            agent_params_path,
-            scenario_path,
-            "run_test",
-        )?;
-        exec(
-            general_path,
             runtime_path,
             agent_params_path,
             scenario_path_t,
@@ -461,20 +455,8 @@ mod tests {
                 fs::File::open(format!("./test/run_test-t_{label}_out.arrow"))?,
                 None,
             )?;
-            check_metadata(
-                general_path,
-                runtime_path,
-                agent_params_path,
-                scenario_path,
-                &reader_a,
-            );
-            check_metadata(
-                general_path,
-                runtime_path,
-                agent_params_path,
-                scenario_path_t,
-                &reader_b,
-            );
+            check_metadata(runtime_path, agent_params_path, scenario_path, &reader_a);
+            check_metadata(runtime_path, agent_params_path, scenario_path_t, &reader_b);
             compare_arrows(reader_a, reader_b)?;
         }
         Ok(())
@@ -482,21 +464,18 @@ mod tests {
 
     #[test]
     fn test_events() -> anyhow::Result<()> {
-        let general_path = "./test/config/general.toml";
         let runtime_path = "./test/config/runtime.toml";
         let agent_params_path = "./test/config/agent_params.toml";
         let scenario_path0 = "./test/config/scenario-e0.toml";
         let scenario_path1 = "./test/config/scenario-e1.toml";
 
         exec(
-            general_path,
             runtime_path,
             agent_params_path,
             scenario_path0,
             "run_test-e0",
         )?;
         exec(
-            general_path,
             runtime_path,
             agent_params_path,
             scenario_path1,
@@ -513,20 +492,8 @@ mod tests {
                 fs::File::open(format!("./test/run_test-e1_{label}_out.arrow"))?,
                 None,
             )?;
-            check_metadata(
-                general_path,
-                runtime_path,
-                agent_params_path,
-                scenario_path0,
-                &reader_a,
-            );
-            check_metadata(
-                general_path,
-                runtime_path,
-                agent_params_path,
-                scenario_path1,
-                &reader_b,
-            );
+            check_metadata(runtime_path, agent_params_path, scenario_path0, &reader_a);
+            check_metadata(runtime_path, agent_params_path, scenario_path1, &reader_b);
             compare_arrows(reader_a, reader_b)?;
         }
         Ok(())

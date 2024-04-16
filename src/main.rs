@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, path::PathBuf};
 
 use cap_sn::{
     config::{DataFormat, FileReadError},
@@ -11,9 +11,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 struct Cli {
     /// string to identify given configuration data
     identifier: String,
-    /// the path of a general config file
-    #[arg(short, long)]
-    general: String,
+    /// the path of output files
+    output_dir: PathBuf,
     /// the path of a runtime config file
     #[arg(short, long)]
     runtime: String,
@@ -26,6 +25,9 @@ struct Cli {
     /// Enable overwriting of a output file
     #[arg(short, long, default_value_t = false)]
     overwriting: bool,
+    /// Compress a output file
+    #[arg(short, long, default_value_t = true)]
+    compressing: bool,
 }
 
 #[derive(clap::Args)]
@@ -60,12 +62,13 @@ fn main() -> anyhow::Result<()> {
 
     let args = Cli::parse();
     let executor = Runner::<f32>::try_new(
-        args.general,
         args.runtime,
         args.agent_params,
         args.scenario,
         args.identifier,
+        args.output_dir,
         args.overwriting,
+        args.compressing,
     )?;
     executor.run()
 }

@@ -8,9 +8,9 @@ use arrow::{
 use std::collections::HashMap;
 use std::fs::File;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::config::Output;
 use crate::info::InfoLabel;
 
 #[derive(Default)]
@@ -231,17 +231,13 @@ struct MyWriter<T> {
 
 impl<T: StatTrait> MyWriter<T> {
     fn try_new(
-        output: &Output,
+        output_dir: &PathBuf,
         identifier: &str,
         metadata: HashMap<String, String>,
         overwriting: bool,
         compress: bool,
     ) -> anyhow::Result<Self> {
-        let output_path = output.location.join(format!(
-            "{}.arrow",
-            [identifier, T::label(), &output.suffix].join("_")
-        ));
-
+        let output_path = output_dir.join(format!("{identifier}_{}.arrow", T::label()));
         if !overwriting && output_path.exists() {
             panic!(
                 "{} already exists. If you want to overwrite it, run with the overwriting option.",
@@ -284,27 +280,28 @@ pub struct FileWriters {
 
 impl FileWriters {
     pub fn try_new(
-        output: &Output,
         identifier: &str,
+        output_dir: &PathBuf,
         overwriting: bool,
+        compressing: bool,
         metadata: HashMap<String, String>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             info: MyWriter::try_new(
-                output,
+                output_dir,
                 identifier,
                 metadata.clone(),
                 overwriting,
-                output.compress,
+                compressing,
             )?,
             agent: MyWriter::try_new(
-                output,
+                output_dir,
                 identifier,
                 metadata.clone(),
                 overwriting,
-                output.compress,
+                compressing,
             )?,
-            pop: MyWriter::try_new(output, identifier, metadata, overwriting, output.compress)?,
+            pop: MyWriter::try_new(output_dir, identifier, metadata, overwriting, compressing)?,
         })
     }
 
