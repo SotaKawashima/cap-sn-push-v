@@ -54,7 +54,8 @@ impl TryFrom<InputConfig> for DataFormat {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::Registry::default()
         .with(tracing_subscriber::fmt::Layer::default().with_writer(io::stderr))
         .with(tracing_subscriber::EnvFilter::from_default_env())
@@ -70,5 +71,5 @@ fn main() -> anyhow::Result<()> {
         args.overwriting,
         args.compressing,
     )?;
-    executor.run()
+    executor.run().await
 }

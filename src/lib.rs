@@ -10,10 +10,10 @@ mod value;
 
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt,
     iter::Sum,
     path::PathBuf,
-    sync::mpsc,
-    thread,
+    sync::Arc,
 };
 
 use approx::UlpsEq;
@@ -21,13 +21,13 @@ use graph_lib::prelude::Graph;
 use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use agent::{Agent, AgentParams};
 use config::{ConfigData, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
+use tokio::sync::{mpsc, Semaphore};
 use tracing::{info, span, Level};
 
 pub struct Runner<V>
@@ -45,6 +45,7 @@ where
     output_dir: PathBuf,
     overwriting: bool,
     compressing: bool,
+    num_cpus: usize,
 }
 
 impl<V> Runner<V>
@@ -85,6 +86,7 @@ where
             output_dir,
             overwriting,
             compressing,
+            num_cpus: num_cpus::get(),
         })
     }
 
@@ -98,22 +100,18 @@ where
             ),
             ("scenario".to_string(), self.scenario.path.to_string()),
             (
-                "num_parallel".to_string(),
-                self.runtime.data.num_parallel.to_string(),
-            ),
-            (
                 "iteration_count".to_string(),
                 self.runtime.data.iteration_count.to_string(),
             ),
         ])
     }
 
-    pub fn run(self) -> anyhow::Result<()>
+    pub async fn run(self) -> anyhow::Result<()>
     where
-        V: FromPrimitive + ToPrimitive + Sync,
+        V: FromPrimitive + ToPrimitive + Sync + 'static,
         <V as SampleUniform>::Sampler: Sync,
     {
-        let (sender, receiver) = mpsc::channel::<Stat>();
+        let (tx, mut rx) = mpsc::channel::<Stat>(self.num_cpus);
         let mut writers = FileWriters::try_new(
             &self.identifier,
             &self.output_dir,
@@ -122,39 +120,41 @@ where
             self.create_metadata(),
         )?;
 
-        let handle = thread::spawn(move || {
-            while let Ok(stat) = receiver.recv() {
+        let handle = tokio::spawn(async move {
+            while let Some(stat) = rx.recv().await {
                 writers.write(stat).unwrap();
             }
             writers.finish().unwrap();
-            println!("finished writing.");
         });
 
         let mut rng = SmallRng::seed_from_u64(self.runtime.data.seed_state);
-        let rngs = (0..(self.runtime.data.num_parallel))
+        let rngs = (0..(self.runtime.data.iteration_count))
             .map(|_| SmallRng::from_rng(&mut rng))
             .collect::<Result<Vec<_>, _>>()?;
+        let agent_params = Arc::new(self.agent_params.data);
+        let scenario = Arc::new(self.scenario.data);
 
+        let semaphore = Arc::new(Semaphore::new(self.num_cpus));
         println!("started.");
-        rngs.into_par_iter()
-            .enumerate()
-            .for_each(|(num_par, mut rng)| {
-                let mut env = Environment::new(
-                    &self.agent_params.data,
-                    &self.scenario.data,
-                    &mut rng,
-                    sender.clone(),
-                );
-                let num_par = num_par as u32;
-                for num_iter in 0..(self.runtime.data.iteration_count) {
-                    let span = span!(Level::INFO, "tr", "p" = num_par, "i" = num_iter);
-                    let _guard = span.enter();
-                    env.execute(num_par, num_iter);
+        for (num_iter, rng) in rngs.into_iter().enumerate() {
+            let tx = tx.clone();
+            let semaphore = semaphore.clone();
+            let agent_params = agent_params.clone();
+            let scenario = scenario.clone();
+            tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.unwrap();
+                print!("[{num_iter}");
+                let ss = execute(0, num_iter as u32, agent_params, scenario, rng);
+                for s in ss {
+                    tx.send(s).await.unwrap();
                 }
+                print!(":{num_iter}]");
+                drop(_permit);
             });
-        drop(sender);
-        handle.join().unwrap();
-        println!("done.");
+        }
+        drop(tx);
+        handle.await.unwrap();
+        println!("\ndone.");
         Ok(())
     }
 }
@@ -165,218 +165,183 @@ struct Receiver {
     info_idx: usize,
 }
 
-struct Environment<'a, V, R>
+fn execute<V, R>(
+    num_par: u32,
+    num_iter: u32,
+    agent_params: Arc<AgentParams<V>>,
+    scenario: Arc<Scenario<V>>,
+    mut rng: R,
+) -> Vec<Stat>
 where
-    V: Float + UlpsEq + SampleUniform + NumAssign,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    agent_params: &'a AgentParams<V>,
-    scenario: &'a Scenario<V>,
-    rng: &'a mut R,
-    info_builder: InfoBuilder<V>,
-    agents: Vec<Agent<V>>,
-    sender: mpsc::Sender<Stat>,
-}
-
-impl<'a, V, R> Environment<'a, V, R>
-where
+    V: Float
+        + UlpsEq
+        + SampleUniform
+        + NumAssign
+        + FromPrimitive
+        + ToPrimitive
+        + Default
+        + Sum
+        + fmt::Debug,
     R: Rng,
-    V: Float + UlpsEq + SampleUniform + NumAssign + FromPrimitive + ToPrimitive,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    fn new(
-        agent_params: &'a AgentParams<V>,
-        scenario: &'a Scenario<V>,
-        rng: &'a mut R,
-        sender: mpsc::Sender<Stat>,
-    ) -> Self
-    where
-        V: Default + NumAssign,
-    {
-        let agents = (0..scenario.num_nodes)
-            .map(|_| Agent::default())
-            .collect::<Vec<_>>();
-        Self {
-            agent_params,
-            scenario,
-            rng,
-            info_builder: InfoBuilder::new(),
-            agents,
-            sender,
-        }
-    }
-
-    fn execute(&mut self, num_par: u32, num_iter: u32)
-    where
-        V: FromPrimitive + Sum + Default + std::fmt::Debug,
-    {
-        for (idx, agent) in self.agents.iter_mut().enumerate() {
+    let info_builder = InfoBuilder::<V>::new();
+    let mut agents = (0..scenario.num_nodes)
+        .map(|idx| {
+            let mut agent = Agent::default();
             let span = span!(Level::DEBUG, "init A", "#" = idx);
             let _guard = span.enter();
-            agent.reset_with(self.agent_params, self.rng);
-        }
+            agent.reset_with(&agent_params, &mut rng);
+            agent
+        })
+        .collect::<Vec<_>>();
 
-        let mut infos = Vec::<Info<V>>::new();
-        let mut receivers = Vec::new();
-        let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
-        let info_objects = &self.scenario.info_objects;
-        let mut event_table = self.scenario.table.clone();
-        let mut agents_willing_selfish = Vec::<usize>::new();
-        let mut senders = Vec::new();
+    let mut infos = Vec::<Info<V>>::new();
+    let mut receivers = Vec::new();
+    let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
+    let info_objects = &scenario.info_objects;
+    let mut event_table = scenario.table.clone();
+    let mut agents_willing_selfish = Vec::<usize>::new();
+    let mut senders = Vec::new();
 
-        let mut info_stat = InfoStat::default();
-        let mut agent_stat = AgentStat::default();
-        let mut pop_stat = PopStat::default();
-        let mut t = 0;
+    let mut info_stat = InfoStat::default();
+    let mut agent_stat = AgentStat::default();
+    let mut pop_stat = PopStat::default();
+    let mut t = 0;
 
-        while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
-        {
-            let span = span!(Level::INFO, "st", t);
-            let _guard = span.enter();
-            let mut pop_data = PopData::default();
+    while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty() {
+        let span = span!(Level::INFO, "st", t);
+        let _guard = span.enter();
+        let mut pop_data = PopData::default();
 
-            if let Some(informms) = event_table.remove(&t) {
-                for Inform {
-                    agent_idx,
-                    info_obj_idx,
-                } in informms
-                {
-                    let info_idx = infos.len();
-                    let info = self
-                        .info_builder
-                        .build(info_idx, &info_objects[info_obj_idx]);
-                    info_data_map.entry(info.content.label).or_default();
-
-                    let span = span!(Level::INFO, "IA", "#" = agent_idx);
-                    let _guard = span.enter();
-                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
-
-                    let agent = &mut self.agents[agent_idx];
-                    agent.set_info_opinions(&info, &self.agent_params.base_rates);
-                    infos.push(info);
-                    if agent.is_willing_selfish() {
-                        agents_willing_selfish.push(agent_idx);
-                    }
-
-                    senders.push(Receiver {
-                        agent_idx,
-                        info_idx,
-                    });
-                }
-            }
-
-            receivers.shuffle(self.rng);
-
-            for r @ Receiver {
+        if let Some(informms) = event_table.remove(&t) {
+            for Inform {
                 agent_idx,
-                info_idx,
-            } in receivers.drain(..)
+                info_obj_idx,
+            } in informms
             {
-                let agent = &mut self.agents[agent_idx];
-                let info = &mut infos[info_idx];
-                let info_label = info.content.label;
-                let info_data = info_data_map.get_mut(&info_label).unwrap();
-                info_data.received();
+                let info_idx = infos.len();
+                let info = info_builder.build(info_idx, &info_objects[info_obj_idx]);
+                info_data_map.entry(info.content.label).or_default();
 
-                let span = span!(Level::INFO, "SA", "#" = agent_idx);
+                let span = span!(Level::INFO, "IA", "#" = agent_idx);
                 let _guard = span.enter();
+                info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
 
-                let friend_receipt_prob = V::one()
-                    - (V::one()
-                        - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
-                        .powf(self.scenario.mean_degree);
-
-                info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
-
-                if self.rng.gen::<V>() > agent.access_prob() {
-                    continue;
-                }
-
-                let b = agent.read_info(info, friend_receipt_prob, self.agent_params, self.rng);
-                info.viewed();
-                info_data.viewed();
-                if b.sharing {
-                    info.shared();
-                    info_data.shared();
-                    senders.push(r);
-                }
-                if b.first_access {
-                    info_data.first_viewed();
-                }
-
+                let agent = &mut agents[agent_idx];
+                agent.set_info_opinions(&info, &agent_params.base_rates);
+                infos.push(info);
                 if agent.is_willing_selfish() {
                     agents_willing_selfish.push(agent_idx);
                 }
+
+                senders.push(Receiver {
+                    agent_idx,
+                    info_idx,
+                });
+            }
+        }
+
+        receivers.shuffle(&mut rng);
+
+        for r @ Receiver {
+            agent_idx,
+            info_idx,
+        } in receivers.drain(..)
+        {
+            let agent = &mut agents[agent_idx];
+            let info = &mut infos[info_idx];
+            let info_label = info.content.label;
+            let info_data = info_data_map.get_mut(&info_label).unwrap();
+            info_data.received();
+
+            let span = span!(Level::INFO, "SA", "#" = agent_idx);
+            let _guard = span.enter();
+
+            let friend_receipt_prob = V::one()
+                - (V::one() - V::from_usize(info.num_shared()).unwrap() / scenario.fnum_nodes)
+                    .powf(scenario.mean_degree);
+
+            info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
+
+            if rng.gen::<V>() > agent.access_prob() {
+                continue;
             }
 
-            for Receiver {
-                agent_idx,
-                info_idx,
-            } in senders.drain(..)
-            {
-                for bid in self.scenario.graph.successors(agent_idx) {
-                    receivers.push(Receiver {
-                        agent_idx: *bid,
-                        info_idx,
-                    });
-                }
+            let b = agent.read_info(info, friend_receipt_prob, &agent_params, &mut rng);
+            info.viewed();
+            info_data.viewed();
+            if b.sharing {
+                info.shared();
+                info_data.shared();
+                senders.push(r);
+            }
+            if b.first_access {
+                info_data.first_viewed();
             }
 
-            // update selfish states of agents
-            agents_willing_selfish.retain(|&agent_idx| {
-                let agent = &mut self.agents[agent_idx];
-                let span = span!(Level::INFO, "Ag", "#" = agent_idx);
-                let _guard = span.enter();
-                if agent.progress_selfish_status() {
-                    agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
-                    pop_data.selfish();
-                }
-                agent.is_willing_selfish()
-            });
+            if agent.is_willing_selfish() {
+                agents_willing_selfish.push(agent_idx);
+            }
+        }
 
-            // register observer agents
-            if let Some(observer) = &self.scenario.observer {
-                if pop_data.num_selfish > 0 {
-                    // E[k] = observer.k
-                    let k = observer.k.trunc().to_usize().unwrap()
-                        + if observer.k.fract() > self.rng.gen() {
-                            1
-                        } else {
-                            0
-                        };
-                    let observer_prob =
-                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
-                    for agent_idx in rand::seq::index::sample(self.rng, self.scenario.num_nodes, k)
-                    {
-                        if observer_prob > self.rng.gen() {
-                            let informs = event_table.entry(t + 1).or_default();
-                            // senders of observed info have priority over existing senders.
-                            informs.push_front(Inform {
-                                agent_idx,
-                                info_obj_idx: observer.observed_info_obj_idx,
-                            });
-                        }
+        for Receiver {
+            agent_idx,
+            info_idx,
+        } in senders.drain(..)
+        {
+            for bid in scenario.graph.successors(agent_idx) {
+                receivers.push(Receiver {
+                    agent_idx: *bid,
+                    info_idx,
+                });
+            }
+        }
+
+        // update selfish states of agents
+        agents_willing_selfish.retain(|&agent_idx| {
+            let agent = &mut agents[agent_idx];
+            let span = span!(Level::INFO, "Ag", "#" = agent_idx);
+            let _guard = span.enter();
+            if agent.progress_selfish_status() {
+                agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
+                pop_data.selfish();
+            }
+            agent.is_willing_selfish()
+        });
+
+        // register observer agents
+        if let Some(observer) = &scenario.observer {
+            if pop_data.num_selfish > 0 {
+                // E[k] = observer.k
+                let k = observer.k.trunc().to_usize().unwrap()
+                    + if observer.k.fract() > rng.gen() { 1 } else { 0 };
+                let observer_prob =
+                    V::from_u32(pop_data.num_selfish).unwrap() / scenario.fnum_nodes;
+                for agent_idx in rand::seq::index::sample(&mut rng, scenario.num_nodes, k) {
+                    if observer_prob > rng.gen() {
+                        let informs = event_table.entry(t + 1).or_default();
+                        // senders of observed info have priority over existing senders.
+                        informs.push_front(Inform {
+                            agent_idx,
+                            info_obj_idx: observer.observed_info_obj_idx,
+                        });
                     }
                 }
             }
-
-            for (info_label, d) in &mut info_data_map {
-                info_stat.push(num_par, num_iter, t, d, info_label);
-                *d = InfoData::default();
-            }
-            pop_stat.push(num_par, num_iter, t, pop_data);
-            t += 1;
         }
-        self.sender.send(info_stat.into()).unwrap();
-        self.sender.send(agent_stat.into()).unwrap();
-        self.sender.send(pop_stat.into()).unwrap();
+
+        for (info_label, d) in &mut info_data_map {
+            info_stat.push(num_par, num_iter, t, d, info_label);
+            *d = InfoData::default();
+        }
+        pop_stat.push(num_par, num_iter, t, pop_data);
+        t += 1;
     }
+    vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
 }
 
 #[cfg(test)]
@@ -385,8 +350,9 @@ mod tests {
     use arrow::{compute::concat_batches, ipc::reader::FileReader};
     use itertools::Itertools;
     use std::fs::{self, File};
+    use tokio::runtime::Runtime;
 
-    fn exec(
+    async fn exec(
         runtime_path: &str,
         agent_params_path: &str,
         scenario_path: &str,
@@ -401,7 +367,7 @@ mod tests {
             true,
             true,
         )?;
-        runner.run()?;
+        runner.run().await?;
         Ok(())
     }
 
@@ -437,13 +403,22 @@ mod tests {
         let scenario_path = "./test/config/scenario.toml";
         let scenario_path_t = "./test/config/scenario-t.toml";
 
-        exec(runtime_path, agent_params_path, scenario_path, "run_test")?;
-        exec(
-            runtime_path,
-            agent_params_path,
-            scenario_path_t,
-            "run_test-t",
-        )?;
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(runtime_path, agent_params_path, scenario_path, "run_test")
+                .await
+                .unwrap();
+        });
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path_t,
+                "run_test-t",
+            )
+            .await
+            .unwrap();
+        });
 
         let labels = ["info", "agent", "pop"];
         for label in labels {
@@ -469,18 +444,27 @@ mod tests {
         let scenario_path0 = "./test/config/scenario-e0.toml";
         let scenario_path1 = "./test/config/scenario-e1.toml";
 
-        exec(
-            runtime_path,
-            agent_params_path,
-            scenario_path0,
-            "run_test-e0",
-        )?;
-        exec(
-            runtime_path,
-            agent_params_path,
-            scenario_path1,
-            "run_test-e1",
-        )?;
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path0,
+                "run_test-e0",
+            )
+            .await
+            .unwrap();
+        });
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path1,
+                "run_test-e1",
+            )
+            .await
+            .unwrap();
+        });
 
         let labels = ["info", "agent", "pop"];
         for label in labels {

@@ -33,7 +33,6 @@ pub struct General {
 #[derive(Debug, serde::Deserialize)]
 pub struct Runtime {
     pub seed_state: u64,
-    pub num_parallel: u32,
     pub iteration_count: u32,
 }
 
