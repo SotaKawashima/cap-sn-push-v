@@ -18,6 +18,7 @@ use std::{
 
 use approx::UlpsEq;
 use graph_lib::prelude::Graph;
+use indicatif::ProgressBar;
 use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
@@ -131,27 +132,33 @@ where
         let rngs = (0..(self.runtime.data.iteration_count))
             .map(|_| SmallRng::from_rng(&mut rng))
             .collect::<Result<Vec<_>, _>>()?;
+
         let agent_params = Arc::new(self.agent_params.data);
         let scenario = Arc::new(self.scenario.data);
-
         let semaphore = Arc::new(Semaphore::new(self.num_cpus));
-        println!("started.");
+        let bar = ProgressBar::new(self.runtime.data.iteration_count as u64);
+
+        let mut jhs = Vec::new();
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let tx = tx.clone();
             let semaphore = semaphore.clone();
             let agent_params = agent_params.clone();
             let scenario = scenario.clone();
-            tokio::spawn(async move {
+            jhs.push(tokio::spawn(async move {
                 let _permit = semaphore.acquire().await.unwrap();
-                print!("[{num_iter}");
                 let ss = execute(0, num_iter as u32, agent_params, scenario, rng);
                 for s in ss {
                     tx.send(s).await.unwrap();
                 }
-                print!(":{num_iter}]");
                 drop(_permit);
-            });
+            }));
         }
+        println!("started.");
+        for jh in jhs {
+            bar.inc(1);
+            jh.await.unwrap();
+        }
+        bar.finish();
         drop(tx);
         handle.await.unwrap();
         println!("\ndone.");

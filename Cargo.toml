@@ -1,6 +1,6 @@
 [package]
 name = "cap-sn"
-version = "0.18.0"
+version = "0.18.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,3 +27,4 @@ anyhow = "1.0"
 itertools = "0.12"
 tokio = { version = "1.37", features = ["rt", "macros", "rt-multi-thread", "sync"] }
 num_cpus = "1.8"
+indicatif = "0.17"
