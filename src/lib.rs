@@ -112,6 +112,9 @@ where
         V: FromPrimitive + ToPrimitive + Sync + 'static,
         <V as SampleUniform>::Sampler: Sync,
     {
+        println!("initialising...");
+        let bar = ProgressBar::new(self.runtime.data.iteration_count as u64);
+
         let (tx, mut rx) = mpsc::channel::<Stat>(self.num_cpus);
         let mut writers = FileWriters::try_new(
             &self.identifier,
@@ -137,8 +140,6 @@ where
         let scenario = Arc::new(self.scenario.data);
         let manager = Manager::new(self.num_cpus, agent_params, scenario);
 
-        let bar = ProgressBar::new(self.runtime.data.iteration_count as u64);
-
         let mut jhs = Vec::new();
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let tx = tx.clone();
@@ -159,7 +160,7 @@ where
         bar.finish();
         drop(tx);
         handle.await.unwrap();
-        println!("\ndone.");
+        println!("done.");
         Ok(())
     }
 }
@@ -203,10 +204,13 @@ where
 
     async fn rent<'a>(&'a self) -> EnvPermit<'a, V> {
         let permit = self.semaphore.acquire().await.unwrap();
-        let mut rs = self.resources.write().await;
         // move first resource to last
-        let env = rs.pop().unwrap();
-        rs.push(env.clone());
+        let env = {
+            let mut rs = self.resources.write().await;
+            let env = rs.pop().unwrap();
+            rs.push(env.clone());
+            env
+        };
         EnvPermit { permit, env }
     }
 }
