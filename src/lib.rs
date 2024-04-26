@@ -28,7 +28,7 @@ use config::{ConfigData, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
-use tokio::sync::{mpsc, RwLock, Semaphore, SemaphorePermit};
+use tokio::sync::{mpsc, Mutex};
 use tracing::{info, span, Level};
 
 pub struct Runner<V>
@@ -138,15 +138,16 @@ where
 
         let agent_params = Arc::new(self.agent_params.data);
         let scenario = Arc::new(self.scenario.data);
-        let manager = Manager::new(self.num_cpus, agent_params, scenario);
+        let mut manager = Manager::new(self.num_cpus, |i| {
+            Env::new(i, agent_params.clone(), scenario.clone())
+        });
 
         let mut jhs = Vec::new();
         for (num_iter, rng) in rngs.into_iter().enumerate() {
+            let env = manager.rent().await;
             let tx = tx.clone();
-            let manager = manager.clone();
             jhs.push(tokio::spawn(async move {
-                let env = manager.rent().await;
-                let ss = env.run(num_iter as u32, rng).await;
+                let ss = env.run((num_iter as u32, rng)).await;
                 for s in ss {
                     tx.send(s).await.unwrap();
                 }
@@ -165,53 +166,31 @@ where
     }
 }
 
-#[derive(Clone)]
-struct Manager<V>
-where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    semaphore: Arc<Semaphore>,
-    resources: Arc<RwLock<Vec<Arc<RwLock<Env<V>>>>>>,
+struct Manager<E> {
+    rx: mpsc::Receiver<usize>,
+    tx: mpsc::Sender<usize>,
+    resources: Vec<Arc<Mutex<E>>>,
 }
 
-impl<V> Manager<V>
-where
-    V: Float + UlpsEq + NumAssign + SampleUniform + Default,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    fn new(permits: usize, agent_params: Arc<AgentParams<V>>, scenario: Arc<Scenario<V>>) -> Self {
+impl<E> Manager<E> {
+    fn new<F: Fn(usize) -> E>(permits: usize, f: F) -> Self {
         let mut resources = Vec::new();
+        let (tx, rx) = mpsc::channel(permits);
         for i in 0..permits {
-            let r = Arc::new(RwLock::new(Env::new(
-                i,
-                agent_params.clone(),
-                scenario.clone(),
-            )));
+            let r = Arc::new(Mutex::new(f(i)));
             resources.push(r);
+            tx.try_send(i).unwrap();
         }
-        Self {
-            semaphore: Arc::new(Semaphore::new(permits)),
-            resources: Arc::new(RwLock::new(resources)),
-        }
+        Self { rx, tx, resources }
     }
 
-    async fn rent<'a>(&'a self) -> EnvPermit<'a, V> {
-        let permit = self.semaphore.acquire().await.unwrap();
-        // move first resource to last
-        let env = {
-            let mut rs = self.resources.write().await;
-            let env = rs.pop().unwrap();
-            rs.push(env.clone());
-            env
-        };
-        EnvPermit { permit, env }
+    async fn rent(&mut self) -> EnvPermit<E> {
+        let idx = self.rx.recv().await.unwrap();
+        EnvPermit {
+            idx,
+            env: self.resources[idx].clone(),
+            tx: self.tx.clone(),
+        }
     }
 }
 
@@ -254,11 +233,28 @@ where
             agents,
         }
     }
+}
 
-    fn execute<R: Rng>(&mut self, num_iter: u32, mut rng: R) -> Vec<Stat>
-    where
-        V: FromPrimitive + ToPrimitive + Default + Sum + fmt::Debug,
-    {
+impl<V, R> Executor<(u32, R)> for Env<V>
+where
+    V: Float
+        + UlpsEq
+        + NumAssign
+        + SampleUniform
+        + FromPrimitive
+        + ToPrimitive
+        + Default
+        + Sum
+        + fmt::Debug,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    R: Rng,
+{
+    type Output = Vec<Stat>;
+
+    fn execute(&mut self, (num_iter, mut rng): (u32, R)) -> Vec<Stat> {
         let num_par = self.id as u32;
         for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::DEBUG, "init A", "#" = idx);
@@ -417,34 +413,25 @@ where
     }
 }
 
-struct EnvPermit<'a, V>
-where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    permit: SemaphorePermit<'a>,
-    env: Arc<RwLock<Env<V>>>,
+trait Executor<I> {
+    type Output;
+    fn execute(&mut self, input: I) -> Self::Output;
 }
 
-impl<'a, V> EnvPermit<'a, V>
-where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    async fn run<R>(self, num_iter: u32, rng: R) -> Vec<Stat>
+struct EnvPermit<E> {
+    idx: usize,
+    tx: mpsc::Sender<usize>,
+    env: Arc<Mutex<E>>,
+}
+
+impl<E> EnvPermit<E> {
+    async fn run<I>(self, input: I) -> E::Output
     where
-        V: FromPrimitive + ToPrimitive + Default + Sum + fmt::Debug,
-        R: Rng,
+        E: Executor<I>,
     {
-        let rs = self.env.write().await.execute(num_iter, rng);
-        drop(self.permit);
-        rs
+        let o = self.env.lock().await.execute(input);
+        self.tx.send(self.idx).await.unwrap();
+        o
     }
 }
 
@@ -459,7 +446,11 @@ mod tests {
     use crate::Runner;
     use arrow::{compute::concat_batches, ipc::reader::FileReader};
     use itertools::Itertools;
-    use std::fs::{self, File};
+    use rand::{rngs::SmallRng, Rng, SeedableRng};
+    use std::{
+        fs::{self, File},
+        sync::Arc,
+    };
     use tokio::runtime::Runtime;
 
     async fn exec(
@@ -591,5 +582,59 @@ mod tests {
             compare_arrows(reader_a, reader_b)?;
         }
         Ok(())
+    }
+
+    struct TestEnv(usize);
+    impl TestEnv {
+        fn execute<R: Rng>(&mut self, _input: usize, mut rng: R) {
+            for i in 0..10_000 {
+                for j in 0..(10_000 + rng.gen_range(0..1000)) {
+                    let _a = i + j;
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_manager() {
+        println!("init");
+        let mut resources = Vec::new();
+        let n = 8;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        for i in 0..n {
+            resources.push(Arc::new(tokio::sync::Mutex::new(TestEnv(i))));
+            tx.try_send(i).unwrap();
+        }
+
+        let m = 8;
+        let mut rng = SmallRng::seed_from_u64(0);
+        let rngs = (0..m)
+            .map(|_| SmallRng::from_rng(&mut rng))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        let mut hs = Vec::new();
+        for (i, rng) in rngs.into_iter().enumerate() {
+            let tx = tx.clone();
+            let idx = rx.recv().await.unwrap();
+            let e = resources[idx].clone();
+            let h = tokio::spawn(async move {
+                {
+                    let mut e = e.lock().await;
+                    println!("s:{}:{}", i, e.0);
+                    e.execute(i, rng);
+                    println!("e:{}:{}", i, e.0);
+                }
+                drop(e);
+                tx.try_send(idx).unwrap();
+            });
+            hs.push(h);
+        }
+        println!("running");
+        for h in hs {
+            h.await.unwrap();
+        }
+        drop(rx);
+        println!("done");
     }
 }
