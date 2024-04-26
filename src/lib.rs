@@ -28,7 +28,7 @@ use config::{ConfigData, Runtime};
 use info::{Info, InfoBuilder, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{mpsc, RwLock, Semaphore, SemaphorePermit};
 use tracing::{info, span, Level};
 
 pub struct Runner<V>
@@ -135,22 +135,20 @@ where
 
         let agent_params = Arc::new(self.agent_params.data);
         let scenario = Arc::new(self.scenario.data);
-        let semaphore = Arc::new(Semaphore::new(self.num_cpus));
+        let manager = Manager::new(self.num_cpus, agent_params, scenario);
+
         let bar = ProgressBar::new(self.runtime.data.iteration_count as u64);
 
         let mut jhs = Vec::new();
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let tx = tx.clone();
-            let semaphore = semaphore.clone();
-            let agent_params = agent_params.clone();
-            let scenario = scenario.clone();
+            let manager = manager.clone();
             jhs.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                let ss = execute(0, num_iter as u32, agent_params, scenario, rng);
+                let env = manager.rent().await;
+                let ss = env.run(num_iter as u32, rng).await;
                 for s in ss {
                     tx.send(s).await.unwrap();
                 }
-                drop(_permit);
             }));
         }
         println!("started.");
@@ -166,189 +164,290 @@ where
     }
 }
 
-#[derive(Debug)]
-struct Receiver {
-    agent_idx: usize,
-    info_idx: usize,
-}
-
-fn execute<V, R>(
-    num_par: u32,
-    num_iter: u32,
-    agent_params: Arc<AgentParams<V>>,
-    scenario: Arc<Scenario<V>>,
-    mut rng: R,
-) -> Vec<Stat>
+#[derive(Clone)]
+struct Manager<V>
 where
-    V: Float
-        + UlpsEq
-        + SampleUniform
-        + NumAssign
-        + FromPrimitive
-        + ToPrimitive
-        + Default
-        + Sum
-        + fmt::Debug,
-    R: Rng,
+    V: Float + UlpsEq + NumAssign + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    let info_builder = InfoBuilder::<V>::new();
-    let mut agents = (0..scenario.num_nodes)
-        .map(|idx| {
-            let mut agent = Agent::default();
+    semaphore: Arc<Semaphore>,
+    resources: Arc<RwLock<Vec<Arc<RwLock<Env<V>>>>>>,
+}
+
+impl<V> Manager<V>
+where
+    V: Float + UlpsEq + NumAssign + SampleUniform + Default,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    fn new(permits: usize, agent_params: Arc<AgentParams<V>>, scenario: Arc<Scenario<V>>) -> Self {
+        let mut resources = Vec::new();
+        for i in 0..permits {
+            let r = Arc::new(RwLock::new(Env::new(
+                i,
+                agent_params.clone(),
+                scenario.clone(),
+            )));
+            resources.push(r);
+        }
+        Self {
+            semaphore: Arc::new(Semaphore::new(permits)),
+            resources: Arc::new(RwLock::new(resources)),
+        }
+    }
+
+    async fn rent<'a>(&'a self) -> EnvPermit<'a, V> {
+        let permit = self.semaphore.acquire().await.unwrap();
+        let mut rs = self.resources.write().await;
+        // move first resource to last
+        let env = rs.pop().unwrap();
+        rs.push(env.clone());
+        EnvPermit { permit, env }
+    }
+}
+
+struct Env<V>
+where
+    V: Float + UlpsEq + NumAssign + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    id: usize,
+    info_builder: InfoBuilder<V>,
+    agent_params: Arc<AgentParams<V>>,
+    scenario: Arc<Scenario<V>>,
+    agents: Vec<Agent<V>>,
+}
+
+impl<V> Env<V>
+where
+    V: Float + UlpsEq + NumAssign + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    fn new(id: usize, agent_params: Arc<AgentParams<V>>, scenario: Arc<Scenario<V>>) -> Self
+    where
+        V: Default,
+    {
+        let info_builder = InfoBuilder::new();
+        let agents = (0..scenario.num_nodes)
+            .map(|_| Agent::default())
+            .collect::<Vec<_>>();
+        Self {
+            id,
+            info_builder,
+            agent_params,
+            scenario,
+            agents,
+        }
+    }
+
+    fn execute<R: Rng>(&mut self, num_iter: u32, mut rng: R) -> Vec<Stat>
+    where
+        V: FromPrimitive + ToPrimitive + Default + Sum + fmt::Debug,
+    {
+        let num_par = self.id as u32;
+        for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::DEBUG, "init A", "#" = idx);
             let _guard = span.enter();
-            agent.reset_with(&agent_params, &mut rng);
-            agent
-        })
-        .collect::<Vec<_>>();
+            agent.reset_with(&self.agent_params, &mut rng);
+        }
 
-    let mut infos = Vec::<Info<V>>::new();
-    let mut receivers = Vec::new();
-    let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
-    let info_objects = &scenario.info_objects;
-    let mut event_table = scenario.table.clone();
-    let mut agents_willing_selfish = Vec::<usize>::new();
-    let mut senders = Vec::new();
+        let mut infos = Vec::<Info<V>>::new();
+        let mut receivers = Vec::new();
+        let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
+        let info_objects = &self.scenario.info_objects;
+        let mut event_table = self.scenario.table.clone();
+        let mut agents_willing_selfish = Vec::<usize>::new();
+        let mut senders = Vec::new();
 
-    let mut info_stat = InfoStat::default();
-    let mut agent_stat = AgentStat::default();
-    let mut pop_stat = PopStat::default();
-    let mut t = 0;
+        let mut info_stat = InfoStat::default();
+        let mut agent_stat = AgentStat::default();
+        let mut pop_stat = PopStat::default();
+        let mut t = 0;
 
-    while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty() {
-        let span = span!(Level::INFO, "st", t);
-        let _guard = span.enter();
-        let mut pop_data = PopData::default();
+        while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
+        {
+            let span = span!(Level::INFO, "st", t);
+            let _guard = span.enter();
+            let mut pop_data = PopData::default();
 
-        if let Some(informms) = event_table.remove(&t) {
-            for Inform {
+            if let Some(informms) = event_table.remove(&t) {
+                for Inform {
+                    agent_idx,
+                    info_obj_idx,
+                } in informms
+                {
+                    let info_idx = infos.len();
+                    let info = self
+                        .info_builder
+                        .build(info_idx, &info_objects[info_obj_idx]);
+                    info_data_map.entry(info.content.label).or_default();
+
+                    let span = span!(Level::INFO, "IA", "#" = agent_idx);
+                    let _guard = span.enter();
+                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
+
+                    let agent = &mut self.agents[agent_idx];
+                    agent.set_info_opinions(&info, &self.agent_params.base_rates);
+                    infos.push(info);
+                    if agent.is_willing_selfish() {
+                        agents_willing_selfish.push(agent_idx);
+                    }
+
+                    senders.push(Receiver {
+                        agent_idx,
+                        info_idx,
+                    });
+                }
+            }
+
+            receivers.shuffle(&mut rng);
+
+            for r @ Receiver {
                 agent_idx,
-                info_obj_idx,
-            } in informms
+                info_idx,
+            } in receivers.drain(..)
             {
-                let info_idx = infos.len();
-                let info = info_builder.build(info_idx, &info_objects[info_obj_idx]);
-                info_data_map.entry(info.content.label).or_default();
+                let agent = &mut self.agents[agent_idx];
+                let info = &mut infos[info_idx];
+                let info_label = info.content.label;
+                let info_data = info_data_map.get_mut(&info_label).unwrap();
+                info_data.received();
 
-                let span = span!(Level::INFO, "IA", "#" = agent_idx);
+                let span = span!(Level::INFO, "SA", "#" = agent_idx);
                 let _guard = span.enter();
-                info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
 
-                let agent = &mut agents[agent_idx];
-                agent.set_info_opinions(&info, &agent_params.base_rates);
-                infos.push(info);
+                let friend_receipt_prob = V::one()
+                    - (V::one()
+                        - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
+                        .powf(self.scenario.mean_degree);
+
+                info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
+
+                if rng.gen::<V>() > agent.access_prob() {
+                    continue;
+                }
+
+                let b = agent.read_info(info, friend_receipt_prob, &self.agent_params, &mut rng);
+                info.viewed();
+                info_data.viewed();
+                if b.sharing {
+                    info.shared();
+                    info_data.shared();
+                    senders.push(r);
+                }
+                if b.first_access {
+                    info_data.first_viewed();
+                }
+
                 if agent.is_willing_selfish() {
                     agents_willing_selfish.push(agent_idx);
                 }
-
-                senders.push(Receiver {
-                    agent_idx,
-                    info_idx,
-                });
-            }
-        }
-
-        receivers.shuffle(&mut rng);
-
-        for r @ Receiver {
-            agent_idx,
-            info_idx,
-        } in receivers.drain(..)
-        {
-            let agent = &mut agents[agent_idx];
-            let info = &mut infos[info_idx];
-            let info_label = info.content.label;
-            let info_data = info_data_map.get_mut(&info_label).unwrap();
-            info_data.received();
-
-            let span = span!(Level::INFO, "SA", "#" = agent_idx);
-            let _guard = span.enter();
-
-            let friend_receipt_prob = V::one()
-                - (V::one() - V::from_usize(info.num_shared()).unwrap() / scenario.fnum_nodes)
-                    .powf(scenario.mean_degree);
-
-            info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
-
-            if rng.gen::<V>() > agent.access_prob() {
-                continue;
             }
 
-            let b = agent.read_info(info, friend_receipt_prob, &agent_params, &mut rng);
-            info.viewed();
-            info_data.viewed();
-            if b.sharing {
-                info.shared();
-                info_data.shared();
-                senders.push(r);
-            }
-            if b.first_access {
-                info_data.first_viewed();
+            for Receiver {
+                agent_idx,
+                info_idx,
+            } in senders.drain(..)
+            {
+                for bid in self.scenario.graph.successors(agent_idx) {
+                    receivers.push(Receiver {
+                        agent_idx: *bid,
+                        info_idx,
+                    });
+                }
             }
 
-            if agent.is_willing_selfish() {
-                agents_willing_selfish.push(agent_idx);
-            }
-        }
+            // update selfish states of agents
+            agents_willing_selfish.retain(|&agent_idx| {
+                let agent = &mut self.agents[agent_idx];
+                let span = span!(Level::INFO, "Ag", "#" = agent_idx);
+                let _guard = span.enter();
+                if agent.progress_selfish_status() {
+                    agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
+                    pop_data.selfish();
+                }
+                agent.is_willing_selfish()
+            });
 
-        for Receiver {
-            agent_idx,
-            info_idx,
-        } in senders.drain(..)
-        {
-            for bid in scenario.graph.successors(agent_idx) {
-                receivers.push(Receiver {
-                    agent_idx: *bid,
-                    info_idx,
-                });
-            }
-        }
-
-        // update selfish states of agents
-        agents_willing_selfish.retain(|&agent_idx| {
-            let agent = &mut agents[agent_idx];
-            let span = span!(Level::INFO, "Ag", "#" = agent_idx);
-            let _guard = span.enter();
-            if agent.progress_selfish_status() {
-                agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
-                pop_data.selfish();
-            }
-            agent.is_willing_selfish()
-        });
-
-        // register observer agents
-        if let Some(observer) = &scenario.observer {
-            if pop_data.num_selfish > 0 {
-                // E[k] = observer.k
-                let k = observer.k.trunc().to_usize().unwrap()
-                    + if observer.k.fract() > rng.gen() { 1 } else { 0 };
-                let observer_prob =
-                    V::from_u32(pop_data.num_selfish).unwrap() / scenario.fnum_nodes;
-                for agent_idx in rand::seq::index::sample(&mut rng, scenario.num_nodes, k) {
-                    if observer_prob > rng.gen() {
-                        let informs = event_table.entry(t + 1).or_default();
-                        // senders of observed info have priority over existing senders.
-                        informs.push_front(Inform {
-                            agent_idx,
-                            info_obj_idx: observer.observed_info_obj_idx,
-                        });
+            // register observer agents
+            if let Some(observer) = &self.scenario.observer {
+                if pop_data.num_selfish > 0 {
+                    // E[k] = observer.k
+                    let k = observer.k.trunc().to_usize().unwrap()
+                        + if observer.k.fract() > rng.gen() { 1 } else { 0 };
+                    let observer_prob =
+                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
+                    for agent_idx in rand::seq::index::sample(&mut rng, self.scenario.num_nodes, k)
+                    {
+                        if observer_prob > rng.gen() {
+                            let informs = event_table.entry(t + 1).or_default();
+                            // senders of observed info have priority over existing senders.
+                            informs.push_front(Inform {
+                                agent_idx,
+                                info_obj_idx: observer.observed_info_obj_idx,
+                            });
+                        }
                     }
                 }
             }
-        }
 
-        for (info_label, d) in &mut info_data_map {
-            info_stat.push(num_par, num_iter, t, d, info_label);
-            *d = InfoData::default();
+            for (info_label, d) in &mut info_data_map {
+                info_stat.push(num_par, num_iter, t, d, info_label);
+                *d = InfoData::default();
+            }
+            pop_stat.push(num_par, num_iter, t, pop_data);
+            t += 1;
         }
-        pop_stat.push(num_par, num_iter, t, pop_data);
-        t += 1;
+        vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
     }
-    vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
+}
+
+struct EnvPermit<'a, V>
+where
+    V: Float + UlpsEq + NumAssign + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    permit: SemaphorePermit<'a>,
+    env: Arc<RwLock<Env<V>>>,
+}
+
+impl<'a, V> EnvPermit<'a, V>
+where
+    V: Float + UlpsEq + NumAssign + SampleUniform,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    async fn run<R>(self, num_iter: u32, rng: R) -> Vec<Stat>
+    where
+        V: FromPrimitive + ToPrimitive + Default + Sum + fmt::Debug,
+        R: Rng,
+    {
+        let rs = self.env.write().await.execute(num_iter, rng);
+        drop(self.permit);
+        rs
+    }
+}
+
+#[derive(Debug)]
+struct Receiver {
+    agent_idx: usize,
+    info_idx: usize,
 }
 
 #[cfg(test)]
