@@ -11,6 +11,7 @@ mod value;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
+    io::{stdout, Write},
     iter::Sum,
     path::PathBuf,
     sync::Arc,
@@ -18,7 +19,6 @@ use std::{
 
 use approx::UlpsEq;
 use graph_lib::prelude::Graph;
-use indicatif::ProgressBar;
 use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
@@ -113,7 +113,6 @@ where
         <V as SampleUniform>::Sampler: Sync,
     {
         println!("initialising...");
-        let bar = ProgressBar::new(self.runtime.data.iteration_count as u64);
 
         let (tx, mut rx) = mpsc::channel::<Stat>(self.num_cpus);
         let mut writers = FileWriters::try_new(
@@ -143,25 +142,31 @@ where
         });
 
         let mut jhs = Vec::new();
+        print!("started.");
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let env = manager.rent().await;
             let tx = tx.clone();
             jhs.push(tokio::spawn(async move {
+                if num_iter % 100 == 0 {
+                    println!("\n{num_iter}");
+                }
+                if num_iter % 10 == 0 {
+                    print!("|");
+                    stdout().flush().unwrap();
+                }
+                print!(".");
                 let ss = env.run((num_iter as u32, rng)).await;
                 for s in ss {
                     tx.send(s).await.unwrap();
                 }
             }));
         }
-        println!("started.");
         for jh in jhs {
-            bar.inc(1);
             jh.await.unwrap();
         }
-        bar.finish();
         drop(tx);
         handle.await.unwrap();
-        println!("done.");
+        println!("\ndone.");
         Ok(())
     }
 }
