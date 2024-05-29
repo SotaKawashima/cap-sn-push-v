@@ -1,12 +1,12 @@
 [package]
 name = "cap-sn"
-version = "0.18.2"
+version = "0.19.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.9.1" }
+subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.9.7" }
 approx = "0.5"
 graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.4.2" }
 rand = { version = "0.8", features = ["small_rng"] }
@@ -24,7 +24,11 @@ num-traits = "0.2"
 thiserror = "1.0"
 either = "1.9"
 anyhow = "1.0"
-itertools = "0.12"
+itertools = "0.13"
 tokio = { version = "1.37", features = ["rt", "macros", "rt-multi-thread", "sync", "time"] }
 parking_lot = "0.12"
 num_cpus = "1.8"
+polars-arrow = { version = "0.40", features = ["io_ipc", "io_ipc_write_async"] }
+
+[dev-dependencies]
+polars = { version = "0.40", features = ["lazy", "ipc", "decompress", "dtype-u8" ] }

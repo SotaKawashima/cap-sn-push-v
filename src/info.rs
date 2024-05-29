@@ -9,33 +9,36 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::labeled::SimplexD1;
 
 use crate::{
-    opinion::{Phi, Psi, O, S},
+    opinion::{Phi, Psi, H, M, O},
     value::{EValue, EValueParam},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct InfoContent<'a, V: Float> {
-    pub label: InfoLabel,
     pub psi: &'a SimplexD1<Psi, V>,
-    pub s: &'a SimplexD1<S, V>,
+    pub m: &'a SimplexD1<M, V>,
     pub o: &'a SimplexD1<O, V>,
     pub phi: &'a SimplexD1<Phi, V>,
+    pub h_by_phi1_psi1: &'a SimplexD1<H, V>,
+    pub h_by_phi1_b1: &'a SimplexD1<H, V>,
 }
 
 impl<'a, V: Float> InfoContent<'a, V> {
     pub fn new(
-        label: InfoLabel,
         psi: &'a SimplexD1<Psi, V>,
-        s: &'a SimplexD1<S, V>,
+        m: &'a SimplexD1<M, V>,
         o: &'a SimplexD1<O, V>,
         phi: &'a SimplexD1<Phi, V>,
+        h_by_phi1_psi1: &'a SimplexD1<H, V>,
+        h_by_phi1_b1: &'a SimplexD1<H, V>,
     ) -> Self {
         Self {
-            label,
             psi,
-            s,
+            m,
             o,
             phi,
+            h_by_phi1_psi1,
+            h_by_phi1_b1,
         }
     }
 }
@@ -56,13 +59,15 @@ pub struct Info<'a, V: Float> {
     pub idx: usize,
     num_shared: usize,
     num_viewed: usize,
+    pub label: InfoLabel,
     pub content: InfoContent<'a, V>,
 }
 
 impl<'a, V: Float> Info<'a, V> {
-    fn new(idx: usize, content: InfoContent<'a, V>) -> Self {
+    fn new(idx: usize, label: InfoLabel, content: InfoContent<'a, V>) -> Self {
         Self {
             idx,
+            label,
             content,
             num_shared: Default::default(),
             num_viewed: Default::default(),
@@ -100,7 +105,7 @@ where
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
         psi: SimplexD1<Psi, V>,
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        s: SimplexD1<S, V>,
+        m: SimplexD1<M, V>,
     },
     Observed {
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
@@ -109,6 +114,10 @@ where
     Inhibitive {
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
         phi: SimplexD1<Phi, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        h_by_phi1_psi1: SimplexD1<H, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+        h_by_phi1_b1: SimplexD1<H, V>,
     },
 }
 
@@ -144,9 +153,11 @@ impl Display for InfoLabel {
 
 pub struct InfoBuilder<V: Float> {
     vacuous_psi: SimplexD1<Psi, V>,
-    vacuous_s: SimplexD1<S, V>,
+    vacuous_m: SimplexD1<M, V>,
     vacuous_o: SimplexD1<O, V>,
     vacuous_phi: SimplexD1<Phi, V>,
+    vacuous_h_by_phi1_psi1: SimplexD1<H, V>,
+    vacuous_h_by_phi1_b1: SimplexD1<H, V>,
 }
 
 impl<V> InfoBuilder<V>
@@ -156,50 +167,50 @@ where
     pub fn new() -> Self {
         Self {
             vacuous_psi: SimplexD1::vacuous(),
-            vacuous_s: SimplexD1::vacuous(),
+            vacuous_m: SimplexD1::vacuous(),
             vacuous_o: SimplexD1::vacuous(),
             vacuous_phi: SimplexD1::vacuous(),
+            vacuous_h_by_phi1_psi1: SimplexD1::vacuous(),
+            vacuous_h_by_phi1_b1: SimplexD1::vacuous(),
         }
     }
 
     pub fn build<'a>(&'a self, idx: usize, obj: &'a InfoObject<V>) -> Info<'a, V> {
-        let content = match obj {
-            InfoObject::Misinfo { psi } => InfoContent::new(
-                InfoLabel::Misinfo,
-                psi,
-                &self.vacuous_s,
-                &self.vacuous_o,
-                &self.vacuous_phi,
-            ),
-            InfoObject::Corrective { psi, s } => InfoContent::new(
-                InfoLabel::Corrective,
-                psi,
-                s,
-                &self.vacuous_o,
-                &self.vacuous_phi,
-            ),
-            InfoObject::Observed { o } => InfoContent::new(
-                InfoLabel::Observed,
-                &self.vacuous_psi,
-                &self.vacuous_s,
-                o,
-                &self.vacuous_phi,
-            ),
+        let mut content = InfoContent::new(
+            &self.vacuous_psi,
+            &self.vacuous_m,
+            &self.vacuous_o,
+            &self.vacuous_phi,
+            &self.vacuous_h_by_phi1_psi1,
+            &self.vacuous_h_by_phi1_b1,
+        );
+        let label = match obj {
+            InfoObject::Misinfo { psi } => {
+                content.psi = psi;
+                InfoLabel::Misinfo
+            }
+            InfoObject::Corrective { psi, m } => {
+                content.psi = psi;
+                content.m = m;
+                InfoLabel::Corrective
+            }
+            InfoObject::Observed { o } => {
+                content.o = o;
+                InfoLabel::Observed
+            }
             InfoObject::Inhibitive {
                 phi,
-                // cond_theta_phi,
-            } => InfoContent::new(
-                InfoLabel::Inhibitive,
-                &self.vacuous_psi,
-                &self.vacuous_s,
-                &self.vacuous_o,
-                phi,
-            ),
+                h_by_phi1_psi1,
+                h_by_phi1_b1,
+            } => {
+                content.phi = phi;
+                content.h_by_phi1_psi1 = h_by_phi1_psi1;
+                content.h_by_phi1_b1 = h_by_phi1_b1;
+                InfoLabel::Inhibitive
+            }
         };
-        Info::new(idx, content)
+        Info::new(idx, label, content)
     }
-
-    // fn merge(&self, a)
 }
 
 #[cfg(test)]
@@ -248,7 +259,7 @@ where
         let observed = self.observed.sample(rng);
         let inhibitive = self.inhibitive.sample(rng);
 
-        move |info: &Info<V>| match &info.content.label {
+        move |info: &Info<V>| match &info.label {
             InfoLabel::Misinfo => misinfo,
             InfoLabel::Corrective => corrective,
             InfoLabel::Observed => observed,

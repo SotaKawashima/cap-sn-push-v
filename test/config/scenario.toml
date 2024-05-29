@@ -3,9 +3,9 @@ graph = { directed = true, location = { LocalFile = "./test/graph/graph.txt" } }
 info_objects = [
     # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
     { Misinfo = { psi = [[0.00, 0.80], 0.20] } },
-    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 0.99 ], 0.01 ] } },
-    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 0.99 ], 0.01 ] } },
-    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], s = [ [ 0.0, 1.0 ], 0.0 ] } },
+    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 0.99 ], 0.01 ] } },
+    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 0.99 ], 0.01 ] } },
+    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 1.0 ], 0.0 ] } },
 ]
 
 [[events]]

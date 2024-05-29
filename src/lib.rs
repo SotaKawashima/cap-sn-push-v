@@ -9,7 +9,7 @@ mod stat;
 mod value;
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     fmt,
     io::{stdout, Write},
     iter::Sum,
@@ -20,6 +20,7 @@ use std::{
 use approx::UlpsEq;
 use graph_lib::prelude::Graph;
 use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
+use polars_arrow::datatypes::Metadata;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 
@@ -91,8 +92,8 @@ where
         })
     }
 
-    fn create_metadata(&self) -> HashMap<String, String> {
-        HashMap::from_iter([
+    fn create_metadata(&self) -> Metadata {
+        Metadata::from_iter([
             ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
             ("runtime".to_string(), self.runtime.path.to_string()),
             (
@@ -137,8 +138,8 @@ where
 
         let agent_params = Arc::new(self.agent_params.data);
         let scenario = Arc::new(self.scenario.data);
-        let mut manager = Manager::new(self.num_cpus, |i| {
-            Env::new(i, agent_params.clone(), scenario.clone())
+        let mut manager = Manager::new(self.num_cpus, |_| {
+            Env::new(agent_params.clone(), scenario.clone())
         });
 
         let mut jhs = Vec::new();
@@ -207,7 +208,6 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    id: usize,
     info_builder: InfoBuilder<V>,
     agent_params: Arc<AgentParams<V>>,
     scenario: Arc<Scenario<V>>,
@@ -222,7 +222,7 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    fn new(id: usize, agent_params: Arc<AgentParams<V>>, scenario: Arc<Scenario<V>>) -> Self
+    fn new(agent_params: Arc<AgentParams<V>>, scenario: Arc<Scenario<V>>) -> Self
     where
         V: Default,
     {
@@ -231,7 +231,6 @@ where
             .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
-            id,
             info_builder,
             agent_params,
             scenario,
@@ -260,7 +259,6 @@ where
     type Output = Vec<Stat>;
 
     fn execute(&mut self, (num_iter, mut rng): (u32, R)) -> Vec<Stat> {
-        let num_par = self.id as u32;
         for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::DEBUG, "init A", "#" = idx);
             let _guard = span.enter();
@@ -296,11 +294,11 @@ where
                     let info = self
                         .info_builder
                         .build(info_idx, &info_objects[info_obj_idx]);
-                    info_data_map.entry(info.content.label).or_default();
+                    info_data_map.entry(info.label).or_default();
 
                     let span = span!(Level::INFO, "IA", "#" = agent_idx);
                     let _guard = span.enter();
-                    info!(target: "  recv", l = ?info.content.label, "obj#" = info_obj_idx, "#" = info_idx);
+                    info!(target: "  recv", l = ?info.label, "obj#" = info_obj_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
                     agent.set_info_opinions(&info, &self.agent_params.base_rates);
@@ -325,7 +323,7 @@ where
             {
                 let agent = &mut self.agents[agent_idx];
                 let info = &mut infos[info_idx];
-                let info_label = info.content.label;
+                let info_label = info.label;
                 let info_data = info_data_map.get_mut(&info_label).unwrap();
                 info_data.received();
 
@@ -379,7 +377,7 @@ where
                 let span = span!(Level::INFO, "Ag", "#" = agent_idx);
                 let _guard = span.enter();
                 if agent.progress_selfish_status() {
-                    agent_stat.push_selfish(num_par, num_iter, t, agent_idx);
+                    agent_stat.push_selfish(num_iter, t, agent_idx);
                     pop_data.selfish();
                 }
                 agent.is_willing_selfish()
@@ -408,10 +406,10 @@ where
             }
 
             for (info_label, d) in &mut info_data_map {
-                info_stat.push(num_par, num_iter, t, d, info_label);
+                info_stat.push(num_iter, t, d, info_label);
                 *d = InfoData::default();
             }
-            pop_stat.push(num_par, num_iter, t, pop_data);
+            pop_stat.push(num_iter, t, pop_data);
             t += 1;
         }
         vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
@@ -449,13 +447,17 @@ struct Receiver {
 #[cfg(test)]
 mod tests {
     use crate::Runner;
-    use arrow::{compute::concat_batches, ipc::reader::FileReader};
-    use itertools::Itertools;
-    use rand::{rngs::SmallRng, Rng, SeedableRng};
-    use std::{
-        fs::{self, File},
-        sync::Arc,
+    use polars::{
+        frame::DataFrame,
+        io::{ipc::IpcReader, SerReader},
+        lazy::{
+            dsl::col,
+            frame::{LazyFrame, ScanArgsIpc},
+        },
     };
+    use polars_arrow::datatypes::Metadata;
+    use rand::{rngs::SmallRng, Rng, SeedableRng};
+    use std::{fs, sync::Arc};
     use tokio::runtime::Runtime;
 
     async fn exec(
@@ -477,27 +479,75 @@ mod tests {
         Ok(())
     }
 
+    fn compare_two_ipcs(
+        na: &str,
+        rpa: &str,
+        apa: &str,
+        spa: &str,
+        nb: &str,
+        rpb: &str,
+        apb: &str,
+        spb: &str,
+    ) -> anyhow::Result<()> {
+        let labels = ["info", "agent", "pop"];
+        for label in labels {
+            let pa = format!("./test/{na}_{label}.arrow");
+            let pb = format!("./test/{nb}_{label}.arrow");
+            let mut reader_a = IpcReader::new(fs::File::open(pa.clone())?);
+            let mut reader_b = IpcReader::new(fs::File::open(pb.clone())?);
+            let metadata_a = &reader_a.schema()?.metadata;
+            let metadata_b = &reader_b.schema()?.metadata;
+            check_metadata(rpa, apa, spa, metadata_a)?;
+            check_metadata(rpb, apb, spb, metadata_b)?;
+            drop(reader_a);
+            drop(reader_b);
+
+            let lfa = LazyFrame::scan_ipc(
+                pa,
+                ScanArgsIpc {
+                    memory_map: false,
+                    ..Default::default()
+                },
+            )?;
+            let lfb = LazyFrame::scan_ipc(
+                pb,
+                ScanArgsIpc {
+                    memory_map: false,
+                    ..Default::default()
+                },
+            )?;
+            compare_arrows(lfa.collect()?, lfb.collect()?)?;
+        }
+        Ok(())
+    }
+
     fn check_metadata(
         runtime_path: &str,
         agent_params_path: &str,
         scenario_path: &str,
-        reader: &FileReader<File>,
-    ) {
-        let metadata = &reader.schema().metadata;
+        metadata: &Metadata,
+    ) -> anyhow::Result<()> {
         assert_eq!(metadata["runtime"], runtime_path);
         assert_eq!(metadata["agent_params"], agent_params_path);
         assert_eq!(metadata["scenario"], scenario_path);
+        Ok(())
     }
 
-    fn compare_arrows(
-        reader_a: FileReader<File>,
-        reader_b: FileReader<File>,
-    ) -> anyhow::Result<()> {
-        let ab = concat_batches(&reader_a.schema(), &reader_a.try_collect::<_, Vec<_>, _>()?)?;
-        let bb = concat_batches(&reader_b.schema(), &reader_b.try_collect::<_, Vec<_>, _>()?)?;
-        assert_eq!(ab.num_columns(), bb.num_columns());
-        for i in 0..ab.num_columns() {
-            assert_eq!(ab.column(i), bb.column(i));
+    fn compare_arrows(dfa: DataFrame, dfb: DataFrame) -> anyhow::Result<()> {
+        let (ra, ca) = dfa.shape();
+        let (rb, cb) = dfb.shape();
+        assert_eq!(ra, rb);
+        assert_eq!(ca, cb);
+
+        let csa = dfa.get_column_names();
+        let csb = dfb.get_column_names();
+        assert_eq!(csa, csb);
+
+        let dfa = dfa.sort(&csa, Default::default())?;
+        let dfb = dfb.sort(&csb, Default::default())?;
+
+        for &c in csa.iter().rev() {
+            assert_eq!(dfa[c], dfb[c]);
         }
         Ok(())
     }
@@ -511,11 +561,6 @@ mod tests {
 
         let rt = Runtime::new()?;
         rt.block_on(async {
-            exec(runtime_path, agent_params_path, scenario_path, "run_test")
-                .await
-                .unwrap();
-        });
-        rt.block_on(async {
             exec(
                 runtime_path,
                 agent_params_path,
@@ -524,22 +569,21 @@ mod tests {
             )
             .await
             .unwrap();
+            exec(runtime_path, agent_params_path, scenario_path, "run_test")
+                .await
+                .unwrap();
         });
 
-        let labels = ["info", "agent", "pop"];
-        for label in labels {
-            let reader_a = FileReader::try_new(
-                fs::File::open(format!("./test/run_test_{label}_out.arrow"))?,
-                None,
-            )?;
-            let reader_b = FileReader::try_new(
-                fs::File::open(format!("./test/run_test-t_{label}_out.arrow"))?,
-                None,
-            )?;
-            check_metadata(runtime_path, agent_params_path, scenario_path, &reader_a);
-            check_metadata(runtime_path, agent_params_path, scenario_path_t, &reader_b);
-            compare_arrows(reader_a, reader_b)?;
-        }
+        compare_two_ipcs(
+            "run_test",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path,
+            "run_test-t",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path_t,
+        )?;
         Ok(())
     }
 
@@ -572,20 +616,47 @@ mod tests {
             .unwrap();
         });
 
-        let labels = ["info", "agent", "pop"];
-        for label in labels {
-            let reader_a = FileReader::try_new(
-                fs::File::open(format!("./test/run_test-e0_{label}_out.arrow"))?,
-                None,
-            )?;
-            let reader_b = FileReader::try_new(
-                fs::File::open(format!("./test/run_test-e1_{label}_out.arrow"))?,
-                None,
-            )?;
-            check_metadata(runtime_path, agent_params_path, scenario_path0, &reader_a);
-            check_metadata(runtime_path, agent_params_path, scenario_path1, &reader_b);
-            compare_arrows(reader_a, reader_b)?;
-        }
+        compare_two_ipcs(
+            "run_test-e0",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path0,
+            "run_test-e1",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path1,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_infos() -> anyhow::Result<()> {
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path0 = "./test/config/scenario-i.toml";
+
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path0,
+                "run_test-sample",
+            )
+            .await
+            .unwrap();
+        });
+
+        let lf = LazyFrame::scan_ipc(
+            "./test/run_test-sample_info.arrow",
+            ScanArgsIpc {
+                memory_map: false,
+                ..Default::default()
+            },
+        )?
+        .filter(col("info_label").eq(3))
+        .collect()?;
+        assert!(lf.shape().0 > 0);
         Ok(())
     }
 

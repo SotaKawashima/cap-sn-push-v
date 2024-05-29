@@ -1,11 +1,8 @@
-use arrow::array::{ArrayRef, BooleanArray, PrimitiveArray, RecordBatch};
-use arrow::datatypes::SchemaRef;
-use arrow::{
-    datatypes::{DataType, Field, Schema},
-    ipc::writer::{FileWriter, IpcWriteOptions},
-    ipc::CompressionType,
-};
-use std::collections::HashMap;
+use polars_arrow::array::{ArrayRef, BooleanArray, PrimitiveArray};
+use polars_arrow::datatypes::{ArrowDataType, ArrowSchema, Field, Metadata};
+use polars_arrow::io::ipc::write::{stream_async::WriteOptions, FileWriter};
+use polars_arrow::legacy::error::PolarsResult;
+use polars_arrow::record_batch::RecordBatch;
 use std::fs::File;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -47,7 +44,6 @@ pub enum Stat {
 
 #[derive(Default)]
 pub struct InfoStat {
-    num_par: Vec<u32>,
     num_iter: Vec<u32>,
     t: Vec<u32>,
     info_label: Vec<u8>,
@@ -60,27 +56,25 @@ pub struct InfoStat {
 impl StatTrait for InfoStat {
     fn fields() -> Vec<Field> {
         vec![
-            Field::new("num_par", DataType::UInt32, false),
-            Field::new("num_iter", DataType::UInt32, false),
-            Field::new("t", DataType::UInt32, false),
-            Field::new("info_label", DataType::UInt8, false),
-            Field::new("num_received", DataType::UInt32, false),
-            Field::new("num_shared", DataType::UInt32, false),
-            Field::new("num_viewed", DataType::UInt32, false),
-            Field::new("num_fst_viewed", DataType::UInt32, false),
+            Field::new("num_iter", ArrowDataType::UInt32, false),
+            Field::new("t", ArrowDataType::UInt32, false),
+            Field::new("info_label", ArrowDataType::UInt8, false),
+            Field::new("num_received", ArrowDataType::UInt32, false),
+            Field::new("num_shared", ArrowDataType::UInt32, false),
+            Field::new("num_viewed", ArrowDataType::UInt32, false),
+            Field::new("num_fst_viewed", ArrowDataType::UInt32, false),
         ]
     }
 
     fn to_columns(self) -> Vec<ArrayRef> {
         vec![
-            Arc::new(PrimitiveArray::from(self.num_par)),
-            Arc::new(PrimitiveArray::from(self.num_iter)),
-            Arc::new(PrimitiveArray::from(self.t)),
-            Arc::new(PrimitiveArray::from(self.info_label)),
-            Arc::new(PrimitiveArray::from(self.num_received)),
-            Arc::new(PrimitiveArray::from(self.num_shared)),
-            Arc::new(PrimitiveArray::from(self.num_viewed)),
-            Arc::new(PrimitiveArray::from(self.num_fst_viewed)),
+            Box::new(PrimitiveArray::from_vec(self.num_iter)),
+            Box::new(PrimitiveArray::from_vec(self.t)),
+            Box::new(PrimitiveArray::from_vec(self.info_label)),
+            Box::new(PrimitiveArray::from_vec(self.num_received)),
+            Box::new(PrimitiveArray::from_vec(self.num_shared)),
+            Box::new(PrimitiveArray::from_vec(self.num_viewed)),
+            Box::new(PrimitiveArray::from_vec(self.num_fst_viewed)),
         ]
     }
 
@@ -96,8 +90,7 @@ impl From<InfoStat> for Stat {
 }
 
 impl InfoStat {
-    pub fn push(&mut self, num_par: u32, num_iter: u32, t: u32, d: &InfoData, label: &InfoLabel) {
-        self.num_par.push(num_par);
+    pub fn push(&mut self, num_iter: u32, t: u32, d: &InfoData, label: &InfoLabel) {
         self.num_iter.push(num_iter);
         self.t.push(t);
         self.info_label.push(label.into());
@@ -110,7 +103,6 @@ impl InfoStat {
 
 #[derive(Default)]
 pub struct AgentStat {
-    num_par: Vec<u32>,
     num_iter: Vec<u32>,
     t: Vec<u32>,
     agent_idx: Vec<u32>,
@@ -120,21 +112,19 @@ pub struct AgentStat {
 impl StatTrait for AgentStat {
     fn fields() -> Vec<Field> {
         vec![
-            Field::new("num_par", DataType::UInt32, false),
-            Field::new("num_iter", DataType::UInt32, false),
-            Field::new("t", DataType::UInt32, false),
-            Field::new("agent_idx", DataType::UInt32, false),
-            Field::new("selfish", DataType::Boolean, false),
+            Field::new("num_iter", ArrowDataType::UInt32, false),
+            Field::new("t", ArrowDataType::UInt32, false),
+            Field::new("agent_idx", ArrowDataType::UInt32, false),
+            Field::new("selfish", ArrowDataType::Boolean, false),
         ]
     }
 
     fn to_columns(self) -> Vec<ArrayRef> {
         vec![
-            Arc::new(PrimitiveArray::from(self.num_par)),
-            Arc::new(PrimitiveArray::from(self.num_iter)),
-            Arc::new(PrimitiveArray::from(self.t)),
-            Arc::new(PrimitiveArray::from(self.agent_idx)),
-            Arc::new(BooleanArray::from(self.selfish)),
+            Box::new(PrimitiveArray::from_vec(self.num_iter)),
+            Box::new(PrimitiveArray::from_vec(self.t)),
+            Box::new(PrimitiveArray::from_vec(self.agent_idx)),
+            Box::new(BooleanArray::from_slice(&self.selfish)),
         ]
     }
 
@@ -144,8 +134,7 @@ impl StatTrait for AgentStat {
 }
 
 impl AgentStat {
-    pub fn push_selfish(&mut self, num_par: u32, num_iter: u32, t: u32, agent_idx: usize) {
-        self.num_par.push(num_par);
+    pub fn push_selfish(&mut self, num_iter: u32, t: u32, agent_idx: usize) {
         self.num_iter.push(num_iter);
         self.t.push(t);
         self.agent_idx.push(agent_idx as u32);
@@ -172,7 +161,6 @@ impl PopData {
 
 #[derive(Default)]
 pub struct PopStat {
-    num_par: Vec<u32>,
     num_iter: Vec<u32>,
     t: Vec<u32>,
     num_selfish: Vec<u32>,
@@ -181,19 +169,17 @@ pub struct PopStat {
 impl StatTrait for PopStat {
     fn fields() -> Vec<Field> {
         vec![
-            Field::new("num_par", DataType::UInt32, false),
-            Field::new("num_iter", DataType::UInt32, false),
-            Field::new("t", DataType::UInt32, false),
-            Field::new("num_selfish", DataType::UInt32, false),
+            Field::new("num_iter", ArrowDataType::UInt32, false),
+            Field::new("t", ArrowDataType::UInt32, false),
+            Field::new("num_selfish", ArrowDataType::UInt32, false),
         ]
     }
 
     fn to_columns(self) -> Vec<ArrayRef> {
         vec![
-            Arc::new(PrimitiveArray::from(self.num_par)),
-            Arc::new(PrimitiveArray::from(self.num_iter)),
-            Arc::new(PrimitiveArray::from(self.t)),
-            Arc::new(PrimitiveArray::from(self.num_selfish)),
+            Box::new(PrimitiveArray::from_vec(self.num_iter)),
+            Box::new(PrimitiveArray::from_vec(self.t)),
+            Box::new(PrimitiveArray::from_vec(self.num_selfish)),
         ]
     }
 
@@ -203,8 +189,7 @@ impl StatTrait for PopStat {
 }
 
 impl PopStat {
-    pub fn push(&mut self, num_par: u32, num_iter: u32, t: u32, d: PopData) {
-        self.num_par.push(num_par);
+    pub fn push(&mut self, num_iter: u32, t: u32, d: PopData) {
         self.num_iter.push(num_iter);
         self.t.push(t);
         self.num_selfish.push(d.num_selfish);
@@ -225,7 +210,6 @@ pub trait StatTrait {
 
 struct MyWriter<T> {
     writer: FileWriter<File>,
-    schema: SchemaRef,
     _marker: PhantomData<T>,
 }
 
@@ -233,7 +217,7 @@ impl<T: StatTrait> MyWriter<T> {
     fn try_new(
         output_dir: &PathBuf,
         identifier: &str,
-        metadata: HashMap<String, String>,
+        metadata: Metadata,
         overwriting: bool,
         compress: bool,
     ) -> anyhow::Result<Self> {
@@ -245,29 +229,31 @@ impl<T: StatTrait> MyWriter<T> {
             );
         }
 
-        let schema = SchemaRef::new(Schema::new_with_metadata(T::fields(), metadata));
-        let writer = FileWriter::try_new_with_options(
+        let schema = Arc::new(ArrowSchema::from(T::fields()).with_metadata(metadata));
+        let writer = FileWriter::try_new(
             File::create(output_path)?,
-            &schema,
-            IpcWriteOptions::default().try_with_compression(if compress {
-                Some(CompressionType::ZSTD)
-            } else {
-                None
-            })?,
+            schema,
+            None,
+            WriteOptions {
+                compression: if compress {
+                    Some(polars_arrow::io::ipc::write::Compression::ZSTD)
+                } else {
+                    None
+                },
+            },
         )?;
         Ok(Self {
             writer,
-            schema,
             _marker: PhantomData,
         })
     }
 
-    fn write(&mut self, data: T) -> arrow::error::Result<()> {
-        let batch = RecordBatch::try_new(self.schema.clone(), data.to_columns())?;
-        self.writer.write(&batch)
+    fn write(&mut self, data: T) -> PolarsResult<()> {
+        let batch = RecordBatch::try_new(data.to_columns())?;
+        self.writer.write(&batch, None)
     }
 
-    fn finish(&mut self) -> arrow::error::Result<()> {
+    fn finish(&mut self) -> PolarsResult<()> {
         self.writer.finish()
     }
 }
@@ -284,7 +270,7 @@ impl FileWriters {
         output_dir: &PathBuf,
         overwriting: bool,
         compressing: bool,
-        metadata: HashMap<String, String>,
+        metadata: Metadata,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             info: MyWriter::try_new(
@@ -305,7 +291,7 @@ impl FileWriters {
         })
     }
 
-    pub fn write(&mut self, stat: Stat) -> arrow::error::Result<()> {
+    pub fn write(&mut self, stat: Stat) -> PolarsResult<()> {
         match stat {
             Stat::Info(stat) => self.info.write(stat)?,
             Stat::Agent(stat) => self.agent.write(stat)?,
@@ -314,7 +300,7 @@ impl FileWriters {
         Ok(())
     }
 
-    pub fn finish(&mut self) -> arrow::error::Result<()> {
+    pub fn finish(&mut self) -> PolarsResult<()> {
         self.info.finish()?;
         self.agent.finish()?;
         self.pop.finish()?;

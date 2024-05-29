@@ -151,35 +151,6 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    pub fn reset(
-        &mut self,
-        delay_selfish: u32,
-        access_prob: V,
-        friend_access_prob: V,
-        social_access_prob: V,
-        friend_arrival_prob: V,
-        initial_opinions: InitialOpinions<V>,
-        base_rates: &GlobalBaseRates<V>,
-    ) where
-        V: NumAssign + Default,
-        StandardNormal: Distribution<V>,
-        Exp1: Distribution<V>,
-        Open01: Distribution<V>,
-    {
-        self.delay_selfish = delay_selfish;
-        self.access_prob = access_prob;
-        self.friend_access_prob = friend_access_prob;
-        self.social_access_prob = social_access_prob;
-        self.friend_arrival_rate = friend_arrival_prob;
-
-        self.ops.reset(initial_opinions, base_rates);
-
-        self.info_trust_map.clear();
-        self.selfish_status.reset();
-        self.sharing_statuses.clear();
-        self.infos_accessed.clear();
-    }
-
     pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
     where
         V: NumAssign + Sum + Default + fmt::Debug,
@@ -191,22 +162,29 @@ where
         self.prospect.reset_with(&agent_params.loss_params, rng);
         self.cpt.reset_with(&agent_params.cpt_params, rng);
 
-        self.conds = ConditionalOpinions::from_init(&agent_params.initial_conditions, rng);
-
         // if agent_params.pi_prob > rng.gen::<V>() {
         //     agent_params.pi_rate.sample(rng)
         // } else {
         //     V::zero()
         // },
-        self.reset(
-            agent_params.delay_selfish.sample(rng),
-            agent_params.access_prob.sample(rng),
-            agent_params.friend_access_prob.sample(rng),
-            agent_params.social_access_prob.sample(rng),
-            agent_params.friend_arrival_prob.sample(rng),
+
+        self.delay_selfish = agent_params.delay_selfish.sample(rng);
+        self.access_prob = agent_params.access_prob.sample(rng);
+        self.friend_access_prob = agent_params.friend_access_prob.sample(rng);
+        self.social_access_prob = agent_params.social_access_prob.sample(rng);
+        self.friend_arrival_rate = agent_params.friend_arrival_prob.sample(rng);
+
+        self.conds = ConditionalOpinions::from_init(&agent_params.initial_conditions, rng);
+        self.ops.reset(
             agent_params.initial_opinions.clone(),
             &agent_params.base_rates,
+            &self.conds,
         );
+
+        self.info_trust_map.clear();
+        self.selfish_status.reset();
+        self.sharing_statuses.clear();
+        self.infos_accessed.clear();
     }
 
     pub fn is_willing_selfish(&self) -> bool {
@@ -246,8 +224,15 @@ where
         let friend_trust = receipt_prob * self.friend_access_prob * trust;
         let social_trust = receipt_prob * self.social_access_prob * trust;
 
-        let mut new_ops = self.ops.new(info, trust, friend_trust, social_trust);
-        let temp_ops = new_ops.compute(info, social_trust, &self.conds, &agent_params.base_rates);
+        let mut new_ops = self
+            .ops
+            .new(info.content, trust, friend_trust, social_trust);
+        let temp_ops = new_ops.compute(
+            info.content,
+            social_trust,
+            &self.conds,
+            &agent_params.base_rates,
+        );
 
         // compute values of prospects
         let sharing_status = self.sharing_statuses.entry(info.idx).or_default();
@@ -257,7 +242,7 @@ where
             }
             let (pred_new_fop, ps) = new_ops.predict(
                 &temp_ops,
-                info,
+                info.content,
                 friend_trust,
                 self.friend_arrival_rate * self.friend_access_prob * trust,
                 &self.conds,
@@ -291,13 +276,15 @@ where
         let friend_trust = V::zero(); // * self.friend_access_prob * trust;
         let social_trust = V::zero(); // * self.social_access_prob * trust;
 
-        let mut new_ops = self.ops.new(info, trust, friend_trust, social_trust);
-        let temp = new_ops.compute(info, social_trust, &self.conds, base_rates);
+        let mut new_ops = self
+            .ops
+            .new(info.content, trust, friend_trust, social_trust);
+        let temp = new_ops.compute(info.content, social_trust, &self.conds, base_rates);
 
         // posting info is equivalent to sharing it to friends with max trust.
         let (pred_fop, _) = new_ops.predict(
             &temp,
-            info,
+            info.content,
             friend_trust,
             self.friend_arrival_rate * self.friend_access_prob, // * trust,
             &self.conds,

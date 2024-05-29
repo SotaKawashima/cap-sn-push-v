@@ -1,0 +1,146 @@
+delay_selfish       = { Fixed = 0 }
+access_prob         = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+friend_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+social_access_prob  = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+friend_arrival_prob = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+
+[base_rates.base]
+psi    = [0.999, 0.001]
+phi    = [0.999, 0.001]
+m      = [0.999, 0.001]
+o      = [0.999, 0.001]
+b      = [0.999, 0.001]
+a      = [0.999, 0.001]
+h      = [0.999, 0.001]
+theta  = [0.999, 0.001]
+thetad = [0.999, 0.001]
+
+[base_rates.friend]
+fpsi = [0.999, 0.001]
+fphi = [0.999, 0.001]
+fm   = [0.999, 0.001]
+fo   = [0.999, 0.001]
+fb   = [0.999, 0.001]
+fh   = [0.999, 0.001]
+
+[base_rates.social]
+kpsi = [0.999, 0.001]
+kphi = [0.999, 0.001]
+km   = [0.999, 0.001]
+ko   = [0.999, 0.001]
+kb   = [0.999, 0.001]
+kh   = [0.999, 0.001]
+
+[initial_opinions.base]
+psi  = [[0.0, 0.0], 1.0]
+phi  = [[0.0, 0.0], 1.0]
+m    = [[0.0, 0.0], 1.0]
+o    = [[0.0, 0.0], 1.0]
+h_by_phi1_psi1 = [[0.0, 0.0], 1.0]
+h_by_phi1_b1 = [[0.0, 0.0], 1.0]
+
+[initial_opinions.friend]
+fphi = [[0.0, 0.0], 1.0]
+fm   = [[0.0, 0.0], 1.0]
+fo   = [[0.0, 0.0], 1.0]
+fh_by_fphi1_fpsi1 = [[0.0, 0.0], 1.0]
+fh_by_fphi1_fb1 = [[0.0, 0.0], 1.0]
+
+[initial_opinions.social]
+kphi = [[0.0, 0.0], 1.0]
+km   = [[0.0, 0.0], 1.0]
+ko   = [[0.0, 0.0], 1.0]
+kh_by_kphi1_kpsi1 = [[0.0, 0.0], 1.0]
+kh_by_kphi1_kb1 = [[0.0, 0.0], 1.0]
+
+[initial_conditions.base]
+a_fh = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.00, 0.95], 0.05] },
+]
+b_kh = [
+    { Fixed = [[0.90, 0.00], 0.10] },
+    { Fixed = [[0.00, 0.99], 0.01] },
+]
+o_b = [
+    { Fixed = [[1.0, 0.00], 0.00] },
+    { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
+]
+theta_h = [
+    { Fixed = [[1.0, 0.00], 0.00] },
+    { Fixed = [[0.0, 0.70], 0.30] },
+]
+thetad_h = [
+    { Fixed = [[1.0, 0.00], 0.00] },
+    { Fixed = [[0.0, 0.70], 0.30] },
+]
+h_psi_by_phi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.60, 0.30], 0.10] },
+]
+h_b_by_phi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.45, 0.45], 0.10] },
+]
+
+[initial_conditions.friend]
+fpsi_m = [
+    { Fixed = [[0.99, 0.00], 0.01] },
+    { Fixed = [[0.70, 0.20], 0.10] },
+]
+fo_fb = [
+    { Fixed = [[1.0, 0.00], 0.00] },
+    { Fixed = [[0.0, 0.70], 0.30] },
+]
+fb_fm = [
+    { Fixed = [[0.90, 0.00], 0.10] },
+    { Fixed = [[0.00, 0.99], 0.01] },
+]
+fh_fpsi_by_fphi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.60, 0.30], 0.10] },
+]
+fh_fb_by_fphi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.45, 0.45], 0.10] },
+]
+
+[initial_conditions.social]
+kpsi_m = [
+    { Fixed = [[0.99, 0.00], 0.01] },
+    { Fixed = [[0.25, 0.65], 0.10] },
+]
+ko_kb = [
+    { Fixed = [[1.0, 0.00], 0.00] },
+    { Fixed = [[0.0, 0.70], 0.30] },
+]
+kb_km = [
+    { Fixed = [[1.00, 0.00], 0.00] },
+    { Fixed = [[0.25, 0.65], 0.10] },
+]
+kh_kpsi_by_kphi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.60, 0.30], 0.10] },
+]
+kh_kb_by_kphi0 = [
+    { Fixed = [[0.95, 0.00], 0.05] },
+    { Fixed = [[0.45, 0.45], 0.10] },
+]
+
+[trust_params]
+misinfo    = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+corrective = { base = 0.0, error = { dist = { Beta = { alpha = 3.0, beta = 3.0 } } } }
+observed   = { base = 0.0, error = { dist = "Standard" } }
+inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
+
+[loss_params]
+x0 = { base = -1.0 }
+x1_of_x0 = { base = -10.0 }
+y_of_x0  = { base = -0.01 }
+
+[cpt_params]
+alpha  = { base = 0.88 }
+beta   = { base = 0.88 }
+lambda = { base = 2.25 }
+gamma  = { base = 0.61 }
+delta  = { base = 0.69 }

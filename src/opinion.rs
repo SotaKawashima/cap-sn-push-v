@@ -1,5 +1,5 @@
 use crate::{
-    info::Info,
+    info::InfoContent,
     value::{EValue, EValueParam},
 };
 use approx::UlpsEq;
@@ -15,7 +15,10 @@ use subjective_logic::{
     impl_domain,
     iter::FromFn,
     marr_d1, marr_d2,
-    mul::labeled::{OpinionD1, OpinionD2, OpinionD3, SimplexD1},
+    mul::{
+        labeled::{OpinionD1, OpinionD2, OpinionD3, SimplexD1},
+        MergeJointConditions2,
+    },
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
     ops::{
         Abduction, Deduction, Discount, Fuse, FuseAssign, FuseOp, Indexes, Product2, Product3,
@@ -33,8 +36,8 @@ pub struct Phi;
 impl_domain!(Phi = 2);
 
 #[derive(Debug)]
-pub struct S;
-impl_domain!(S = 2);
+pub struct M;
+impl_domain!(M = 2);
 
 #[derive(Debug)]
 pub struct O;
@@ -49,20 +52,24 @@ pub struct B;
 impl_domain!(B = 2);
 
 #[derive(Debug)]
+pub struct H;
+impl_domain!(H = 2);
+
+#[derive(Debug)]
 pub struct Theta;
-impl_domain!(Theta = 2);
+impl_domain!(Theta from H);
 
 #[derive(Debug)]
 pub struct Thetad;
-impl_domain!(Thetad from Theta);
+impl_domain!(Thetad from H);
 
 #[derive(Debug)]
 pub struct FO;
 impl_domain!(FO from O);
 
 #[derive(Debug)]
-pub struct FS;
-impl_domain!(FS from S);
+pub struct FM;
+impl_domain!(FM from M);
 
 #[derive(Debug)]
 pub struct FPhi;
@@ -77,8 +84,8 @@ pub struct FB;
 impl_domain!(FB from B);
 
 #[derive(Debug)]
-pub struct FTheta;
-impl_domain!(FTheta from Theta);
+pub struct FH;
+impl_domain!(FH from H);
 
 #[derive(Debug)]
 pub struct KPsi;
@@ -89,16 +96,16 @@ pub struct KPhi;
 impl_domain!(KPhi from Phi);
 
 #[derive(Debug)]
-pub struct KS;
-impl_domain!(KS from S);
+pub struct KM;
+impl_domain!(KM from M);
 
 #[derive(Debug)]
 pub struct KO;
 impl_domain!(KO from O);
 
 #[derive(Debug)]
-pub struct KTheta;
-impl_domain!(KTheta from Theta);
+pub struct KH;
+impl_domain!(KH from H);
 
 #[derive(Debug)]
 pub struct KB;
@@ -120,15 +127,17 @@ pub struct BaseRates<V> {
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub phi: MArrD1<Phi, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub s: MArrD1<S, V>,
+    pub m: MArrD1<M, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub o: MArrD1<O, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
+    pub a: MArrD1<A, V>,
+    #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub b: MArrD1<B, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub theta: MArrD1<Theta, V>,
+    pub h: MArrD1<H, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub a: MArrD1<A, V>,
+    pub theta: MArrD1<Theta, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub thetad: MArrD1<Thetad, V>,
 }
@@ -142,13 +151,13 @@ pub struct FriendBaseRates<V> {
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub fphi: MArrD1<FPhi, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub fs: MArrD1<FS, V>,
+    pub fm: MArrD1<FM, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub fo: MArrD1<FO, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub fb: MArrD1<FB, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub ftheta: MArrD1<FTheta, V>,
+    pub fh: MArrD1<FH, V>,
 }
 
 #[serde_as]
@@ -160,13 +169,13 @@ pub struct SocialBaseRates<V> {
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub kphi: MArrD1<KPhi, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub ks: MArrD1<KS, V>,
+    pub km: MArrD1<KM, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub ko: MArrD1<KO, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     pub kb: MArrD1<KB, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
-    pub ktheta: MArrD1<KTheta, V>,
+    pub kh: MArrD1<KH, V>,
 }
 
 #[serde_as]
@@ -186,9 +195,13 @@ pub struct InitialBaseSimplexes<V: Float + AddAssign + UlpsEq> {
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub phi: SimplexD1<Phi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    pub s: SimplexD1<S, V>,
+    pub m: SimplexD1<M, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub o: SimplexD1<O, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub h_by_phi1_psi1: SimplexD1<H, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub h_by_phi1_b1: SimplexD1<H, V>,
 }
 
 #[serde_as]
@@ -198,9 +211,13 @@ pub struct InitialFriendSimplexes<V: Float + AddAssign + UlpsEq> {
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub fphi: SimplexD1<FPhi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    pub fs: SimplexD1<FS, V>,
+    pub fm: SimplexD1<FM, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub fo: SimplexD1<FO, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub fh_by_fphi1_fpsi1: SimplexD1<FH, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub fh_by_fphi1_fb1: SimplexD1<FH, V>,
 }
 
 #[serde_as]
@@ -210,9 +227,13 @@ pub struct InitialSocialSimplexes<V: Float + AddAssign + UlpsEq> {
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub kphi: SimplexD1<KPhi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    pub ks: SimplexD1<KS, V>,
+    pub km: SimplexD1<KM, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     pub ko: SimplexD1<KO, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub kh_by_kphi1_kpsi1: SimplexD1<KH, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
+    pub kh_by_kphi1_kb1: SimplexD1<KH, V>,
 }
 
 #[derive(Debug, serde::Deserialize, Clone)]
@@ -360,23 +381,27 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    /// $K\Theta \Rightarrow A$
+    /// $H^F \implies A$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_a: MArrD1<KTheta, SimplexDist<A, V>>,
-    /// $K\Theta \Rightarrow B$
+    pub a_fh: MArrD1<FH, SimplexDist<A, V>>,
+    /// $H^K \implies B$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_b: MArrD1<KTheta, SimplexDist<B, V>>,
-    /// $B \Rightarrow O$
+    pub b_kh: MArrD1<KH, SimplexDist<B, V>>,
+    /// $B \implies O$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_o: MArrD1<B, SimplexDist<O, V>>,
-    /// $B,\Psi \Rightarrow \Theta$
-    pub cond_theta: CondThetaDist<V>,
-    /// relative paramter of $B,\Psi,A \Rightarrow \Theta'$ and $\Phi \Rightarrow \Theta'$
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub rel_cond_thetad: RelativeParam<EValue<V>>,
-    /// $\Phi \Rightarrow \Theta$
+    pub o_b: MArrD1<B, SimplexDist<O, V>>,
+    /// $H \implies \Theta$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_theta_phi: MArrD1<Phi, SimplexDist<Theta, V>>,
+    pub theta_h: MArrD1<H, SimplexDist<Theta, V>>,
+    /// $H \implies \Theta'$
+    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
+    pub thetad_h: MArrD1<H, SimplexDist<Thetad, V>>,
+    /// $\Psi \implies H$ when $\phi_0$ is true
+    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
+    pub h_psi_by_phi0: MArrD1<Psi, SimplexDist<H, V>>,
+    /// $B \implies H$ when $\phi_0$ is true
+    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
+    pub h_b_by_phi0: MArrD1<B, SimplexDist<H, V>>,
 }
 
 #[serde_as]
@@ -390,20 +415,21 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    /// $S \Rightarrow F\Psi$
+    /// $M \implies \Psi^F$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_fpsi: MArrD1<S, SimplexDist<FPsi, V>>,
-    /// $FB \Rightarrow FO$
+    pub fpsi_m: MArrD1<M, SimplexDist<FPsi, V>>,
+    /// $B^F \implies O^F$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_fo: MArrD1<FB, SimplexDist<FO, V>>,
-    /// $FS \Rightarrow FB$
+    pub fo_fb: MArrD1<FB, SimplexDist<FO, V>>,
+    /// $M^F \implies B^F$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_fb: MArrD1<FS, SimplexDist<FB, V>>,
-    /// $FB,F\Psi \Rightarrow F\Theta$
-    pub cond_ftheta: CondFThetaDist<V>,
-    /// $F\Phi \Rightarrow F\Theta$
+    pub fb_fm: MArrD1<FM, SimplexDist<FB, V>>,
+    /// $\Psi^F \implies H^F$ when $\phi^F_0$ is true
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_ftheta_fphi: MArrD1<FPhi, SimplexDist<FTheta, V>>,
+    pub fh_fpsi_by_fphi0: MArrD1<FPhi, SimplexDist<FH, V>>,
+    /// $B^F \implies H^F$ when $\phi^F_0$ is true
+    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
+    pub fh_fb_by_fphi0: MArrD1<FB, SimplexDist<FH, V>>,
 }
 
 #[serde_as]
@@ -417,20 +443,21 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    /// $S \Rightarrow K\Psi$
+    /// $M \implies \Psi^K$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_kpsi: MArrD1<S, SimplexDist<KPsi, V>>,
-    /// $KB \Rightarrow KO$
+    pub kpsi_m: MArrD1<M, SimplexDist<KPsi, V>>,
+    /// $B^K \implies O^K$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_ko: MArrD1<KB, SimplexDist<KO, V>>,
-    /// $KS \Rightarrow KB$
+    pub ko_kb: MArrD1<KB, SimplexDist<KO, V>>,
+    /// $M^K \implies B^K$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_kb: MArrD1<KS, SimplexDist<KB, V>>,
-    /// $KB,K\Psi \Rightarrow K\Theta$
-    pub cond_ktheta: CondKThetaDist<V>,
-    /// $K\Phi \Rightarrow K\Theta$
+    pub kb_km: MArrD1<KM, SimplexDist<KB, V>>,
+    /// $\Psi^K \implies H^K$ when $\phi^K_0$ is true
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub cond_ktheta_kphi: MArrD1<KPhi, SimplexDist<KTheta, V>>,
+    pub kh_kpsi_by_kphi0: MArrD1<KPhi, SimplexDist<KH, V>>,
+    /// $B^K \implies H^K$ when $\phi^K_0$ is true
+    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
+    pub kh_kb_by_kphi0: MArrD1<KB, SimplexDist<KH, V>>,
 }
 
 /// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
@@ -526,9 +553,9 @@ where
     Open01: Distribution<V>,
 {
     #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub fb0fpsi0: SimplexDist<FTheta, V>,
+    pub fb0fpsi0: SimplexDist<FH, V>,
     #[serde_as(as = "TryFromInto<SimplexParam< V>>")]
-    pub fb1fpsi1: SimplexDist<FTheta, V>,
+    pub fb1fpsi1: SimplexDist<FH, V>,
     #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
     pub fb0fpsi1: RelativeParam<EValue<V>>,
     #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
@@ -547,9 +574,9 @@ where
     Open01: Distribution<V>,
 {
     #[serde_as(as = "TryFromInto<SimplexParam< V>>")]
-    pub kb0kpsi0: SimplexDist<KTheta, V>,
+    pub kb0kpsi0: SimplexDist<KH, V>,
     #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub kb1kpsi1: SimplexDist<KTheta, V>,
+    pub kb1kpsi1: SimplexDist<KH, V>,
     #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
     pub kb0kpsi1: RelativeParam<EValue<V>>,
     #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
@@ -573,7 +600,7 @@ where
     }
 }
 
-impl<V> Distribution<MArrD2<FB, FPsi, SimplexD1<FTheta, V>>> for CondFThetaDist<V>
+impl<V> Distribution<MArrD2<FB, FPsi, SimplexD1<FH, V>>> for CondFThetaDist<V>
 where
     V: Float + AddAssign + UlpsEq,
     Standard: Distribution<V>,
@@ -581,7 +608,7 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<FB, FPsi, SimplexD1<FTheta, V>> {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<FB, FPsi, SimplexD1<FH, V>> {
         let fb0fpsi0 = self.fb0fpsi0.sample(rng);
         let fb1fpsi1 = self.fb1fpsi1.sample(rng);
         let fb0fpsi1 = self.fb0fpsi1.sample(rng).to_simplex(&fb1fpsi1).unwrap();
@@ -590,7 +617,7 @@ where
     }
 }
 
-impl<V> Distribution<MArrD2<KB, KPsi, SimplexD1<KTheta, V>>> for CondKThetaDist<V>
+impl<V> Distribution<MArrD2<KB, KPsi, SimplexD1<KH, V>>> for CondKThetaDist<V>
 where
     V: Float + AddAssign + UlpsEq,
     Standard: Distribution<V>,
@@ -598,7 +625,7 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<KB, KPsi, SimplexD1<KTheta, V>> {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<KB, KPsi, SimplexD1<KH, V>> {
         let kb0kpsi0 = self.kb0kpsi0.sample(rng);
         let kb1kpsi1 = self.kb1kpsi1.sample(rng);
         let kb0kpsi1 = self.kb0kpsi1.sample(rng).to_simplex(&kb1kpsi1).unwrap();
@@ -606,60 +633,6 @@ where
         marr_d2![[kb0kpsi0, kb0kpsi1], [kb1kpsi0, kb1kpsi1]]
     }
 }
-
-// #[serde_as]
-// #[derive(Debug, serde::Deserialize)]
-// #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-// pub struct CondThetadDist<V>
-// where
-//     V: Float + UlpsEq + AddAssign,
-//     Standard: Distribution<V>,
-//     StandardNormal: Distribution<V>,
-//     Exp1: Distribution<V>,
-//     Open01: Distribution<V>,
-// {
-//     // #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
-//     // pub a0: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
-//     // #[serde_as(as = "TryFromInto<[[RelativeParam<EValueParam<V>>; PSI]; B]>")]
-//     // pub a1: HigherArr2<RelativeParam<EValue<V>>, B, PSI>,
-// }
-
-// impl<V> CondThetadDist<V>
-// where
-//     V: Float + AddAssign + UlpsEq,
-//     Standard: Distribution<V>,
-//     StandardNormal: Distribution<V>,
-//     Exp1: Distribution<V>,
-//     Open01: Distribution<V>,
-// {
-//     fn sample<R: Rng + ?Sized>(
-//         &self,
-//         rng: &mut R,
-//         cond: &HigherArr2<Simplex<V, THETA>, B, PSI>,
-//     ) -> HigherArr3<Simplex<V, THETAD>, B, PSI, A> {
-//         // a -> b -> psi
-//         let a000 = self.a0[[0, 0]]
-//             .sample(rng)
-//             .to_simplex(&cond[[0, 0]])
-//             .unwrap();
-//         let a001 = self.a0[[0, 1]]
-//             .sample(rng)
-//             .to_simplex(&cond[[0, 1]])
-//             .unwrap();
-//         let a010 = self.a0[[1, 0]]
-//             .sample(rng)
-//             .to_simplex(&cond[[1, 0]])
-//             .unwrap();
-//         let a011 = self.a0[[1, 1]]
-//             .sample(rng)
-//             .to_simplex(&cond[[1, 1]])
-//             .unwrap();
-//         harr3![
-//             [[a000.clone(), a001], [a010, a011]],
-//             [[a000.clone(), a000.clone()], [a000.clone(), a000]]
-//         ]
-//     }
-// }
 
 #[derive(Debug, Default)]
 pub struct ConditionalOpinions<V: Float> {
@@ -670,54 +643,54 @@ pub struct ConditionalOpinions<V: Float> {
 
 #[derive(Debug, Default)]
 pub struct BaseConditionalOpinions<V: Float> {
-    /// $B \Rightarrow O$
-    cond_o: MArrD1<B, SimplexD1<O, V>>,
-    /// $K\Theta \Rightarrow B$
-    cond_b: MArrD1<KTheta, SimplexD1<B, V>>,
-    /// $B,\Psi \Rightarrow \Theta$
-    cond_theta: MArrD2<B, Psi, SimplexD1<Theta, V>>,
-    /// $\Phi \Rightarrow \Theta$
-    cond_theta_phi: MArrD1<Phi, SimplexD1<Theta, V>>,
-    /// $K\Theta \Rightarrow A$
-    cond_a: MArrD1<FTheta, SimplexD1<A, V>>,
-    /// $B,\Psi,A \Rightarrow \Theta'$
-    cond_thetad: MArrD3<A, B, Psi, SimplexD1<Thetad, V>>,
-    /// $\Phi \Rightarrow \Theta'$
-    cond_thetad_phi: MArrD1<Phi, SimplexD1<Thetad, V>>,
+    /// $B \implies O$
+    o: MArrD1<B, SimplexD1<O, V>>,
+    /// $\Theta^K \implies B$
+    b: MArrD1<KH, SimplexD1<B, V>>,
+    /// $\Theta^K \implies A$
+    a: MArrD1<FH, SimplexD1<A, V>>,
+    /// $\Psi \implies H$ when $\phi_0$ is true
+    h_psi_by_phi0: MArrD1<Psi, SimplexD1<H, V>>,
+    /// $B \implies H$ when $\phi_0$ is true
+    h_b_by_phi0: MArrD1<B, SimplexD1<H, V>>,
+    /// $H \implies \Theta$
+    theta: MArrD1<H, SimplexD1<Theta, V>>,
+    /// $H \implies \Theta'$
+    thetad: MArrD1<H, SimplexD1<Thetad, V>>,
 }
 
 #[derive(Debug, Default)]
 pub struct FriendConditionalOpinions<V: Float> {
-    /// $S \Rightarrow F\Psi$
-    cond_fpsi: MArrD1<S, SimplexD1<FPsi, V>>,
-    /// $FB \Rightarrow FO$
-    cond_fo: MArrD1<FB, SimplexD1<FO, V>>,
-    /// $FS \Rightarrow FB$
-    cond_fb: MArrD1<FS, SimplexD1<FB, V>>,
-    /// $FB,F\Psi \Rightarrow F\Theta$
-    cond_ftheta: MArrD2<FB, FPsi, SimplexD1<FTheta, V>>,
-    /// $F\Phi \Rightarrow F\Theta$
-    cond_ftheta_fphi: MArrD1<FPhi, SimplexD1<FTheta, V>>,
+    /// $S \implies \Psi^F$
+    fpsi: MArrD1<M, SimplexD1<FPsi, V>>,
+    /// $B^F \implies O^F$
+    fo: MArrD1<FB, SimplexD1<FO, V>>,
+    /// $M^F \implies B^F$
+    fb: MArrD1<FM, SimplexD1<FB, V>>,
+    /// $\Psi^F \implies H^F$ when $\phi_0^F$ is true
+    fh_fpsi_by_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
+    /// $B^F \implies H^F$ when $\phi_0^F$ is true
+    fh_fb_by_fphi0: MArrD1<FB, SimplexD1<FH, V>>,
 }
 
 #[derive(Debug, Default)]
 pub struct SocialConditionalOpinions<V: Float> {
-    /// $S \Rightarrow K\Psi$
-    cond_kpsi: MArrD1<S, SimplexD1<KPsi, V>>,
-    /// $KB \Rightarrow KO$
-    cond_ko: MArrD1<KB, SimplexD1<KO, V>>,
-    /// $KS \Rightarrow KB$
-    cond_kb: MArrD1<KS, SimplexD1<KB, V>>,
-    /// $KB,K\Psi \Rightarrow K\Theta$
-    cond_ktheta: MArrD2<KB, KPsi, SimplexD1<KTheta, V>>,
-    /// $K\Phi \Rightarrow K\Theta$
-    cond_ktheta_kphi: MArrD1<KPhi, SimplexD1<KTheta, V>>,
+    /// $M \implies \Psi^K$
+    kpsi: MArrD1<M, SimplexD1<KPsi, V>>,
+    /// $B^K \implies O^K$
+    ko: MArrD1<KB, SimplexD1<KO, V>>,
+    /// $M^K \implies B^K$
+    kb: MArrD1<KM, SimplexD1<KB, V>>,
+    /// $\Psi^K \implies H^K$ when $\phi_0^K$ is true
+    kh_kpsi_by_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
+    /// $B^K \implies H^K$ when $\phi_0^K$ is true
+    kh_kb_by_kphi0: MArrD1<KB, SimplexD1<KH, V>>,
 }
 
 #[derive(Debug, Default)]
 pub struct Opinions<V: Float> {
     op: BaseOpinions<V>,
-    sop: SocialOpinions<V>,
+    sop: CollectiveOpinions<V>,
     fop: FriendOpinions<V>,
 }
 
@@ -725,28 +698,34 @@ pub struct Opinions<V: Float> {
 struct BaseOpinions<V: Float> {
     psi: OpinionD1<Psi, V>,
     phi: OpinionD1<Phi, V>,
-    s: OpinionD1<S, V>,
+    m: OpinionD1<M, V>,
     o: OpinionD1<O, V>,
+    h_psi_by_phi1: MArrD1<Psi, SimplexD1<H, V>>,
+    h_b_by_phi1: MArrD1<B, SimplexD1<H, V>>,
 }
 
 #[derive(Debug, Default)]
-pub struct SocialOpinions<V: Float> {
+pub struct CollectiveOpinions<V: Float> {
     ko: OpinionD1<KO, V>,
-    ks: OpinionD1<KS, V>,
+    km: OpinionD1<KM, V>,
     kphi: OpinionD1<KPhi, V>,
+    kh_kpsi_by_kphi1: MArrD1<KPsi, SimplexD1<KH, V>>,
+    kh_kb_by_kphi1: MArrD1<KB, SimplexD1<KH, V>>,
 }
 
 #[derive(Debug, Default)]
 pub struct FriendOpinions<V: Float> {
     fo: OpinionD1<FO, V>,
-    fs: OpinionD1<FS, V>,
+    fm: OpinionD1<FM, V>,
     fphi: OpinionD1<FPhi, V>,
+    fh_fpsi_by_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
+    fh_fb_by_fphi1: MArrD1<FB, SimplexD1<FH, V>>,
 }
 
 #[derive(Debug)]
 pub struct TempOpinions<V: Float> {
+    h: OpinionD1<H, V>,
     theta: OpinionD1<Theta, V>,
-    b: OpinionD1<B, V>,
     fpsi_ded: OpinionD1<FPsi, V>,
 }
 
@@ -754,138 +733,251 @@ impl<V: Float> TempOpinions<V> {
     #[inline]
     pub fn get_theta_projection(&self) -> MArrD1<Theta, V>
     where
-        V: NumAssign + fmt::Debug,
+        V: NumAssign,
     {
         self.theta.projection()
     }
 }
 
-impl<V> BaseOpinions<V>
-where
-    V: Float + NumAssign + Sum + fmt::Debug,
-{
-    fn new(&self, info: &Info<V>, trust: V) -> Self
+impl<V: Float> BaseOpinions<V> {
+    fn new(
+        init: InitialBaseSimplexes<V>,
+        base_rates: &BaseRates<V>,
+        conds: &BaseConditionalOpinions<V>,
+    ) -> Self
     where
-        V: UlpsEq + NumAssign,
+        V: UlpsEq + AddAssign,
     {
-        let psi = FuseOp::Wgh.fuse(&self.psi, &info.content.psi.discount(trust));
-        let phi = FuseOp::Wgh.fuse(&self.phi, &info.content.phi.discount(trust));
-        let s = FuseOp::Wgh.fuse(&self.s, &info.content.s.discount(trust));
-        let o = FuseOp::Wgh.fuse(&self.o, &info.content.o.discount(trust));
+        let InitialBaseSimplexes {
+            psi,
+            phi,
+            m,
+            o,
+            h_by_phi1_psi1,
+            h_by_phi1_b1,
+        } = init;
+        Self {
+            psi: (psi, base_rates.psi.clone()).into(),
+            phi: (phi, base_rates.phi.clone()).into(),
+            m: (m, base_rates.m.clone()).into(),
+            o: (o, base_rates.o.clone()).into(),
+            h_psi_by_phi1: marr_d1![conds.h_psi_by_phi0[0].clone(), h_by_phi1_psi1],
+            h_b_by_phi1: marr_d1![conds.h_b_by_phi0[0].clone(), h_by_phi1_b1],
+        }
+    }
 
-        Self { psi, phi, s, o }
+    fn update(&self, info: InfoContent<'_, V>, trust: V) -> Self
+    where
+        V: UlpsEq + NumAssign + Sum,
+    {
+        let psi = FuseOp::Wgh.fuse(&self.psi, &info.psi.discount(trust));
+        let phi = FuseOp::Wgh.fuse(&self.phi, &info.phi.discount(trust));
+        let m = FuseOp::Wgh.fuse(&self.m, &info.m.discount(trust));
+        let o = FuseOp::Wgh.fuse(&self.o, &info.o.discount(trust));
+        let h_psi_by_phi1 = marr_d1![
+            self.h_psi_by_phi1[0].clone(),
+            FuseOp::Wgh.fuse(&self.h_psi_by_phi1[1], &info.h_by_phi1_psi1.discount(trust))
+        ];
+        let h_b_by_phi1 = marr_d1![
+            self.h_b_by_phi1[0].clone(),
+            FuseOp::Wgh.fuse(&self.h_b_by_phi1[1], &info.h_by_phi1_b1.discount(trust))
+        ];
+
+        Self {
+            psi,
+            phi,
+            m,
+            o,
+            h_psi_by_phi1,
+            h_b_by_phi1,
+        }
     }
 
     fn compute_a(
         &self,
-        ftheta: &OpinionD1<FTheta, V>,
+        fh: &OpinionD1<FH, V>,
         conds: &BaseConditionalOpinions<V>,
         base_rates: &BaseRates<V>,
     ) -> OpinionD1<A, V>
     where
         V: Float + UlpsEq + NumAssign + Sum + Default,
     {
-        ftheta
-            .deduce(&conds.cond_a)
+        fh.deduce(&conds.a)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.a.clone()))
     }
 
     fn compute_b(
         &self,
-        ktheta: &OpinionD1<KTheta, V>,
+        kh: &OpinionD1<KH, V>,
         conds: &BaseConditionalOpinions<V>,
         base_rates: &BaseRates<V>,
     ) -> OpinionD1<B, V>
     where
         V: Float + UlpsEq + NumAssign + Sum + Default,
     {
-        let mut b = ktheta
-            .deduce(&conds.cond_b)
+        let mut b = kh
+            .deduce(&conds.b)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.b.clone()));
         let b_abd = self
             .o
             .simplex
-            .abduce(&conds.cond_o, base_rates.b.clone())
+            .abduce(&conds.o, base_rates.b.clone())
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.b.clone()));
         FuseOp::ACm.fuse_assign(&mut b, &b_abd);
         b
     }
 
-    fn compute_theta(
+    fn compute_h(
         &self,
         b: &OpinionD1<B, V>,
+        conds: &BaseConditionalOpinions<V>,
+        base_rates: &BaseRates<V>,
+    ) -> OpinionD1<H, V>
+    where
+        V: Float + UlpsEq + NumAssign + Sum + Default,
+    {
+        let h_psi_b_by_phi0: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
+            &conds.h_psi_by_phi0,
+            &conds.h_b_by_phi0,
+            &base_rates.psi,
+            &base_rates.b,
+            &base_rates.h,
+        )
+        .unwrap();
+        let h_psi_b_by_phi1: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
+            &self.h_psi_by_phi1,
+            &self.h_b_by_phi1,
+            &base_rates.psi,
+            &base_rates.b,
+            &base_rates.h,
+        )
+        .unwrap_or_else(|| MArrD2::new(vec![self.h_b_by_phi1.clone(), self.h_b_by_phi1.clone()]));
+        let cond_h = MArrD3::<Phi, _, _, _>::new(vec![h_psi_b_by_phi0, h_psi_b_by_phi1]);
+        let mw = OpinionD3::product3(self.phi.as_ref(), b.as_ref(), self.psi.as_ref());
+        mw.deduce(&cond_h)
+            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.h.clone()))
+    }
+
+    fn compute_theta(
+        &self,
+        h: &OpinionD1<H, V>,
         conds: &BaseConditionalOpinions<V>,
         base_rates: &BaseRates<V>,
     ) -> OpinionD1<Theta, V>
     where
         V: Float + UlpsEq + NumAssign + Sum + Default,
     {
-        let mut theta_ded = OpinionD2::product2(b.as_ref(), self.psi.as_ref())
-            .deduce(&conds.cond_theta)
-            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.theta.clone()));
-        let theta_ded_2 = self
-            .phi
-            .deduce(&conds.cond_theta_phi)
-            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.theta.clone()));
-        FuseOp::Wgh.fuse_assign(&mut theta_ded, &theta_ded_2);
-        theta_ded
+        h.deduce(&conds.theta)
+            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.theta.clone()))
     }
 
     fn compute_thetad(
         &self,
-        a: &OpinionD1<A, V>,
-        b: &OpinionD1<B, V>,
+        h: &OpinionD1<H, V>,
         conds: &BaseConditionalOpinions<V>,
         base_rates: &BaseRates<V>,
     ) -> OpinionD1<Thetad, V>
     where
         V: Float + UlpsEq + NumAssign + Sum + Default,
     {
-        let thetad_ded_2 = self
-            .phi
-            .deduce(&conds.cond_thetad_phi)
-            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.thetad.clone()));
-        let mut thetad_ded_1 = OpinionD3::product3(a.as_ref(), b.as_ref(), self.psi.as_ref())
-            .deduce(&conds.cond_thetad)
-            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.thetad.clone()));
-        FuseOp::Wgh.fuse_assign(&mut thetad_ded_1, &thetad_ded_2);
-        thetad_ded_1
+        h.deduce(&conds.thetad)
+            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.thetad.clone()))
     }
 }
 
-impl<V: Float + fmt::Debug> SocialOpinions<V> {
-    fn new(&self, info: &Info<V>, trust: V) -> Self
+impl<V: Float> CollectiveOpinions<V> {
+    fn new(
+        init: InitialSocialSimplexes<V>,
+        base_rates: &SocialBaseRates<V>,
+        conds: &SocialConditionalOpinions<V>,
+    ) -> Self
+    where
+        V: UlpsEq + AddAssign,
+    {
+        let InitialSocialSimplexes {
+            kphi,
+            km,
+            ko,
+            kh_by_kphi1_kb1,
+            kh_by_kphi1_kpsi1,
+        } = init;
+        Self {
+            kphi: (kphi, base_rates.kphi.clone()).into(),
+            km: (km, base_rates.km.clone()).into(),
+            ko: (ko, base_rates.ko.clone()).into(),
+            kh_kpsi_by_kphi1: marr_d1![conds.kh_kpsi_by_kphi0[0].clone(), kh_by_kphi1_kpsi1],
+            kh_kb_by_kphi1: marr_d1![conds.kh_kb_by_kphi0[0].clone(), kh_by_kphi1_kb1],
+        }
+    }
+
+    fn update(&self, info: InfoContent<'_, V>, trust: V) -> Self
     where
         V: UlpsEq + NumAssign + Sum,
     {
         // compute friends opinions
-        let ko = FuseOp::Wgh.fuse(&self.ko, &info.content.o.discount(trust).conv());
-        let ks = FuseOp::Wgh.fuse(&self.ks, &info.content.s.discount(trust).conv());
-        let kphi = FuseOp::Wgh.fuse(&self.kphi, &info.content.phi.discount(trust).conv());
+        let ko = FuseOp::Wgh.fuse(&self.ko, &info.o.discount(trust).conv());
+        let km = FuseOp::Wgh.fuse(&self.km, &info.m.discount(trust).conv());
+        let kphi = FuseOp::Wgh.fuse(&self.kphi, &info.phi.discount(trust).conv());
+        let kh_kpsi_by_kphi1 = marr_d1![
+            self.kh_kpsi_by_kphi1[0].clone(),
+            FuseOp::Wgh.fuse(
+                &self.kh_kpsi_by_kphi1[1],
+                &info.h_by_phi1_psi1.discount(trust).conv()
+            ),
+        ];
+        let kh_kb_by_kphi1 = marr_d1![
+            self.kh_kb_by_kphi1[0].clone(),
+            FuseOp::Wgh.fuse(
+                &self.kh_kb_by_kphi1[1],
+                &info.h_by_phi1_b1.discount(trust).conv()
+            ),
+        ];
 
-        Self { ko, ks, kphi }
+        Self {
+            ko,
+            km,
+            kphi,
+            kh_kpsi_by_kphi1,
+            kh_kb_by_kphi1,
+        }
     }
 
-    fn compute_ktheta(
+    fn compute_kh(
         &self,
         kb: &OpinionD1<KB, V>,
         kpsi: &OpinionD1<KPsi, V>,
         conds: &SocialConditionalOpinions<V>,
         base_rates: &SocialBaseRates<V>,
-    ) -> OpinionD1<KTheta, V>
+    ) -> OpinionD1<KH, V>
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        let mut ktheta = OpinionD2::product2(kb, kpsi)
-            .deduce(&conds.cond_ktheta)
-            .unwrap_or_else(|| OpinionD1::<_, V>::vacuous_with(base_rates.ktheta.clone()));
-        let ktheta_ded_2 = self
-            .kphi
-            .deduce(&conds.cond_ktheta_kphi)
-            .unwrap_or_else(|| OpinionD1::<_, V>::vacuous_with(base_rates.ktheta.clone()));
-        FuseOp::Wgh.fuse_assign(&mut ktheta, &ktheta_ded_2);
+        let kh_kpsi_kb_kpsi0: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
+            &conds.kh_kpsi_by_kphi0,
+            &conds.kh_kb_by_kphi0,
+            &base_rates.kpsi,
+            &base_rates.kb,
+            &base_rates.kh,
+        )
+        .unwrap();
 
-        ktheta
+        let kh_kpsi_kb_kpsi1: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
+            &self.kh_kpsi_by_kphi1,
+            &self.kh_kb_by_kphi1,
+            &base_rates.kpsi,
+            &base_rates.kb,
+            &base_rates.kh,
+        )
+        .unwrap_or_else(|| {
+            MArrD2::new(vec![
+                self.kh_kb_by_kphi1.clone(),
+                self.kh_kb_by_kphi1.clone(),
+            ])
+        });
+        let cond_kh = MArrD3::<KPhi, _, _, _>::new(vec![kh_kpsi_kb_kpsi0, kh_kpsi_kb_kpsi1]);
+        let mw = OpinionD3::product3(&self.kphi, kb, kpsi);
+        mw.deduce(&cond_kh)
+            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.kh.clone()))
     }
 
     fn compute_kb(
@@ -897,13 +989,13 @@ impl<V: Float + fmt::Debug> SocialOpinions<V> {
         V: UlpsEq + NumAssign + Sum + Default,
     {
         let mut kb = self
-            .ks
-            .deduce(&conds.cond_kb)
+            .km
+            .deduce(&conds.kb)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.kb.clone()));
         let kb_abd = self
             .ko
             .simplex
-            .abduce(&conds.cond_ko, base_rates.kb.clone())
+            .abduce(&conds.ko, base_rates.kb.clone())
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.kb.clone()));
 
         // Use aleatory cummulative fusion
@@ -912,47 +1004,91 @@ impl<V: Float + fmt::Debug> SocialOpinions<V> {
     }
 
     fn compute_kpsi(
-        info: &Info<V>,
-        s: &OpinionD1<S, V>,
+        info_kpsi: &SimplexD1<KPsi, V>,
+        m: &OpinionD1<M, V>,
         trust: V,
         conds: &SocialConditionalOpinions<V>,
         base_rates: &SocialBaseRates<V>,
     ) -> OpinionD1<KPsi, V>
     where
-        V: UlpsEq + NumAssign + Sum + fmt::Debug + Default,
+        V: UlpsEq + NumAssign + Sum + Default,
     {
-        let mut kpsi = s
-            .deduce(&conds.cond_kpsi)
+        let mut kpsi = m
+            .deduce(&conds.kpsi)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.kpsi.clone()));
-        FuseOp::Wgh.fuse_assign(&mut kpsi, &info.content.psi.discount(trust).conv());
+        FuseOp::Wgh.fuse_assign(&mut kpsi, &info_kpsi.discount(trust));
         kpsi
     }
 }
 
-impl<V: Float + fmt::Debug> FriendOpinions<V> {
-    fn new(&self, info: &Info<V>, trust: V) -> Self
+impl<V: Float> FriendOpinions<V> {
+    fn new(
+        init: InitialFriendSimplexes<V>,
+        base_rates: &FriendBaseRates<V>,
+        conds: &FriendConditionalOpinions<V>,
+    ) -> Self
+    where
+        V: UlpsEq + AddAssign,
+    {
+        let InitialFriendSimplexes {
+            fphi,
+            fm,
+            fo,
+            fh_by_fphi1_fpsi1,
+            fh_by_fphi1_fb1,
+        } = init;
+        Self {
+            fphi: (fphi, base_rates.fphi.clone()).into(),
+            fm: (fm, base_rates.fm.clone()).into(),
+            fo: (fo, base_rates.fo.clone()).into(),
+            fh_fpsi_by_fphi1: marr_d1![conds.fh_fpsi_by_fphi0[0].clone(), fh_by_fphi1_fpsi1],
+            fh_fb_by_fphi1: marr_d1![conds.fh_fb_by_fphi0[0].clone(), fh_by_fphi1_fb1],
+        }
+    }
+
+    fn update(&self, info: InfoContent<'_, V>, trust: V) -> Self
     where
         V: Float + UlpsEq + NumAssign + Sum + fmt::Debug,
     {
         // compute friends opinions
-        let fo = FuseOp::Wgh.fuse(&self.fo, &info.content.o.discount(trust).conv());
-        let fs = FuseOp::Wgh.fuse(&self.fs, &info.content.s.discount(trust).conv());
-        let fphi = FuseOp::Wgh.fuse(&self.fphi, &info.content.phi.discount(trust).conv());
+        let fo = FuseOp::Wgh.fuse(&self.fo, &info.o.discount(trust).conv());
+        let fm = FuseOp::Wgh.fuse(&self.fm, &info.m.discount(trust).conv());
+        let fphi = FuseOp::Wgh.fuse(&self.fphi, &info.phi.discount(trust).conv());
+        let fh_fpsi_fphi1 = marr_d1![
+            self.fh_fpsi_by_fphi1[0].clone(),
+            FuseOp::Wgh.fuse(
+                &self.fh_fpsi_by_fphi1[1],
+                &info.h_by_phi1_psi1.discount(trust).conv(),
+            )
+        ];
+        let fh_fb_fphi1 = marr_d1![
+            self.fh_fb_by_fphi1[0].clone(),
+            FuseOp::Wgh.fuse(
+                &self.fh_fb_by_fphi1[1],
+                &info.h_by_phi1_b1.discount(trust).conv()
+            )
+        ];
 
-        debug!(target: "    FS", w = ?fs);
+        debug!(target: "    FM", w = ?fm);
 
-        Self { fo, fs, fphi }
+        Self {
+            fo,
+            fm,
+            fphi,
+            fh_fpsi_by_fphi1: fh_fpsi_fphi1,
+            fh_fb_by_fphi1: fh_fb_fphi1,
+        }
     }
 
     fn deduce_fpsi(
-        s: &OpinionD1<S, V>,
+        m: &OpinionD1<M, V>,
         conds: &FriendConditionalOpinions<V>,
         base_rates: &FriendBaseRates<V>,
     ) -> OpinionD1<FPsi, V>
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        s.deduce(&conds.cond_fpsi)
+        m.deduce(&conds.fpsi)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.fpsi.clone()))
     }
 
@@ -962,90 +1098,111 @@ impl<V: Float + fmt::Debug> FriendOpinions<V> {
         base_rates: &FriendBaseRates<V>,
     ) -> OpinionD1<FB, V>
     where
-        V: UlpsEq + NumAssign + Sum + Default,
+        V: UlpsEq + NumAssign + Sum + Default + fmt::Debug,
     {
         let mut fb = self
-            .fs
-            .deduce(&conds.cond_fb)
+            .fm
+            .deduce(&conds.fb)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.fb.clone()));
         let fb_abd = self
             .fo
             .simplex
-            .abduce(&conds.cond_fo, base_rates.fb.clone())
+            .abduce(&conds.fo, base_rates.fb.clone())
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.fb.clone()));
 
-        debug!(target: "FB||FS", w = ?fb);
+        debug!(target: "FB||FM", w = ?fb);
         debug!(target: "FB~|FO", w = ?fb_abd);
         // Use aleatory cummulative fusion
         FuseOp::ACm.fuse_assign(&mut fb, &fb_abd);
         fb
     }
 
-    fn compute_fpsi(info: &Info<V>, fpsi_ded: &OpinionD1<FPsi, V>, trust: V) -> OpinionD1<FPsi, V>
+    fn compute_fpsi(
+        info_fpsi: &SimplexD1<FPsi, V>,
+        fpsi_ded: &OpinionD1<FPsi, V>,
+        trust: V,
+    ) -> OpinionD1<FPsi, V>
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        FuseOp::Wgh.fuse(fpsi_ded, &info.content.psi.discount(trust).conv())
+        FuseOp::Wgh.fuse(fpsi_ded, &info_fpsi.discount(trust))
     }
 
-    fn compute_ftheta(
+    fn compute_fh(
         &self,
         fb: &OpinionD1<FB, V>,
         fpsi: &OpinionD1<FPsi, V>,
         conds: &FriendConditionalOpinions<V>,
         base_rates: &FriendBaseRates<V>,
-    ) -> OpinionD1<FTheta, V>
+    ) -> OpinionD1<FH, V>
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        let mut ftheta = OpinionD2::product2(fb, fpsi)
-            .deduce(&conds.cond_ftheta)
-            .unwrap_or_else(|| OpinionD1::<_, V>::vacuous_with(base_rates.ftheta.clone()));
+        let fh_fpsi_fb_fpsi0: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
+            &conds.fh_fpsi_by_fphi0,
+            &conds.fh_fb_by_fphi0,
+            &base_rates.fpsi,
+            &base_rates.fb,
+            &base_rates.fh,
+        )
+        .unwrap();
 
-        debug!(target: "FTH||0", w = ?ftheta);
-
-        let ftheta_ded_2 = self
-            .fphi
-            .deduce(&conds.cond_ftheta_fphi)
-            .unwrap_or_else(|| OpinionD1::<_, V>::vacuous_with(base_rates.ftheta.clone()));
-        FuseOp::Wgh.fuse_assign(&mut ftheta, &ftheta_ded_2);
-
-        ftheta
+        let fh_fpsi_fb_fpsi1: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
+            &self.fh_fpsi_by_fphi1,
+            &self.fh_fb_by_fphi1,
+            &base_rates.fpsi,
+            &base_rates.fb,
+            &base_rates.fh,
+        )
+        .unwrap_or_else(|| {
+            MArrD2::new(vec![
+                self.fh_fb_by_fphi1.clone(),
+                self.fh_fb_by_fphi1.clone(),
+            ])
+        });
+        let cond_fh = MArrD3::<FPhi, _, _, _>::new(vec![fh_fpsi_fb_fpsi0, fh_fpsi_fb_fpsi1]);
+        let mw = OpinionD3::product3(&self.fphi, fb, fpsi);
+        mw.deduce(&cond_fh)
+            .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.fh.clone()))
     }
 
     fn compute_p_a_thetad(
         &self,
         op: &BaseOpinions<V>,
         temp: &TempOpinions<V>,
-        info: &Info<V>,
+        info_fpsi: &SimplexD1<FPsi, V>,
         friend_trust: V,
         conds: &ConditionalOpinions<V>,
         base_rates: &GlobalBaseRates<V>,
     ) -> MArrD2<A, Thetad, V>
     where
-        V: UlpsEq + NumAssign + Sum + Default,
+        V: UlpsEq + NumAssign + Sum + Default + fmt::Debug,
     {
         let fb = self.compute_fb(&conds.friend, &base_rates.friend);
         debug!(target: "    FB", w = ?fb);
-        let fpsi = FriendOpinions::compute_fpsi(info, &temp.fpsi_ded, friend_trust);
-        debug!(target: "  FPSI", w = ?fpsi);
-        let ftheta = self.compute_ftheta(&fb, &fpsi, &conds.friend, &base_rates.friend);
-        debug!(target: "   FTH", w = ?ftheta);
-        let a = op.compute_a(&ftheta, &conds.base, &base_rates.base);
+        let fpsi = FriendOpinions::compute_fpsi(info_fpsi, &temp.fpsi_ded, friend_trust);
+        debug!(target: "  FPsi", w = ?fpsi);
+        let fh = self.compute_fh(&fb, &fpsi, &conds.friend, &base_rates.friend);
+        debug!(target: "    FH", w = ?fh);
+        let a = op.compute_a(&fh, &conds.base, &base_rates.base);
         debug!(target: "     A", w = ?a);
-        let thetad = op.compute_thetad(&a, &temp.b, &conds.base, &base_rates.base);
-        debug!(target: "   THd", w = ?thetad);
+        let thetad = op.compute_thetad(&temp.h, &conds.base, &base_rates.base);
+        debug!(target: "   Thd", w = ?thetad);
 
         let a_thetad = OpinionD2::product2(a.as_ref(), thetad.as_ref());
         let p = a_thetad.projection();
-        debug!(target: " A,THd", P = ?p);
+        debug!(target: " A,Thd", P = ?p);
         p
     }
 }
 
 impl<V: Float> Opinions<V> {
-    pub fn reset(&mut self, initial_opinions: InitialOpinions<V>, base_rates: &GlobalBaseRates<V>)
-    where
+    pub fn reset(
+        &mut self,
+        initial_opinions: InitialOpinions<V>,
+        base_rates: &GlobalBaseRates<V>,
+        conds: &ConditionalOpinions<V>,
+    ) where
         V: UlpsEq + NumAssign,
     {
         let InitialOpinions {
@@ -1054,25 +1211,25 @@ impl<V: Float> Opinions<V> {
             social,
         } = initial_opinions;
 
-        self.op = (base, &base_rates.base).into();
-        self.fop = (friend, &base_rates.friend).into();
-        self.sop = (social, &base_rates.social).into();
+        self.op = BaseOpinions::new(base, &base_rates.base, &conds.base);
+        self.fop = FriendOpinions::new(friend, &base_rates.friend, &conds.friend);
+        self.sop = CollectiveOpinions::new(social, &base_rates.social, &conds.social);
     }
 
-    pub fn new(&self, info: &Info<V>, trust: V, friend_trust: V, social_trust: V) -> Self
+    pub fn new(&self, info: InfoContent<'_, V>, trust: V, friend_trust: V, social_trust: V) -> Self
     where
         V: UlpsEq + NumAssign + Sum + fmt::Debug,
     {
-        let op = self.op.new(info, trust);
-        let sop = self.sop.new(info, friend_trust);
-        let fop = self.fop.new(info, social_trust);
+        let op = self.op.update(info, trust);
+        let sop = self.sop.update(info, friend_trust);
+        let fop = self.fop.update(info, social_trust);
 
         Self { op, sop, fop }
     }
 
     pub fn compute(
         &self,
-        info: &Info<V>,
+        info: InfoContent<V>,
         social_trust: V,
         conds: &ConditionalOpinions<V>,
         base_rates: &GlobalBaseRates<V>,
@@ -1080,37 +1237,39 @@ impl<V: Float> Opinions<V> {
     where
         V: UlpsEq + NumAssign + Sum + Default + std::fmt::Debug,
     {
-        let fpsi_ded = FriendOpinions::deduce_fpsi(&self.op.s, &conds.friend, &base_rates.friend);
+        let fpsi_ded = FriendOpinions::deduce_fpsi(&self.op.m, &conds.friend, &base_rates.friend);
         let kb = self.sop.compute_kb(&conds.social, &base_rates.social);
-        let kpsi = SocialOpinions::compute_kpsi(
-            info,
-            &self.op.s,
+        let kpsi = CollectiveOpinions::compute_kpsi(
+            &info.psi.to_owned().conv(),
+            &self.op.m,
             social_trust,
             &conds.social,
             &base_rates.social,
         );
-        let ktheta = self
+        let kh = self
             .sop
-            .compute_ktheta(&kb, &kpsi, &conds.social, &base_rates.social);
-        let b = self.op.compute_b(&ktheta, &conds.base, &base_rates.base);
-        let theta = self.op.compute_theta(&b, &conds.base, &base_rates.base);
+            .compute_kh(&kb, &kpsi, &conds.social, &base_rates.social);
+        let b = self.op.compute_b(&kh, &conds.base, &base_rates.base);
+        let h = self.op.compute_h(&b, &conds.base, &base_rates.base);
+        let theta = self.op.compute_theta(&h, &conds.base, &base_rates.base);
 
-        debug!(target: "     S", w = ?self.op.s);
-        debug!(target: "   PSI", w = ?self.op.psi);
-        debug!(target: " FPSId", w = ?fpsi_ded);
+        debug!(target: "     S", w = ?self.op.m);
+        debug!(target: "   Psi", w = ?self.op.psi);
+        debug!(target: " FPsid", w = ?fpsi_ded);
         debug!(target: "    KB", w = ?kb);
-        debug!(target: "  KPSI", w = ?kpsi);
-        debug!(target: "   KTH", w = ?ktheta);
+        debug!(target: "  KPsi", w = ?kpsi);
+        debug!(target: "    KH", w = ?kh);
         debug!(target: "     B", w = ?b);
-        debug!(target: "    TH", w = ?theta);
+        debug!(target: "     H", w = ?h);
+        debug!(target: "    Th", w = ?theta);
 
-        TempOpinions { theta, b, fpsi_ded }
+        TempOpinions { theta, h, fpsi_ded }
     }
 
     pub fn predict(
         &self,
         temp: &TempOpinions<V>,
-        info: &Info<V>,
+        info: InfoContent<'_, V>,
         friend_trust: V,
         pred_friend_trust: V,
         conds: &ConditionalOpinions<V>,
@@ -1122,17 +1281,29 @@ impl<V: Float> Opinions<V> {
         // current opinions
         let span = span!(Level::DEBUG, "pred-curr");
         let _guard = span.enter();
-        let p_a_thetad =
-            self.fop
-                .compute_p_a_thetad(&self.op, temp, info, friend_trust, conds, base_rates);
+        let info_fpsi = info.psi.to_owned().conv();
+        let p_a_thetad = self.fop.compute_p_a_thetad(
+            &self.op,
+            temp,
+            &info_fpsi,
+            friend_trust,
+            conds,
+            base_rates,
+        );
         drop(_guard);
 
         // predict  opinions in case of sharing
         let span = span!(Level::DEBUG, "pred-pred");
         let _guard = span.enter();
-        let pred_fop = self.fop.new(info, pred_friend_trust);
-        let p_pred_a_thetad =
-            pred_fop.compute_p_a_thetad(&self.op, temp, info, pred_friend_trust, conds, base_rates);
+        let pred_fop = self.fop.update(info, pred_friend_trust);
+        let p_pred_a_thetad = pred_fop.compute_p_a_thetad(
+            &self.op,
+            temp,
+            &info_fpsi,
+            pred_friend_trust,
+            conds,
+            base_rates,
+        );
         drop(_guard);
 
         let ps = [p_a_thetad, p_pred_a_thetad];
@@ -1141,49 +1312,6 @@ impl<V: Float> Opinions<V> {
 
     pub fn replace_pred_fop(&mut self, pred_fop: FriendOpinions<V>) {
         self.fop = pred_fop;
-    }
-}
-
-impl<V> From<(InitialBaseSimplexes<V>, &BaseRates<V>)> for BaseOpinions<V>
-where
-    V: Float + AddAssign + UlpsEq,
-{
-    fn from((init, base_rates): (InitialBaseSimplexes<V>, &BaseRates<V>)) -> Self {
-        let InitialBaseSimplexes { psi, phi, s, o } = init;
-        Self {
-            psi: (psi, base_rates.psi.clone()).into(),
-            phi: (phi, base_rates.phi.clone()).into(),
-            s: (s, base_rates.s.clone()).into(),
-            o: (o, base_rates.o.clone()).into(),
-        }
-    }
-}
-
-impl<V> From<(InitialFriendSimplexes<V>, &FriendBaseRates<V>)> for FriendOpinions<V>
-where
-    V: Float + AddAssign + UlpsEq,
-{
-    fn from((init, base_rates): (InitialFriendSimplexes<V>, &FriendBaseRates<V>)) -> Self {
-        let InitialFriendSimplexes { fphi, fs, fo } = init;
-        Self {
-            fphi: (fphi, base_rates.fphi.clone()).into(),
-            fs: (fs, base_rates.fs.clone()).into(),
-            fo: (fo, base_rates.fo.clone()).into(),
-        }
-    }
-}
-
-impl<V> From<(InitialSocialSimplexes<V>, &SocialBaseRates<V>)> for SocialOpinions<V>
-where
-    V: Float + AddAssign + UlpsEq,
-{
-    fn from((init, base_rates): (InitialSocialSimplexes<V>, &SocialBaseRates<V>)) -> Self {
-        let InitialSocialSimplexes { kphi, ks, ko } = init;
-        Self {
-            kphi: (kphi, base_rates.kphi.clone()).into(),
-            ks: (ks, base_rates.ks.clone()).into(),
-            ko: (ko, base_rates.ko.clone()).into(),
-        }
     }
 }
 
@@ -1196,21 +1324,6 @@ impl<V: Float> ConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        // self.cond_fpsi = {
-        //     let u = cond_fpsi[1].uncertainty;
-        //     let b1 = pi_rate * cond_fpsi[1].belief[1];
-        //     cond_fpsi[1].belief[0] = V::one() - u - b1;
-        //     cond_fpsi[1].belief[1] = b1;
-        //     cond_fpsi
-        // };
-        // self.cond_kpsi = {
-        //     let u = cond_kpsi[1].uncertainty;
-        //     let b1 = pi_rate * cond_kpsi[1].belief[1];
-        //     cond_kpsi[1].belief[0] = V::one() - u - b1;
-        //     cond_kpsi[1].belief[1] = b1;
-        //     cond_kpsi
-        // };
-
         let base = BaseConditionalOpinions::from_init(&init.base, rng);
         let friend = FriendConditionalOpinions::from_init(&init.friend, rng);
         let social = SocialConditionalOpinions::from_init(&init.social, rng);
@@ -1232,35 +1345,31 @@ impl<V: Float> BaseConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let cond_theta = init.cond_theta.sample(rng);
-        let r = init.rel_cond_thetad.sample(rng);
-        let cond_thetad = MArrD3::from_fn(|idx| match idx {
-            (0, i, j) => r.to_simplex(&cond_theta[(i, j)]).unwrap().conv(),
-            _ => r.to_simplex(&cond_theta[(0, 0)]).unwrap().conv(),
-        });
-        // init.cond_thetad.sample(rng, &cond_theta);
-        let cond_theta_phi = MArrD1::from_fn(|i| init.cond_theta_phi[i].sample(rng));
-        let cond_thetad_phi = MArrD1::from_fn(|i| r.to_simplex(&cond_theta_phi[i]).unwrap().conv());
-        let cond_o = FromFn::from_fn(|i| init.cond_o[i].sample(rng));
-        let cond_b = FromFn::from_fn(|i| init.cond_b[i].sample(rng));
-        let cond_a = FromFn::from_fn(|i| init.cond_a[i].sample(rng));
+        let o = MArrD1::from_fn(|i| init.o_b[i].sample(rng));
+        let b = MArrD1::from_fn(|i| init.b_kh[i].sample(rng));
+        let a = MArrD1::from_fn(|i| init.a_fh[i].sample(rng));
 
-        debug!(target: "TH||...", w = ?cond_theta);
-        debug!(target: "TH||PHI", w = ?cond_theta_phi);
-        debug!(target: "THd||..", w = ?cond_thetad);
-        debug!(target: "THd||PHI", w = ?cond_thetad_phi);
-        debug!(target: "O||B", w = ?cond_o);
-        debug!(target: "B||KTH", w = ?cond_b);
-        debug!(target: "A||FTH", w = ?cond_a);
+        let theta = MArrD1::from_fn(|h| init.theta_h[h].sample(rng));
+        let thetad = MArrD1::from_fn(|h| init.thetad_h[h].sample(rng));
+        let h_psi_by_phi0 = MArrD1::from_fn(|h| init.h_psi_by_phi0[h].sample(rng));
+        let h_b_by_phi0 = MArrD1::from_fn(|h| init.h_b_by_phi0[h].sample(rng));
+
+        debug!(target: "O||B", w =   ?o);
+        debug!(target: "B||KTh", w = ?b);
+        debug!(target: "A||FTh", w = ?a);
+        debug!(target: "Th||...", w = ?theta);
+        debug!(target: "Thd||..", w = ?thetad);
+        debug!(target: "H||Psi,phi0", w = ?h_psi_by_phi0);
+        debug!(target: "H||B,phi0",   w = ?h_b_by_phi0);
 
         Self {
-            cond_theta,
-            cond_theta_phi,
-            cond_thetad,
-            cond_thetad_phi,
-            cond_a,
-            cond_b,
-            cond_o,
+            a,
+            b,
+            o,
+            theta,
+            thetad,
+            h_b_by_phi0,
+            h_psi_by_phi0,
         }
     }
 }
@@ -1274,24 +1383,24 @@ impl<V: Float> FriendConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let cond_ftheta = init.cond_ftheta.sample(rng);
-        let cond_ftheta_fphi = MArrD1::from_fn(|i| init.cond_ftheta_fphi[i].sample(rng));
-        let cond_fpsi = MArrD1::from_fn(|i| init.cond_fpsi[i].sample(rng));
-        let cond_fb = MArrD1::from_fn(|i| init.cond_fb[i].sample(rng));
-        let cond_fo = MArrD1::from_fn(|i| init.cond_fo[i].sample(rng));
+        let fpsi = MArrD1::from_fn(|i| init.fpsi_m[i].sample(rng));
+        let fb = MArrD1::from_fn(|i| init.fb_fm[i].sample(rng));
+        let fo = MArrD1::from_fn(|i| init.fo_fb[i].sample(rng));
+        let fh_fpsi_by_fphi0 = MArrD1::from_fn(|i| init.fh_fpsi_by_fphi0[i].sample(rng));
+        let fh_fb_by_fphi0 = MArrD1::from_fn(|i| init.fh_fb_by_fphi0[i].sample(rng));
 
-        debug!(target: "FTH||..", w = ?cond_ftheta);
-        debug!(target: "FTH||FPHI", w = ?cond_ftheta_fphi);
-        debug!(target: "FPSI||S", w = ?cond_fpsi);
-        debug!(target: "FB||FS", w = ?cond_fb);
-        debug!(target: "FO||FB", w = ?cond_fo);
+        debug!(target: "FPsi||M", w = ?fpsi);
+        debug!(target: "FB||FM", w = ?fb);
+        debug!(target: "FO||FB", w = ?fo);
+        debug!(target: "FH||FPsi,Fphi0", w = ?fh_fpsi_by_fphi0);
+        debug!(target: "FH||FB,Fphi0", w = ?fh_fb_by_fphi0);
 
         Self {
-            cond_ftheta,
-            cond_ftheta_fphi,
-            cond_fb,
-            cond_fo,
-            cond_fpsi,
+            fb,
+            fo,
+            fpsi,
+            fh_fpsi_by_fphi0,
+            fh_fb_by_fphi0,
         }
     }
 }
@@ -1305,42 +1414,36 @@ impl<V: Float> SocialConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let cond_ktheta = init.cond_ktheta.sample(rng);
-        let cond_ktheta_kphi = MArrD1::from_fn(|i| init.cond_ktheta_kphi[i].sample(rng));
-        let cond_kpsi = MArrD1::from_fn(|i| init.cond_kpsi[i].sample(rng));
-        let cond_ko = MArrD1::from_fn(|i| init.cond_ko[i].sample(rng));
-        let cond_kb = MArrD1::from_fn(|i| init.cond_kb[i].sample(rng));
+        let kpsi = MArrD1::from_fn(|i| init.kpsi_m[i].sample(rng));
+        let ko = MArrD1::from_fn(|i| init.ko_kb[i].sample(rng));
+        let kb = MArrD1::from_fn(|i| init.kb_km[i].sample(rng));
+        let kh_kpsi_by_kphi0 = MArrD1::from_fn(|i| init.kh_kpsi_by_kphi0[i].sample(rng));
+        let kh_kb_by_kphi0 = MArrD1::from_fn(|i| init.kh_kb_by_kphi0[i].sample(rng));
 
-        debug!(target: "KTH||..", w = ?cond_ktheta);
-        debug!(target: "KTH||KPHI", w = ?cond_ktheta_kphi);
-        debug!(target: "KPSI||S", w = ?cond_kpsi);
-        debug!(target: "KB||KS", w = ?cond_kb);
-        debug!(target: "KO||KB", w = ?cond_ko);
+        debug!(target: "KPsi||M", w = ?kpsi);
+        debug!(target: "KB||KM",  w = ?kb);
+        debug!(target: "KO||KB",  w = ?ko);
+        debug!(target: "KH||KPsi,Kphi0", w = ?kh_kpsi_by_kphi0);
+        debug!(target: "KH||KB,Kphi0", w = ?kh_kb_by_kphi0);
 
         Self {
-            cond_ktheta,
-            cond_ktheta_kphi,
-            cond_kb,
-            cond_ko,
-            cond_kpsi,
+            kb,
+            ko,
+            kpsi,
+            kh_kpsi_by_kphi0,
+            kh_kb_by_kphi0,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use approx::ulps_eq;
     use rand::thread_rng;
     use rand_distr::Distribution;
-    use subjective_logic::iter::Container;
-    use subjective_logic::mul::labeled::SimplexD1;
     use subjective_logic::multi_array::labeled::MArrD1;
-    use subjective_logic::{domain::Domain, impl_domain, marr_d1};
+    use subjective_logic::{domain::Domain, impl_domain};
 
-    use super::{
-        BaseConditionalOpinions, CondThetaDist, InitialBaseConditions, RelativeParam, SimplexDist,
-        SimplexParam,
-    };
+    use super::{SimplexDist, SimplexParam};
 
     struct X;
     impl_domain!(X = 2);
@@ -1435,6 +1538,7 @@ mod tests {
         println!("{}", d.err().unwrap());
     }
 
+    /*
     #[test]
     fn test_relative_param() {
         let w = SimplexD1::<X, _>::new(marr_d1![0.9, 0.1], 0.00);
@@ -1496,7 +1600,9 @@ mod tests {
         let _rw0 = r.to_simplex(&w0).unwrap();
         let _rw1 = r.to_simplex(&w1).unwrap();
     }
+    w*/
 
+    /*
     #[test]
     fn test_cond_theta() -> anyhow::Result<()> {
         let mut rng = thread_rng();
@@ -1524,8 +1630,9 @@ mod tests {
             }
         }
         Ok(())
-    }
+    } */
 
+    /*
     #[test]
     fn test_base_cond() -> anyhow::Result<()> {
         let s = r#"
@@ -1533,19 +1640,19 @@ mod tests {
             phi  = [[0.0, 0.0], 1.0]
             s    = [[0.0, 0.0], 1.0]
             o    = [[0.0, 0.0], 1.0]
-            cond_a = [
+            a_fh = [
                 { Fixed = [[0.95, 0.00], 0.05] },
                 { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
             ]
-            cond_b = [
+            b_kh = [
                 { Fixed = [[0.90, 0.00], 0.10] },
                 { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
             ]
-            cond_o = [
+            o_b = [
                 { Fixed = [[1.0, 0.00], 0.00] },
                 { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
             ]
-            cond_theta_phi= [
+            h_phi = [
                 { Fixed = [[0.00, 0.0], 1.00] },
                 { Dirichlet = { alpha = [5.0, 5.0, 5.0]} },
             ]
@@ -1591,5 +1698,5 @@ mod tests {
             }
         }
         Ok(())
-    }
+    } */
 }

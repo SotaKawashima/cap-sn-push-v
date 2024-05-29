@@ -1,0 +1,22 @@
+graph = { directed = false, location = { LocalFile = "./test/graph/graph.txt" } }
+
+[[info_objects]]
+Misinfo = { psi = [[0.00, 0.99], 0.01] }
+[[info_objects]]
+Corrective = { psi = [[0.99, 0.00], 0.01], m = [[0.0, 1.0], 0.0] }
+[[info_objects]]
+Inhibitive = { phi = [[0.0, 1.0], 0.0], h_by_phi1_psi1 = [[0.1, 0.7], 0.2], h_by_phi1_b1 = [[0.1, 0.7], 0.2] }
+
+[[events]]
+time = 0
+informs = [ { agent_idx = 0, info_obj_idx = 0 } ]
+[[events]]
+time = 0
+informs = [ { agent_idx = 1, info_obj_idx = 0 } ]
+[[events]]
+time = 1
+informs = [{ agent_idx = 2, info_obj_idx = 1 }]
+
+[observer]
+observer_pop_rate = 0.01
+observed_info = [[0.0, 1.0], 0.0]

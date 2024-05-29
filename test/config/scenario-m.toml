@@ -2,7 +2,7 @@ graph = { directed = true, location = { LocalFile = "./test/graph/graph1.txt" } 
 
 info_objects = [
     { Misinfo = { psi = [[0.00, 0.95], 0.05] } },
-    # { Corrective = { psi = [ [ 0.95, 0.00 ], 0.05 ], s = [ [ 0.0, 0.95 ], 0.05 ] } },
+    # { Corrective = { psi = [ [ 0.95, 0.00 ], 0.05 ], m = [ [ 0.0, 0.95 ], 0.05 ] } },
 ]
 
 [[events]]
