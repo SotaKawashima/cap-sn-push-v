@@ -129,7 +129,7 @@ mod tests {
     use super::{General, Runtime};
     use crate::agent::AgentParams;
     use crate::info::InfoObject;
-    use crate::opinion::SimplexDist;
+    use crate::opinion::paramter::SimplexDist;
     use crate::scenario::{Inform, Scenario, ScenarioParam};
     use graph_lib::prelude::Graph;
     use serde_json::json;
@@ -224,14 +224,17 @@ mod tests {
                         { "Fixed" : [[1.0, 0.00], 0.00] },
                         { "Fixed" : [[0.0, 0.70], 0.30] },
                     ],
-                    "h_psi_by_phi0" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.60, 0.30], 0.10] },
-                    ],
-                    "h_b_by_phi0" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.45, 0.45], 0.10] },
-                    ],
+                    "params_h_psi_b_by_phi0" : {
+                        "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
+                        "by_cause0": { "Fixed" : [[0.50, 0.40], 0.10] },
+                        "by_cause1": {
+                            "Rel": {
+                                "coef_b": [5.0, 10.0],
+                                "coef_u": 5.0,
+                                "error": 0.00001
+                            }
+                        }
+                    }
                 },
                 "friend": {
                     "fpsi_m" : [
@@ -246,14 +249,19 @@ mod tests {
                         { "Fixed" : [[0.90, 0.00], 0.10] },
                         { "Fixed" : [[0.00, 0.99], 0.01] },
                     ],
-                    "fh_fpsi_by_fphi0" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.60, 0.30], 0.10] },
-                    ],
-                    "fh_fb_by_fphi0"  : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.45, 0.45], 0.10] },
-                    ],
+                    "params_fh_fpsi_fb_by_fphi0" : {
+                        "Abs": {
+                            "no_cause" : { "Fixed" : [[0.95, 0.00], 0.05] },
+                            "by_cause0" : { "Fixed" : [[0.55, 0.35], 0.10] },
+                            "by_cause1" : {
+                                "Rel": {
+                                    "coef_b": [5.0, 10.0],
+                                    "coef_u": 5.0,
+                                    "error": 0.00001
+                                }
+                            }
+                        }
+                    }
                 },
                 "social": {
                     "kpsi_m" : [
@@ -268,14 +276,17 @@ mod tests {
                         { "Fixed" : [[1.00, 0.00], 0.00] },
                         { "Fixed" : [[0.25, 0.65], 0.10] },
                     ],
-                    "kh_kpsi_by_kphi0" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.60, 0.30], 0.10] },
-                    ],
-                    "kh_kb_by_kphi0"  : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.45, 0.45], 0.10] },
-                    ],
+                    "params_kh_kpsi_kb_by_kphi0" : {
+                        "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
+                        "by_cause0": { "Fixed" : [[0.30, 0.60], 0.10] },
+                        "by_cause1": {
+                            "Rel": {
+                                "coef_b": [5.0, 7.0],
+                                "coef_u": 5.0,
+                                "error": 0.00001
+                            }
+                        }
+                    },
                 },
             },
             // "pi_prob": 1.0,
@@ -375,14 +386,6 @@ mod tests {
         assert!(matches!(
             &agent_params.initial_conditions.base.theta_h[1],
             SimplexDist::Fixed(s) if s.b() == &marr_d1![0.0, 0.7] && s.u() == &0.3,
-        ));
-        assert!(matches!(
-            &agent_params.initial_conditions.social.kh_kpsi_by_kphi0[0],
-            SimplexDist::Fixed(s) if s.b() == &marr_d1![0.95, 0.0] && s.u() == &0.05,
-        ));
-        assert!(matches!(
-            &agent_params.initial_conditions.social.kh_kpsi_by_kphi0[1],
-            SimplexDist::Fixed(s) if s.b() == &marr_d1![0.60, 0.30] && s.u() == &0.10,
         ));
 
         assert_eq!(scenario.graph.node_count(), 12);

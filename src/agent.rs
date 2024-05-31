@@ -16,8 +16,8 @@ use crate::{
     dist::{IValue, IValueParam},
     info::{Info, TrustParams},
     opinion::{
-        ConditionalOpinions, GlobalBaseRates, InitialConditions, InitialOpinions, Opinions,
-        TempOpinions,
+        ConditionalOpinions, GlobalBaseRates, InitialConditions, InitialOpinions, MyFloat,
+        Opinions, TempOpinions,
     },
     value::{EValue, EValueParam},
 };
@@ -153,7 +153,7 @@ where
 {
     pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
     where
-        V: NumAssign + Sum + Default + fmt::Debug,
+        V: MyFloat,
         R: Rng,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,

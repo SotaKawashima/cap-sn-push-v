@@ -10,19 +10,16 @@ mod value;
 
 use std::{
     collections::BTreeMap,
-    fmt,
     io::{stdout, Write},
-    iter::Sum,
     path::PathBuf,
     sync::Arc,
 };
 
-use approx::UlpsEq;
 use graph_lib::prelude::Graph;
-use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
+use opinion::MyFloat;
 use polars_arrow::datatypes::Metadata;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
-use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
 use agent::{Agent, AgentParams};
 use config::{ConfigData, Runtime};
@@ -34,7 +31,7 @@ use tracing::{info, span, Level};
 
 pub struct Runner<V>
 where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -52,17 +49,7 @@ where
 
 impl<V> Runner<V>
 where
-    V: Float
-        + NumAssign
-        + UlpsEq
-        + FromPrimitive
-        + ToPrimitive
-        + Default
-        + Sum
-        + std::fmt::Debug
-        + SampleUniform
-        + Send
-        + Sync,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -110,8 +97,8 @@ where
 
     pub async fn run(self) -> anyhow::Result<()>
     where
-        V: FromPrimitive + ToPrimitive + Sync + 'static,
-        <V as SampleUniform>::Sampler: Sync,
+        V: 'static,
+        V::Sampler: Sync,
     {
         println!("initialising...");
 
@@ -145,25 +132,45 @@ where
         let mut jhs = Vec::new();
         print!("started.");
         for (num_iter, rng) in rngs.into_iter().enumerate() {
-            let env = manager.rent().await;
+            let permit = manager.rent().await;
             let tx = tx.clone();
             jhs.push(tokio::spawn(async move {
-                if num_iter % 100 == 0 {
-                    println!("\n{num_iter}");
+                let env = permit.env();
+                let handle = tokio::spawn(async move {
+                    if num_iter % 100 == 0 {
+                        println!("\n{num_iter}");
+                    }
+                    if num_iter % 10 == 0 {
+                        print!("|");
+                        stdout().flush().unwrap();
+                    }
+                    print!(".");
+                    env.lock().await.execute(num_iter as u32, rng)
+                });
+                match handle.await {
+                    Ok(ss) => {
+                        for s in ss {
+                            tx.send(s).await.unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{e:?}");
+                    }
                 }
-                if num_iter % 10 == 0 {
-                    print!("|");
-                    stdout().flush().unwrap();
-                }
-                print!(".");
-                let ss = env.run((num_iter as u32, rng)).await;
-                for s in ss {
-                    tx.send(s).await.unwrap();
-                }
+                drop(permit);
             }));
         }
         for jh in jhs {
-            jh.await.unwrap();
+            match jh.await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("error : {:?}", e);
+                }
+            }
+            // let ss = ;
+            // for s in ss {
+            //     tx.send(s).await.unwrap();
+            // }
         }
         drop(tx);
         handle.await.unwrap();
@@ -202,7 +209,7 @@ impl<E> Manager<E> {
 
 struct Env<V>
 where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -216,7 +223,7 @@ where
 
 impl<V> Env<V>
 where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -237,28 +244,8 @@ where
             agents,
         }
     }
-}
 
-impl<V, R> Executor<(u32, R)> for Env<V>
-where
-    V: Float
-        + UlpsEq
-        + NumAssign
-        + SampleUniform
-        + FromPrimitive
-        + ToPrimitive
-        + Default
-        + Sum
-        + fmt::Debug,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    R: Rng,
-{
-    type Output = Vec<Stat>;
-
-    fn execute(&mut self, (num_iter, mut rng): (u32, R)) -> Vec<Stat> {
+    fn execute<R: Rng>(&mut self, num_iter: u32, mut rng: R) -> Vec<Stat> {
         for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::DEBUG, "init A", "#" = idx);
             let _guard = span.enter();
@@ -428,13 +415,18 @@ struct EnvPermit<E> {
 }
 
 impl<E> EnvPermit<E> {
-    async fn run<I>(self, input: I) -> E::Output
-    where
-        E: Executor<I>,
-    {
-        let o = self.env.lock().await.execute(input);
-        self.tx.send(self.idx).await.unwrap();
-        o
+    fn env(&self) -> Arc<Mutex<E>> {
+        self.env.clone()
+        // let o = .execute(input);
+        // panic!("test");
+        // self.tx.send(self.idx).await.unwrap();
+        // o
+    }
+}
+
+impl<E> Drop for EnvPermit<E> {
+    fn drop(&mut self) {
+        self.tx.try_send(self.idx).unwrap();
     }
 }
 

@@ -1,28 +1,26 @@
-use crate::{
-    info::InfoContent,
-    value::{EValue, EValueParam},
-};
+pub mod paramter;
+
+use crate::info::InfoContent;
+use paramter::{ConditionParams, DependentParam, SimplexDist, SimplexParam};
+
 use approx::UlpsEq;
-use core::fmt;
-use num_traits::{Float, NumAssign};
+use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand::Rng;
-use rand_distr::{Dirichlet, Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
-use std::{iter::Sum, ops::AddAssign};
+use std::{fmt, iter::Sum, ops::AddAssign};
 use subjective_logic::{
     domain::{Domain, DomainConv},
-    errors::InvalidValueError,
     impl_domain,
     iter::FromFn,
-    marr_d1, marr_d2,
+    marr_d1,
     mul::{
         labeled::{OpinionD1, OpinionD2, OpinionD3, SimplexD1},
         MergeJointConditions2,
     },
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
     ops::{
-        Abduction, Deduction, Discount, Fuse, FuseAssign, FuseOp, Indexes, Product2, Product3,
-        Projection, Zeros,
+        Abduction, Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection,
     },
 };
 use tracing::{debug, span, Level};
@@ -236,125 +234,6 @@ pub struct InitialSocialSimplexes<V: Float + AddAssign + UlpsEq> {
     pub kh_by_kphi1_kb1: SimplexD1<KH, V>,
 }
 
-#[derive(Debug, serde::Deserialize, Clone)]
-pub enum SimplexParam<V> {
-    /// belief: T, uncertainty: V
-    Fixed(Vec<V>, V),
-    /// alpha: Vec<V>
-    Dirichlet {
-        alpha: Vec<V>,
-        zeros: Option<Vec<usize>>,
-    },
-}
-
-#[derive(Debug)]
-pub enum SimplexDist<D, V>
-where
-    V: Float,
-    D: Domain,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    Fixed(SimplexD1<D, V>),
-    Dirichlet {
-        dist: Dirichlet<V>,
-        b_zeros: MArrD1<D, bool>,
-        u_zero: bool,
-    },
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum SimplexDistError {
-    #[error("{0}")]
-    SimplexError(#[from] subjective_logic::errors::InvalidValueError),
-    #[error("alpha.len() + zeros.len() must be {0}.")]
-    LengthExceed(usize),
-    #[error("Index {0} exceeds the size of the domain + 1.")]
-    ZeroIndexExceed(usize),
-    #[error("Index {0} is duplicated.")]
-    ZeroIndexDuplicated(usize),
-    #[error("{0}")]
-    DirichletError(#[from] rand_distr::DirichletError),
-}
-
-impl<D, V> TryFrom<SimplexParam<V>> for SimplexDist<D, V>
-where
-    D: Domain<Idx = usize>,
-    V: Float + UlpsEq + AddAssign,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    type Error = SimplexDistError;
-    fn try_from(value: SimplexParam<V>) -> Result<Self, Self::Error> {
-        match value {
-            SimplexParam::Fixed(b, u) => Ok(Self::Fixed(SimplexD1::try_from((b, u))?)),
-            SimplexParam::Dirichlet { alpha, zeros } => {
-                let l = alpha.len();
-                let zero_idxs = zeros.unwrap_or(Vec::new());
-                if l + zero_idxs.len() != D::LEN + 1 {
-                    return Err(SimplexDistError::LengthExceed(D::LEN + 1));
-                }
-                let mut b_zeros = MArrD1::default();
-                let mut u_zero = false;
-                for idx in zero_idxs {
-                    if idx >= D::LEN + 1 {
-                        return Err(SimplexDistError::ZeroIndexExceed(idx));
-                    }
-                    if idx == D::LEN {
-                        if u_zero {
-                            return Err(SimplexDistError::ZeroIndexDuplicated(idx));
-                        }
-                        u_zero = true;
-                    } else {
-                        if b_zeros[idx] {
-                            return Err(SimplexDistError::ZeroIndexDuplicated(idx));
-                        }
-                        b_zeros[idx] = true;
-                    }
-                }
-                Ok(Self::Dirichlet {
-                    dist: Dirichlet::new(&alpha)?,
-                    b_zeros,
-                    u_zero,
-                })
-            }
-        }
-    }
-}
-
-impl<D, V> Distribution<SimplexD1<D, V>> for SimplexDist<D, V>
-where
-    D: Domain<Idx = usize>,
-    V: Float + UlpsEq + AddAssign,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SimplexD1<D, V> {
-        match self {
-            SimplexDist::Fixed(s) => s.clone(),
-            SimplexDist::Dirichlet {
-                dist,
-                b_zeros,
-                u_zero,
-            } => {
-                let mut s = dist.sample(rng);
-                let u = if *u_zero { V::zero() } else { s.pop().unwrap() };
-                let mut b = MArrD1::zeros();
-
-                for i in MArrD1::<D, V>::indexes().rev() {
-                    if !b_zeros[i] {
-                        b[i] = s.pop().unwrap();
-                    }
-                }
-                SimplexD1::new(b, u)
-            }
-        }
-    }
-}
-
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 pub struct InitialConditions<V>
@@ -396,12 +275,8 @@ where
     /// $H \implies \Theta'$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
     pub thetad_h: MArrD1<H, SimplexDist<Thetad, V>>,
-    /// $\Psi \implies H$ when $\phi_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub h_psi_by_phi0: MArrD1<Psi, SimplexDist<H, V>>,
-    /// $B \implies H$ when $\phi_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub h_b_by_phi0: MArrD1<B, SimplexDist<H, V>>,
+    /// parameters of conditional opinions $\Psi \implies H$ and $B \implies H$ when $\phi_0$ is true
+    pub params_h_psi_b_by_phi0: ConditionParams<Psi, B, H, V>,
 }
 
 #[serde_as]
@@ -424,12 +299,8 @@ where
     /// $M^F \implies B^F$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
     pub fb_fm: MArrD1<FM, SimplexDist<FB, V>>,
-    /// $\Psi^F \implies H^F$ when $\phi^F_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub fh_fpsi_by_fphi0: MArrD1<FPhi, SimplexDist<FH, V>>,
-    /// $B^F \implies H^F$ when $\phi^F_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub fh_fb_by_fphi0: MArrD1<FB, SimplexDist<FH, V>>,
+    /// parameters of conditional opinions $\Psi^F \implies H^F$ and $B^F \implies H^F$ when $\phi^F_0$ is true
+    pub params_fh_fpsi_fb_by_fphi0: DependentParam<FH, V, ConditionParams<FPsi, FB, FH, V>>,
 }
 
 #[serde_as]
@@ -452,186 +323,8 @@ where
     /// $M^K \implies B^K$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
     pub kb_km: MArrD1<KM, SimplexDist<KB, V>>,
-    /// $\Psi^K \implies H^K$ when $\phi^K_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub kh_kpsi_by_kphi0: MArrD1<KPhi, SimplexDist<KH, V>>,
-    /// $B^K \implies H^K$ when $\phi^K_0$ is true
-    #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
-    pub kh_kb_by_kphi0: MArrD1<KB, SimplexDist<KH, V>>,
-}
-
-/// b'_i = b_i * rate.0 * rate.1, 1-u' = (1-u) * rate.1
-#[derive(Debug, serde::Deserialize)]
-pub struct RelativeParam<T> {
-    pub belief: T,
-    pub uncertainty: T,
-}
-
-impl<V> Distribution<RelativeParam<V>> for RelativeParam<EValue<V>>
-where
-    V: Float,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> RelativeParam<V> {
-        RelativeParam {
-            belief: self.belief.sample(rng),
-            uncertainty: self.uncertainty.sample(rng),
-        }
-    }
-}
-
-impl<V> RelativeParam<V>
-where
-    V: Float + AddAssign + UlpsEq,
-{
-    fn to_simplex<D: Domain<Idx = usize>>(
-        &self,
-        w: &SimplexD1<D, V>,
-    ) -> Result<SimplexD1<D, V>, InvalidValueError> {
-        if w.is_vacuous() {
-            return Ok(SimplexD1::vacuous());
-        }
-        let b1 = w.b()[1];
-        let u = *w.u();
-        let sb = V::one() - u;
-        let x = self.belief.min(sb / b1);
-        let y = self.uncertainty.min(V::one() / u);
-        let ud = u * y;
-        let sbd = V::one() - ud;
-        let bd1 = b1 / sb * x * sbd;
-        SimplexD1::try_new(marr_d1![sbd - bd1, bd1], ud)
-    }
-}
-
-impl<V> TryFrom<RelativeParam<EValueParam<V>>> for RelativeParam<EValue<V>>
-where
-    V: Float,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-{
-    type Error = <EValue<V> as TryFrom<EValueParam<V>>>::Error;
-
-    fn try_from(value: RelativeParam<EValueParam<V>>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            belief: value.belief.try_into()?,
-            uncertainty: value.uncertainty.try_into()?,
-        })
-    }
-}
-
-#[serde_as]
-#[derive(Debug, serde::Deserialize)]
-#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct CondThetaDist<V>
-where
-    V: Float + UlpsEq + AddAssign,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub b0psi0: SimplexDist<Theta, V>,
-    #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub b1psi1: SimplexDist<Theta, V>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub b0psi1: RelativeParam<EValue<V>>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub b1psi0: RelativeParam<EValue<V>>,
-}
-
-#[serde_as]
-#[derive(Debug, serde::Deserialize)]
-#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct CondFThetaDist<V>
-where
-    V: Float + UlpsEq + AddAssign,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub fb0fpsi0: SimplexDist<FH, V>,
-    #[serde_as(as = "TryFromInto<SimplexParam< V>>")]
-    pub fb1fpsi1: SimplexDist<FH, V>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub fb0fpsi1: RelativeParam<EValue<V>>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub fb1fpsi0: RelativeParam<EValue<V>>,
-}
-
-#[serde_as]
-#[derive(Debug, serde::Deserialize)]
-#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct CondKThetaDist<V>
-where
-    V: Float + UlpsEq + AddAssign,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    #[serde_as(as = "TryFromInto<SimplexParam< V>>")]
-    pub kb0kpsi0: SimplexDist<KH, V>,
-    #[serde_as(as = "TryFromInto<SimplexParam<V>>")]
-    pub kb1kpsi1: SimplexDist<KH, V>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub kb0kpsi1: RelativeParam<EValue<V>>,
-    #[serde_as(as = "TryFromInto<RelativeParam<EValueParam<V>>>")]
-    pub kb1kpsi0: RelativeParam<EValue<V>>,
-}
-
-impl<V> Distribution<MArrD2<B, Psi, SimplexD1<Theta, V>>> for CondThetaDist<V>
-where
-    V: Float + AddAssign + UlpsEq,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<B, Psi, SimplexD1<Theta, V>> {
-        let b0psi0 = self.b0psi0.sample(rng);
-        let b1psi1 = self.b1psi1.sample(rng);
-        let b0psi1 = self.b0psi1.sample(rng).to_simplex(&b1psi1).unwrap();
-        let b1psi0 = self.b1psi0.sample(rng).to_simplex(&b1psi1).unwrap();
-        marr_d2![[b0psi0, b0psi1], [b1psi0, b1psi1]]
-    }
-}
-
-impl<V> Distribution<MArrD2<FB, FPsi, SimplexD1<FH, V>>> for CondFThetaDist<V>
-where
-    V: Float + AddAssign + UlpsEq,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<FB, FPsi, SimplexD1<FH, V>> {
-        let fb0fpsi0 = self.fb0fpsi0.sample(rng);
-        let fb1fpsi1 = self.fb1fpsi1.sample(rng);
-        let fb0fpsi1 = self.fb0fpsi1.sample(rng).to_simplex(&fb1fpsi1).unwrap();
-        let fb1fpsi0 = self.fb1fpsi0.sample(rng).to_simplex(&fb1fpsi1).unwrap();
-        marr_d2![[fb0fpsi0, fb0fpsi1], [fb1fpsi0, fb1fpsi1]]
-    }
-}
-
-impl<V> Distribution<MArrD2<KB, KPsi, SimplexD1<KH, V>>> for CondKThetaDist<V>
-where
-    V: Float + AddAssign + UlpsEq,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MArrD2<KB, KPsi, SimplexD1<KH, V>> {
-        let kb0kpsi0 = self.kb0kpsi0.sample(rng);
-        let kb1kpsi1 = self.kb1kpsi1.sample(rng);
-        let kb0kpsi1 = self.kb0kpsi1.sample(rng).to_simplex(&kb1kpsi1).unwrap();
-        let kb1kpsi0 = self.kb1kpsi0.sample(rng).to_simplex(&kb1kpsi1).unwrap();
-        marr_d2![[kb0kpsi0, kb0kpsi1], [kb1kpsi0, kb1kpsi1]]
-    }
+    /// parameters of conditional opinions $\Psi^K \implies H^K$ and $B^K \implies H^K$ when $\phi^K_0$ is true
+    pub params_kh_kpsi_kb_by_kphi0: ConditionParams<KPsi, KB, KH, V>,
 }
 
 #[derive(Debug, Default)]
@@ -1315,17 +1008,36 @@ impl<V: Float> Opinions<V> {
     }
 }
 
+pub trait MyFloat
+where
+    Self: Float
+        + NumAssign
+        + UlpsEq
+        + fmt::Debug
+        + Sum
+        + FromPrimitive
+        + SampleUniform
+        + ToPrimitive
+        + Default
+        + Send
+        + Sync,
+{
+}
+
+impl MyFloat for f32 {}
+impl MyFloat for f64 {}
+
 impl<V: Float> ConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq + fmt::Debug,
+        V: MyFloat,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
         let base = BaseConditionalOpinions::from_init(&init.base, rng);
-        let friend = FriendConditionalOpinions::from_init(&init.friend, rng);
+        let friend = FriendConditionalOpinions::from_init(&init.friend, &base, rng);
         let social = SocialConditionalOpinions::from_init(&init.social, rng);
 
         Self {
@@ -1339,7 +1051,7 @@ impl<V: Float> ConditionalOpinions<V> {
 impl<V: Float> BaseConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialBaseConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq + fmt::Debug,
+        V: MyFloat,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -1351,8 +1063,7 @@ impl<V: Float> BaseConditionalOpinions<V> {
 
         let theta = MArrD1::from_fn(|h| init.theta_h[h].sample(rng));
         let thetad = MArrD1::from_fn(|h| init.thetad_h[h].sample(rng));
-        let h_psi_by_phi0 = MArrD1::from_fn(|h| init.h_psi_by_phi0[h].sample(rng));
-        let h_b_by_phi0 = MArrD1::from_fn(|h| init.h_b_by_phi0[h].sample(rng));
+        let (h_psi_by_phi0, h_b_by_phi0) = init.params_h_psi_b_by_phi0.sample(rng);
 
         debug!(target: "O||B", w =   ?o);
         debug!(target: "B||KTh", w = ?b);
@@ -1375,9 +1086,13 @@ impl<V: Float> BaseConditionalOpinions<V> {
 }
 
 impl<V: Float> FriendConditionalOpinions<V> {
-    pub fn from_init<R: Rng>(init: &InitialFriendConditions<V>, rng: &mut R) -> Self
+    pub fn from_init<R: Rng>(
+        init: &InitialFriendConditions<V>,
+        base: &BaseConditionalOpinions<V>,
+        rng: &mut R,
+    ) -> Self
     where
-        V: Float + AddAssign + UlpsEq + fmt::Debug,
+        V: MyFloat,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -1386,8 +1101,17 @@ impl<V: Float> FriendConditionalOpinions<V> {
         let fpsi = MArrD1::from_fn(|i| init.fpsi_m[i].sample(rng));
         let fb = MArrD1::from_fn(|i| init.fb_fm[i].sample(rng));
         let fo = MArrD1::from_fn(|i| init.fo_fb[i].sample(rng));
-        let fh_fpsi_by_fphi0 = MArrD1::from_fn(|i| init.fh_fpsi_by_fphi0[i].sample(rng));
-        let fh_fb_by_fphi0 = MArrD1::from_fn(|i| init.fh_fb_by_fphi0[i].sample(rng));
+        // let fh_fpsi_by_fphi0 = MArrD1::from_fn(|i| init.fh_fpsi_by_fphi0[i].sample(rng));
+        // let fh_fb_by_fphi0 = MArrD1::from_fn(|i| init.fh_fb_by_fphi0[i].sample(rng));
+        let (fh_fpsi_by_fphi0, fh_fb_by_fphi0) = init
+            .params_fh_fpsi_fb_by_fphi0
+            .samples::<FPsi, FB, _, _, _>(
+                rng,
+                &(
+                    MArrD1::<FPsi, _>::from_fn(|i| base.h_psi_by_phi0[i].clone().conv()),
+                    MArrD1::<FB, _>::from_fn(|i| base.h_b_by_phi0[i].clone().conv()),
+                ),
+            );
 
         debug!(target: "FPsi||M", w = ?fpsi);
         debug!(target: "FB||FM", w = ?fb);
@@ -1408,7 +1132,7 @@ impl<V: Float> FriendConditionalOpinions<V> {
 impl<V: Float> SocialConditionalOpinions<V> {
     pub fn from_init<R: Rng>(init: &InitialSocialConditions<V>, rng: &mut R) -> Self
     where
-        V: Float + AddAssign + UlpsEq + fmt::Debug,
+        V: MyFloat,
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
@@ -1417,8 +1141,7 @@ impl<V: Float> SocialConditionalOpinions<V> {
         let kpsi = MArrD1::from_fn(|i| init.kpsi_m[i].sample(rng));
         let ko = MArrD1::from_fn(|i| init.ko_kb[i].sample(rng));
         let kb = MArrD1::from_fn(|i| init.kb_km[i].sample(rng));
-        let kh_kpsi_by_kphi0 = MArrD1::from_fn(|i| init.kh_kpsi_by_kphi0[i].sample(rng));
-        let kh_kb_by_kphi0 = MArrD1::from_fn(|i| init.kh_kb_by_kphi0[i].sample(rng));
+        let (kh_kpsi_by_kphi0, kh_kb_by_kphi0) = init.params_kh_kpsi_kb_by_kphi0.sample(rng);
 
         debug!(target: "KPsi||M", w = ?kpsi);
         debug!(target: "KB||KM",  w = ?kb);
@@ -1440,7 +1163,10 @@ impl<V: Float> SocialConditionalOpinions<V> {
 mod tests {
     use rand::thread_rng;
     use rand_distr::Distribution;
+    use subjective_logic::iter::FromFn;
+    use subjective_logic::mul::labeled::SimplexD1;
     use subjective_logic::multi_array::labeled::MArrD1;
+    use subjective_logic::{approx_ext, marr_d1};
     use subjective_logic::{domain::Domain, impl_domain};
 
     use super::{SimplexDist, SimplexParam};
@@ -1699,4 +1425,41 @@ mod tests {
         }
         Ok(())
     } */
+
+    #[test]
+    fn test_dirichlet_sampling() -> anyhow::Result<()> {
+        let w = SimplexD1::<X, f64>::new(marr_d1![0.2, 0.3], 0.5);
+
+        let s = 10.0;
+        let d = marr_d1!(X; [0.5, 1.0]);
+        let d_k = 1.0;
+        let e = 0.0001;
+
+        for d in d.iter().chain([&d_k]) {
+            assert!(*d < 1.0 || approx_ext::is_one(*d));
+        }
+
+        let k = X::LEN as f64 + 1.0;
+        let (alpha, alpha_k) = 'a: {
+            let alpha = MArrD1::<X, _>::from_fn(|x| w.b()[x] * d[x] * s);
+            let alpha_k = w.u() * d_k * s;
+            let iter = alpha.iter().chain([&alpha_k]);
+            for a in iter {
+                if approx_ext::is_zero(*a) {
+                    let s = alpha.iter().sum::<f64>() + alpha_k;
+                    break 'a (
+                        MArrD1::<X, _>::from_fn(|x| (alpha[x] + e) * s / (s + e * k)),
+                        alpha_k * s / (s + e * k),
+                    );
+                }
+            }
+            (alpha, alpha_k)
+        };
+
+        println!("{:?}", alpha);
+        println!("{:?}", alpha_k);
+        println!("sum {:?}", alpha_k + alpha.iter().sum::<f64>());
+
+        Ok(())
+    }
 }
