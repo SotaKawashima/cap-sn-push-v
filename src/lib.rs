@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
 };
 
+use futures::future::try_join_all;
 use graph_lib::prelude::Graph;
 use opinion::MyFloat;
 use polars_arrow::datatypes::Metadata;
@@ -134,44 +135,10 @@ where
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let permit = manager.rent().await;
             let tx = tx.clone();
-            jhs.push(tokio::spawn(async move {
-                let env = permit.env();
-                let handle = tokio::spawn(async move {
-                    if num_iter % 100 == 0 {
-                        println!("\n{num_iter}");
-                    }
-                    if num_iter % 10 == 0 {
-                        print!("|");
-                        stdout().flush().unwrap();
-                    }
-                    print!(".");
-                    env.lock().await.execute(num_iter as u32, rng)
-                });
-                match handle.await {
-                    Ok(ss) => {
-                        for s in ss {
-                            tx.send(s).await.unwrap();
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("{e:?}");
-                    }
-                }
-                drop(permit);
-            }));
+            jhs.push(tokio::spawn(permit.run(num_iter, rng, tx)));
         }
-        for jh in jhs {
-            match jh.await {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error : {:?}", e);
-                }
-            }
-            // let ss = ;
-            // for s in ss {
-            //     tx.send(s).await.unwrap();
-            // }
-        }
+
+        try_join_all(jhs).await?;
         drop(tx);
         handle.await.unwrap();
         println!("\ndone.");
@@ -414,13 +381,37 @@ struct EnvPermit<E> {
     env: Arc<Mutex<E>>,
 }
 
-impl<E> EnvPermit<E> {
-    fn env(&self) -> Arc<Mutex<E>> {
-        self.env.clone()
-        // let o = .execute(input);
-        // panic!("test");
-        // self.tx.send(self.idx).await.unwrap();
-        // o
+impl<V> EnvPermit<Env<V>>
+where
+    V: MyFloat + 'static,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    async fn run<R: Rng + Send + 'static>(
+        self,
+        num_iter: usize,
+        rng: R,
+        tx: mpsc::Sender<Stat>,
+    ) -> anyhow::Result<()> {
+        let env = self.env.clone();
+        let handle = tokio::spawn(async move {
+            if num_iter % 100 == 0 {
+                println!("\n{num_iter}");
+            }
+            if num_iter % 10 == 0 {
+                print!("|");
+                stdout().flush().unwrap();
+            }
+            print!(".");
+            env.lock().await.execute(num_iter as u32, rng)
+        });
+        let ss = handle.await?;
+        for s in ss {
+            tx.send(s).await.unwrap();
+        }
+        Ok(())
     }
 }
 

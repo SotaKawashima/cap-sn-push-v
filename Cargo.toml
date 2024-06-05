@@ -10,7 +10,6 @@ subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git"
 approx = "0.5"
 graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.4.2" }
 rand = { version = "0.8", features = ["small_rng"] }
-arrow = { version = "51.0", features = ["ipc_compression"] }
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -26,9 +25,10 @@ either = "1.9"
 anyhow = "1.0"
 itertools = "0.13"
 tokio = { version = "1.37", features = ["rt", "macros", "rt-multi-thread", "sync", "time"] }
+futures = "0.3"
 parking_lot = "0.12"
 num_cpus = "1.8"
-polars-arrow = { version = "0.40", features = ["io_ipc", "io_ipc_write_async"] }
+polars-arrow = { version = "0.40", features = ["io_ipc", "io_ipc_write_async", "io_ipc_compression"] }
 
 [dev-dependencies]
 polars = { version = "0.40", features = ["lazy", "ipc", "decompress", "dtype-u8" ] }
