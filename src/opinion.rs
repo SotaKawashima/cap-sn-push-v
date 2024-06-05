@@ -1233,17 +1233,17 @@ where
             h_b_by_phi0,
         } = sample;
 
-        println!("{:?}", h_psi_by_phi0);
-        println!("{:?}", h_b_by_phi0);
-
-        let h_psi_b_by_phi0: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
+        let Some(h_psi_b_by_phi0) = MArrD1::<H, _>::merge_cond2(
             &h_psi_by_phi0,
             &h_b_by_phi0,
             &base_rates.psi,
             &base_rates.b,
             &base_rates.h,
-        )
-        .unwrap();
+        ) else {
+            println!("{:?}", h_psi_by_phi0);
+            println!("{:?}", h_b_by_phi0);
+            panic!("base merge_cond2 failed");
+        };
 
         Self {
             o,
@@ -1276,17 +1276,17 @@ impl<V: MyFloat> FriendConditionalOpinions<V> {
             fh_fb_by_fphi0,
         } = sample;
 
-        println!("{:?}", fh_fpsi_by_fphi0);
-        println!("{:?}", fh_fb_by_fphi0);
-
-        let fh_fpsi_fb_fpsi0: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
+        let Some(fh_fpsi_fb_fpsi0) = MArrD1::<FH, _>::merge_cond2(
             &fh_fpsi_by_fphi0,
             &fh_fb_by_fphi0,
             &base_rates.fpsi,
             &base_rates.fb,
             &base_rates.fh,
-        )
-        .unwrap();
+        ) else {
+            println!("{:?}", fh_fpsi_by_fphi0);
+            println!("{:?}", fh_fb_by_fphi0);
+            panic!("friend merge_cond2 failed");
+        };
 
         Self {
             fb,
@@ -1317,17 +1317,17 @@ impl<V: MyFloat> SocialConditionalOpinions<V> {
             kh_kb_by_kphi0,
         } = sample;
 
-        println!("{:?}", kh_kpsi_by_kphi0);
-        println!("{:?}", kh_kb_by_kphi0);
-
-        let kh_kpsi_kb_kpsi0: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
+        let Some(kh_kpsi_kb_kpsi0) = MArrD1::<KH, _>::merge_cond2(
             &kh_kpsi_by_kphi0,
             &kh_kb_by_kphi0,
             &base_rates.kpsi,
             &base_rates.kb,
             &base_rates.kh,
-        )
-        .unwrap();
+        ) else {
+            println!("{:?}", kh_kpsi_by_kphi0);
+            println!("{:?}", kh_kb_by_kphi0);
+            panic!("social merge_cond2 failed");
+        };
 
         Self {
             kpsi,
