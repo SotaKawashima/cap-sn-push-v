@@ -249,6 +249,33 @@ where
     pub social: InitialSocialConditions<V>,
 }
 
+pub struct SampleInitialConditions<V> {
+    base: SampleInitialBaseConditions<V>,
+    friend: SampleInitialFriendConditions<V>,
+    social: SampleInitialSocialConditions<V>,
+}
+
+impl<V> InitialConditions<V>
+where
+    V: MyFloat,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    pub fn sample<R: Rng>(&self, rng: &mut R) -> SampleInitialConditions<V> {
+        let base = self.base.sample(rng);
+        let friend = self.friend.sample(rng, &base);
+        let social = self.social.sample(rng);
+
+        SampleInitialConditions {
+            base,
+            friend,
+            social,
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
@@ -279,6 +306,16 @@ where
     pub params_h_psi_b_by_phi0: ConditionParams<Psi, B, H, V>,
 }
 
+struct SampleInitialBaseConditions<V> {
+    o: MArrD1<B, SimplexD1<O, V>>,
+    b: MArrD1<KH, SimplexD1<B, V>>,
+    a: MArrD1<FH, SimplexD1<A, V>>,
+    theta: MArrD1<H, SimplexD1<Theta, V>>,
+    thetad: MArrD1<H, SimplexD1<Thetad, V>>,
+    h_psi_by_phi0: MArrD1<Psi, SimplexD1<H, V>>,
+    h_b_by_phi0: MArrD1<B, SimplexD1<H, V>>,
+}
+
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
@@ -301,6 +338,95 @@ where
     pub fb_fm: MArrD1<FM, SimplexDist<FB, V>>,
     /// parameters of conditional opinions $\Psi^F \implies H^F$ and $B^F \implies H^F$ when $\phi^F_0$ is true
     pub params_fh_fpsi_fb_by_fphi0: DependentParam<FH, V, ConditionParams<FPsi, FB, FH, V>>,
+}
+
+struct SampleInitialFriendConditions<V> {
+    fpsi: MArrD1<M, SimplexD1<FPsi, V>>,
+    fo: MArrD1<FB, SimplexD1<FO, V>>,
+    fb: MArrD1<FM, SimplexD1<FB, V>>,
+    fh_fpsi_by_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
+    fh_fb_by_fphi0: MArrD1<FB, SimplexD1<FH, V>>,
+}
+
+impl<V> InitialBaseConditions<V>
+where
+    V: MyFloat,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SampleInitialBaseConditions<V> {
+        let o = MArrD1::from_fn(|i| self.o_b[i].sample(rng));
+        let b = MArrD1::from_fn(|i| self.b_kh[i].sample(rng));
+        let a = MArrD1::from_fn(|i| self.a_fh[i].sample(rng));
+
+        let theta = MArrD1::from_fn(|h| self.theta_h[h].sample(rng));
+        let thetad = MArrD1::from_fn(|h| self.thetad_h[h].sample(rng));
+        let (h_psi_by_phi0, h_b_by_phi0) = self.params_h_psi_b_by_phi0.sample(rng);
+
+        debug!(target: "O||B", w =   ?o);
+        debug!(target: "B||KTh", w = ?b);
+        debug!(target: "A||FTh", w = ?a);
+        debug!(target: "Th||...", w = ?theta);
+        debug!(target: "Thd||..", w = ?thetad);
+        debug!(target: "H||Psi,phi0", w = ?h_psi_by_phi0);
+        debug!(target: "H||B,phi0",   w = ?h_b_by_phi0);
+
+        SampleInitialBaseConditions {
+            o,
+            b,
+            a,
+            theta,
+            thetad,
+            h_psi_by_phi0,
+            h_b_by_phi0,
+        }
+    }
+}
+
+impl<V> InitialFriendConditions<V>
+where
+    V: MyFloat,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(
+        &self,
+        rng: &mut R,
+        base: &SampleInitialBaseConditions<V>,
+    ) -> SampleInitialFriendConditions<V> {
+        let fpsi = MArrD1::from_fn(|i| self.fpsi_m[i].sample(rng));
+        let fb = MArrD1::from_fn(|i| self.fb_fm[i].sample(rng));
+        let fo = MArrD1::from_fn(|i| self.fo_fb[i].sample(rng));
+        // let fh_fpsi_by_fphi0 = MArrD1::from_fn(|i| init.fh_fpsi_by_fphi0[i].sample(rng));
+        // let fh_fb_by_fphi0 = MArrD1::from_fn(|i| init.fh_fb_by_fphi0[i].sample(rng));
+        let (fh_fpsi_by_fphi0, fh_fb_by_fphi0) = self
+            .params_fh_fpsi_fb_by_fphi0
+            .samples::<FPsi, FB, _, _, _>(
+                rng,
+                &(
+                    MArrD1::<FPsi, _>::from_fn(|i| base.h_psi_by_phi0[i].clone().conv()),
+                    MArrD1::<FB, _>::from_fn(|i| base.h_b_by_phi0[i].clone().conv()),
+                ),
+            );
+
+        debug!(target: "FPsi||M", w = ?fpsi);
+        debug!(target: "FB||FM", w = ?fb);
+        debug!(target: "FO||FB", w = ?fo);
+        debug!(target: "FH||FPsi,Fphi0", w = ?fh_fpsi_by_fphi0);
+        debug!(target: "FH||FB,Fphi0", w = ?fh_fb_by_fphi0);
+
+        SampleInitialFriendConditions {
+            fpsi,
+            fo,
+            fb,
+            fh_fpsi_by_fphi0,
+            fh_fb_by_fphi0,
+        }
+    }
 }
 
 #[serde_as]
@@ -327,6 +453,44 @@ where
     pub params_kh_kpsi_kb_by_kphi0: ConditionParams<KPsi, KB, KH, V>,
 }
 
+pub struct SampleInitialSocialConditions<V> {
+    kpsi: MArrD1<M, SimplexD1<KPsi, V>>,
+    ko: MArrD1<KB, SimplexD1<KO, V>>,
+    kb: MArrD1<KM, SimplexD1<KB, V>>,
+    kh_kpsi_by_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
+    kh_kb_by_kphi0: MArrD1<KB, SimplexD1<KH, V>>,
+}
+
+impl<V> InitialSocialConditions<V>
+where
+    V: MyFloat,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SampleInitialSocialConditions<V> {
+        let kpsi = MArrD1::from_fn(|i| self.kpsi_m[i].sample(rng));
+        let ko = MArrD1::from_fn(|i| self.ko_kb[i].sample(rng));
+        let kb = MArrD1::from_fn(|i| self.kb_km[i].sample(rng));
+        let (kh_kpsi_by_kphi0, kh_kb_by_kphi0) = self.params_kh_kpsi_kb_by_kphi0.sample(rng);
+
+        debug!(target: "KPsi||M", w = ?kpsi);
+        debug!(target: "KB||KM",  w = ?kb);
+        debug!(target: "KO||KB",  w = ?ko);
+        debug!(target: "KH||KPsi,Kphi0", w = ?kh_kpsi_by_kphi0);
+        debug!(target: "KH||KB,Kphi0", w = ?kh_kb_by_kphi0);
+
+        SampleInitialSocialConditions {
+            kb,
+            ko,
+            kpsi,
+            kh_kpsi_by_kphi0,
+            kh_kb_by_kphi0,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct ConditionalOpinions<V: Float> {
     base: BaseConditionalOpinions<V>,
@@ -342,14 +506,15 @@ pub struct BaseConditionalOpinions<V: Float> {
     b: MArrD1<KH, SimplexD1<B, V>>,
     /// $\Theta^K \implies A$
     a: MArrD1<FH, SimplexD1<A, V>>,
-    /// $\Psi \implies H$ when $\phi_0$ is true
-    h_psi_by_phi0: MArrD1<Psi, SimplexD1<H, V>>,
-    /// $B \implies H$ when $\phi_0$ is true
-    h_b_by_phi0: MArrD1<B, SimplexD1<H, V>>,
     /// $H \implies \Theta$
     theta: MArrD1<H, SimplexD1<Theta, V>>,
     /// $H \implies \Theta'$
     thetad: MArrD1<H, SimplexD1<Thetad, V>>,
+    // /// $\Psi \implies H$ when $\phi_0$ is true
+    // h_psi_by_phi0: MArrD1<Psi, SimplexD1<H, V>>,
+    // /// $B \implies H$ when $\phi_0$ is true
+    // h_b_by_phi0: MArrD1<B, SimplexD1<H, V>>,
+    h_psi_b_by_phi0: MArrD2<Psi, B, SimplexD1<H, V>>,
 }
 
 #[derive(Debug, Default)]
@@ -361,9 +526,10 @@ pub struct FriendConditionalOpinions<V: Float> {
     /// $M^F \implies B^F$
     fb: MArrD1<FM, SimplexD1<FB, V>>,
     /// $\Psi^F \implies H^F$ when $\phi_0^F$ is true
-    fh_fpsi_by_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
+    // fh_fpsi_by_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
     /// $B^F \implies H^F$ when $\phi_0^F$ is true
-    fh_fb_by_fphi0: MArrD1<FB, SimplexD1<FH, V>>,
+    // fh_fb_by_fphi0: MArrD1<FB, SimplexD1<FH, V>>,
+    fh_fpsi_fb_fpsi0: MArrD2<FPsi, FB, SimplexD1<FH, V>>,
 }
 
 #[derive(Debug, Default)]
@@ -375,9 +541,10 @@ pub struct SocialConditionalOpinions<V: Float> {
     /// $M^K \implies B^K$
     kb: MArrD1<KM, SimplexD1<KB, V>>,
     /// $\Psi^K \implies H^K$ when $\phi_0^K$ is true
-    kh_kpsi_by_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
+    // kh_kpsi_by_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
     /// $B^K \implies H^K$ when $\phi_0^K$ is true
-    kh_kb_by_kphi0: MArrD1<KB, SimplexD1<KH, V>>,
+    // kh_kb_by_kphi0: MArrD1<KB, SimplexD1<KH, V>>,
+    kh_kpsi_kb_kpsi0: MArrD2<KPsi, KB, SimplexD1<KH, V>>,
 }
 
 #[derive(Debug, Default)]
@@ -436,7 +603,8 @@ impl<V: Float> BaseOpinions<V> {
     fn new(
         init: InitialBaseSimplexes<V>,
         base_rates: &BaseRates<V>,
-        conds: &BaseConditionalOpinions<V>,
+        h_by_phi1_psi0: SimplexD1<H, V>,
+        h_by_phi1_b0: SimplexD1<H, V>,
     ) -> Self
     where
         V: UlpsEq + AddAssign,
@@ -454,8 +622,8 @@ impl<V: Float> BaseOpinions<V> {
             phi: (phi, base_rates.phi.clone()).into(),
             m: (m, base_rates.m.clone()).into(),
             o: (o, base_rates.o.clone()).into(),
-            h_psi_by_phi1: marr_d1![conds.h_psi_by_phi0[0].clone(), h_by_phi1_psi1],
-            h_b_by_phi1: marr_d1![conds.h_b_by_phi0[0].clone(), h_by_phi1_b1],
+            h_psi_by_phi1: marr_d1![h_by_phi1_psi0, h_by_phi1_psi1],
+            h_b_by_phi1: marr_d1![h_by_phi1_b0, h_by_phi1_b1],
         }
     }
 
@@ -529,14 +697,6 @@ impl<V: Float> BaseOpinions<V> {
     where
         V: Float + UlpsEq + NumAssign + Sum + Default,
     {
-        let h_psi_b_by_phi0: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
-            &conds.h_psi_by_phi0,
-            &conds.h_b_by_phi0,
-            &base_rates.psi,
-            &base_rates.b,
-            &base_rates.h,
-        )
-        .unwrap();
         let h_psi_b_by_phi1: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_by_phi1,
             &self.h_b_by_phi1,
@@ -545,7 +705,8 @@ impl<V: Float> BaseOpinions<V> {
             &base_rates.h,
         )
         .unwrap_or_else(|| MArrD2::new(vec![self.h_b_by_phi1.clone(), self.h_b_by_phi1.clone()]));
-        let cond_h = MArrD3::<Phi, _, _, _>::new(vec![h_psi_b_by_phi0, h_psi_b_by_phi1]);
+        let cond_h =
+            MArrD3::<Phi, _, _, _>::new(vec![conds.h_psi_b_by_phi0.clone(), h_psi_b_by_phi1]);
         let mw = OpinionD3::product3(self.phi.as_ref(), b.as_ref(), self.psi.as_ref());
         mw.deduce(&cond_h)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.h.clone()))
@@ -582,7 +743,8 @@ impl<V: Float> CollectiveOpinions<V> {
     fn new(
         init: InitialSocialSimplexes<V>,
         base_rates: &SocialBaseRates<V>,
-        conds: &SocialConditionalOpinions<V>,
+        kh_by_kphi1_kpsi0: SimplexD1<KH, V>,
+        kh_by_kphi1_kb0: SimplexD1<KH, V>,
     ) -> Self
     where
         V: UlpsEq + AddAssign,
@@ -598,8 +760,8 @@ impl<V: Float> CollectiveOpinions<V> {
             kphi: (kphi, base_rates.kphi.clone()).into(),
             km: (km, base_rates.km.clone()).into(),
             ko: (ko, base_rates.ko.clone()).into(),
-            kh_kpsi_by_kphi1: marr_d1![conds.kh_kpsi_by_kphi0[0].clone(), kh_by_kphi1_kpsi1],
-            kh_kb_by_kphi1: marr_d1![conds.kh_kb_by_kphi0[0].clone(), kh_by_kphi1_kb1],
+            kh_kpsi_by_kphi1: marr_d1![kh_by_kphi1_kpsi0, kh_by_kphi1_kpsi1],
+            kh_kb_by_kphi1: marr_d1![kh_by_kphi1_kb0, kh_by_kphi1_kb1],
         }
     }
 
@@ -645,15 +807,6 @@ impl<V: Float> CollectiveOpinions<V> {
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        let kh_kpsi_kb_kpsi0: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
-            &conds.kh_kpsi_by_kphi0,
-            &conds.kh_kb_by_kphi0,
-            &base_rates.kpsi,
-            &base_rates.kb,
-            &base_rates.kh,
-        )
-        .unwrap();
-
         let kh_kpsi_kb_kpsi1: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
             &self.kh_kpsi_by_kphi1,
             &self.kh_kb_by_kphi1,
@@ -667,7 +820,8 @@ impl<V: Float> CollectiveOpinions<V> {
                 self.kh_kb_by_kphi1.clone(),
             ])
         });
-        let cond_kh = MArrD3::<KPhi, _, _, _>::new(vec![kh_kpsi_kb_kpsi0, kh_kpsi_kb_kpsi1]);
+        let cond_kh =
+            MArrD3::<KPhi, _, _, _>::new(vec![conds.kh_kpsi_kb_kpsi0.clone(), kh_kpsi_kb_kpsi1]);
         let mw = OpinionD3::product3(&self.kphi, kb, kpsi);
         mw.deduce(&cond_kh)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.kh.clone()))
@@ -718,7 +872,8 @@ impl<V: Float> FriendOpinions<V> {
     fn new(
         init: InitialFriendSimplexes<V>,
         base_rates: &FriendBaseRates<V>,
-        conds: &FriendConditionalOpinions<V>,
+        fh_by_fphi1_fpsi0: SimplexD1<FH, V>,
+        fh_by_fphi1_fb0: SimplexD1<FH, V>,
     ) -> Self
     where
         V: UlpsEq + AddAssign,
@@ -734,8 +889,8 @@ impl<V: Float> FriendOpinions<V> {
             fphi: (fphi, base_rates.fphi.clone()).into(),
             fm: (fm, base_rates.fm.clone()).into(),
             fo: (fo, base_rates.fo.clone()).into(),
-            fh_fpsi_by_fphi1: marr_d1![conds.fh_fpsi_by_fphi0[0].clone(), fh_by_fphi1_fpsi1],
-            fh_fb_by_fphi1: marr_d1![conds.fh_fb_by_fphi0[0].clone(), fh_by_fphi1_fb1],
+            fh_fpsi_by_fphi1: marr_d1![fh_by_fphi1_fpsi0, fh_by_fphi1_fpsi1],
+            fh_fb_by_fphi1: marr_d1![fh_by_fphi1_fb0, fh_by_fphi1_fb1],
         }
     }
 
@@ -831,15 +986,6 @@ impl<V: Float> FriendOpinions<V> {
     where
         V: UlpsEq + NumAssign + Sum + Default,
     {
-        let fh_fpsi_fb_fpsi0: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
-            &conds.fh_fpsi_by_fphi0,
-            &conds.fh_fb_by_fphi0,
-            &base_rates.fpsi,
-            &base_rates.fb,
-            &base_rates.fh,
-        )
-        .unwrap();
-
         let fh_fpsi_fb_fpsi1: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
             &self.fh_fpsi_by_fphi1,
             &self.fh_fb_by_fphi1,
@@ -853,7 +999,8 @@ impl<V: Float> FriendOpinions<V> {
                 self.fh_fb_by_fphi1.clone(),
             ])
         });
-        let cond_fh = MArrD3::<FPhi, _, _, _>::new(vec![fh_fpsi_fb_fpsi0, fh_fpsi_fb_fpsi1]);
+        let cond_fh =
+            MArrD3::<FPhi, _, _, _>::new(vec![conds.fh_fpsi_fb_fpsi0.clone(), fh_fpsi_fb_fpsi1]);
         let mw = OpinionD3::product3(&self.fphi, fb, fpsi);
         mw.deduce(&cond_fh)
             .unwrap_or_else(|| OpinionD1::vacuous_with(base_rates.fh.clone()))
@@ -890,12 +1037,12 @@ impl<V: Float> FriendOpinions<V> {
 }
 
 impl<V: Float> Opinions<V> {
-    pub fn reset(
-        &mut self,
+    pub fn new(
         initial_opinions: InitialOpinions<V>,
         base_rates: &GlobalBaseRates<V>,
-        conds: &ConditionalOpinions<V>,
-    ) where
+        sample: &SampleInitialConditions<V>,
+    ) -> Self
+    where
         V: UlpsEq + NumAssign,
     {
         let InitialOpinions {
@@ -904,12 +1051,35 @@ impl<V: Float> Opinions<V> {
             social,
         } = initial_opinions;
 
-        self.op = BaseOpinions::new(base, &base_rates.base, &conds.base);
-        self.fop = FriendOpinions::new(friend, &base_rates.friend, &conds.friend);
-        self.sop = CollectiveOpinions::new(social, &base_rates.social, &conds.social);
+        let op = BaseOpinions::new(
+            base,
+            &base_rates.base,
+            sample.base.h_psi_by_phi0[0].clone(),
+            sample.base.h_b_by_phi0[0].clone(),
+        );
+        let fop = FriendOpinions::new(
+            friend,
+            &base_rates.friend,
+            sample.friend.fh_fpsi_by_fphi0[0].clone(),
+            sample.friend.fh_fb_by_fphi0[0].clone(),
+        );
+        let sop = CollectiveOpinions::new(
+            social,
+            &base_rates.social,
+            sample.social.kh_kpsi_by_kphi0[0].clone(),
+            sample.social.kh_kb_by_kphi0[0].clone(),
+        );
+
+        Self { op, fop, sop }
     }
 
-    pub fn new(&self, info: InfoContent<'_, V>, trust: V, friend_trust: V, social_trust: V) -> Self
+    pub fn update(
+        &self,
+        info: InfoContent<'_, V>,
+        trust: V,
+        friend_trust: V,
+        social_trust: V,
+    ) -> Self
     where
         V: UlpsEq + NumAssign + Sum + fmt::Debug,
     {
@@ -1028,7 +1198,7 @@ impl MyFloat for f32 {}
 impl MyFloat for f64 {}
 
 impl<V: Float> ConditionalOpinions<V> {
-    pub fn from_init<R: Rng>(init: &InitialConditions<V>, rng: &mut R) -> Self
+    pub fn from_sample(sample: SampleInitialConditions<V>, base_rates: &GlobalBaseRates<V>) -> Self
     where
         V: MyFloat,
         Standard: Distribution<V>,
@@ -1036,9 +1206,9 @@ impl<V: Float> ConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let base = BaseConditionalOpinions::from_init(&init.base, rng);
-        let friend = FriendConditionalOpinions::from_init(&init.friend, &base, rng);
-        let social = SocialConditionalOpinions::from_init(&init.social, rng);
+        let base = BaseConditionalOpinions::from_sample(sample.base, &base_rates.base);
+        let friend = FriendConditionalOpinions::from_sample(sample.friend, &base_rates.friend);
+        let social = SocialConditionalOpinions::from_sample(sample.social, &base_rates.social);
 
         Self {
             base,
@@ -1048,48 +1218,48 @@ impl<V: Float> ConditionalOpinions<V> {
     }
 }
 
-impl<V: Float> BaseConditionalOpinions<V> {
-    pub fn from_init<R: Rng>(init: &InitialBaseConditions<V>, rng: &mut R) -> Self
-    where
-        V: MyFloat,
-        Standard: Distribution<V>,
-        StandardNormal: Distribution<V>,
-        Exp1: Distribution<V>,
-        Open01: Distribution<V>,
-    {
-        let o = MArrD1::from_fn(|i| init.o_b[i].sample(rng));
-        let b = MArrD1::from_fn(|i| init.b_kh[i].sample(rng));
-        let a = MArrD1::from_fn(|i| init.a_fh[i].sample(rng));
-
-        let theta = MArrD1::from_fn(|h| init.theta_h[h].sample(rng));
-        let thetad = MArrD1::from_fn(|h| init.thetad_h[h].sample(rng));
-        let (h_psi_by_phi0, h_b_by_phi0) = init.params_h_psi_b_by_phi0.sample(rng);
-
-        debug!(target: "O||B", w =   ?o);
-        debug!(target: "B||KTh", w = ?b);
-        debug!(target: "A||FTh", w = ?a);
-        debug!(target: "Th||...", w = ?theta);
-        debug!(target: "Thd||..", w = ?thetad);
-        debug!(target: "H||Psi,phi0", w = ?h_psi_by_phi0);
-        debug!(target: "H||B,phi0",   w = ?h_b_by_phi0);
-
-        Self {
-            a,
-            b,
+impl<V> BaseConditionalOpinions<V>
+where
+    V: MyFloat,
+{
+    fn from_sample(sample: SampleInitialBaseConditions<V>, base_rates: &BaseRates<V>) -> Self {
+        let SampleInitialBaseConditions {
             o,
+            b,
+            a,
             theta,
             thetad,
-            h_b_by_phi0,
             h_psi_by_phi0,
+            h_b_by_phi0,
+        } = sample;
+
+        println!("{:?}", h_psi_by_phi0);
+        println!("{:?}", h_b_by_phi0);
+
+        let h_psi_b_by_phi0: MArrD2<Psi, B, SimplexD1<H, V>> = MArrD1::<H, _>::merge_cond2(
+            &h_psi_by_phi0,
+            &h_b_by_phi0,
+            &base_rates.psi,
+            &base_rates.b,
+            &base_rates.h,
+        )
+        .unwrap();
+
+        Self {
+            o,
+            a,
+            b,
+            theta,
+            thetad,
+            h_psi_b_by_phi0,
         }
     }
 }
 
-impl<V: Float> FriendConditionalOpinions<V> {
-    pub fn from_init<R: Rng>(
-        init: &InitialFriendConditions<V>,
-        base: &BaseConditionalOpinions<V>,
-        rng: &mut R,
+impl<V: MyFloat> FriendConditionalOpinions<V> {
+    fn from_sample(
+        sample: SampleInitialFriendConditions<V>,
+        base_rates: &FriendBaseRates<V>,
     ) -> Self
     where
         V: MyFloat,
@@ -1098,39 +1268,40 @@ impl<V: Float> FriendConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let fpsi = MArrD1::from_fn(|i| init.fpsi_m[i].sample(rng));
-        let fb = MArrD1::from_fn(|i| init.fb_fm[i].sample(rng));
-        let fo = MArrD1::from_fn(|i| init.fo_fb[i].sample(rng));
-        // let fh_fpsi_by_fphi0 = MArrD1::from_fn(|i| init.fh_fpsi_by_fphi0[i].sample(rng));
-        // let fh_fb_by_fphi0 = MArrD1::from_fn(|i| init.fh_fb_by_fphi0[i].sample(rng));
-        let (fh_fpsi_by_fphi0, fh_fb_by_fphi0) = init
-            .params_fh_fpsi_fb_by_fphi0
-            .samples::<FPsi, FB, _, _, _>(
-                rng,
-                &(
-                    MArrD1::<FPsi, _>::from_fn(|i| base.h_psi_by_phi0[i].clone().conv()),
-                    MArrD1::<FB, _>::from_fn(|i| base.h_b_by_phi0[i].clone().conv()),
-                ),
-            );
+        let SampleInitialFriendConditions {
+            fpsi,
+            fo,
+            fb,
+            fh_fpsi_by_fphi0,
+            fh_fb_by_fphi0,
+        } = sample;
 
-        debug!(target: "FPsi||M", w = ?fpsi);
-        debug!(target: "FB||FM", w = ?fb);
-        debug!(target: "FO||FB", w = ?fo);
-        debug!(target: "FH||FPsi,Fphi0", w = ?fh_fpsi_by_fphi0);
-        debug!(target: "FH||FB,Fphi0", w = ?fh_fb_by_fphi0);
+        println!("{:?}", fh_fpsi_by_fphi0);
+        println!("{:?}", fh_fb_by_fphi0);
+
+        let fh_fpsi_fb_fpsi0: MArrD2<FPsi, FB, _> = MArrD1::<FH, _>::merge_cond2(
+            &fh_fpsi_by_fphi0,
+            &fh_fb_by_fphi0,
+            &base_rates.fpsi,
+            &base_rates.fb,
+            &base_rates.fh,
+        )
+        .unwrap();
 
         Self {
             fb,
             fo,
             fpsi,
-            fh_fpsi_by_fphi0,
-            fh_fb_by_fphi0,
+            fh_fpsi_fb_fpsi0,
         }
     }
 }
 
-impl<V: Float> SocialConditionalOpinions<V> {
-    pub fn from_init<R: Rng>(init: &InitialSocialConditions<V>, rng: &mut R) -> Self
+impl<V: MyFloat> SocialConditionalOpinions<V> {
+    pub fn from_sample(
+        sample: SampleInitialSocialConditions<V>,
+        base_rates: &SocialBaseRates<V>,
+    ) -> Self
     where
         V: MyFloat,
         Standard: Distribution<V>,
@@ -1138,23 +1309,31 @@ impl<V: Float> SocialConditionalOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let kpsi = MArrD1::from_fn(|i| init.kpsi_m[i].sample(rng));
-        let ko = MArrD1::from_fn(|i| init.ko_kb[i].sample(rng));
-        let kb = MArrD1::from_fn(|i| init.kb_km[i].sample(rng));
-        let (kh_kpsi_by_kphi0, kh_kb_by_kphi0) = init.params_kh_kpsi_kb_by_kphi0.sample(rng);
-
-        debug!(target: "KPsi||M", w = ?kpsi);
-        debug!(target: "KB||KM",  w = ?kb);
-        debug!(target: "KO||KB",  w = ?ko);
-        debug!(target: "KH||KPsi,Kphi0", w = ?kh_kpsi_by_kphi0);
-        debug!(target: "KH||KB,Kphi0", w = ?kh_kb_by_kphi0);
-
-        Self {
-            kb,
-            ko,
+        let SampleInitialSocialConditions {
             kpsi,
+            ko,
+            kb,
             kh_kpsi_by_kphi0,
             kh_kb_by_kphi0,
+        } = sample;
+
+        println!("{:?}", kh_kpsi_by_kphi0);
+        println!("{:?}", kh_kb_by_kphi0);
+
+        let kh_kpsi_kb_kpsi0: MArrD2<KPsi, KB, _> = MArrD1::<KH, _>::merge_cond2(
+            &kh_kpsi_by_kphi0,
+            &kh_kb_by_kphi0,
+            &base_rates.kpsi,
+            &base_rates.kb,
+            &base_rates.kh,
+        )
+        .unwrap();
+
+        Self {
+            kpsi,
+            ko,
+            kb,
+            kh_kpsi_kb_kpsi0,
         }
     }
 }

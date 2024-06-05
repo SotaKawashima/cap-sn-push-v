@@ -174,12 +174,13 @@ where
         self.social_access_prob = agent_params.social_access_prob.sample(rng);
         self.friend_arrival_rate = agent_params.friend_arrival_prob.sample(rng);
 
-        self.conds = ConditionalOpinions::from_init(&agent_params.initial_conditions, rng);
-        self.ops.reset(
+        let sample = agent_params.initial_conditions.sample(rng);
+        self.ops = Opinions::new(
             agent_params.initial_opinions.clone(),
             &agent_params.base_rates,
-            &self.conds,
+            &sample,
         );
+        self.conds = ConditionalOpinions::from_sample(sample, &agent_params.base_rates);
 
         self.info_trust_map.clear();
         self.selfish_status.reset();
@@ -226,7 +227,7 @@ where
 
         let mut new_ops = self
             .ops
-            .new(info.content, trust, friend_trust, social_trust);
+            .update(info.content, trust, friend_trust, social_trust);
         let temp_ops = new_ops.compute(
             info.content,
             social_trust,
@@ -278,7 +279,7 @@ where
 
         let mut new_ops = self
             .ops
-            .new(info.content, trust, friend_trust, social_trust);
+            .update(info.content, trust, friend_trust, social_trust);
         let temp = new_ops.compute(info.content, social_trust, &self.conds, base_rates);
 
         // posting info is equivalent to sharing it to friends with max trust.
