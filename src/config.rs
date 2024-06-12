@@ -155,22 +155,22 @@ mod tests {
                     "phi" : [[0.0, 0.0], 1.0],
                     "m"   : [[0.0, 0.0], 1.0],
                     "o"   : [[0.0, 0.0], 1.0],
-                    "h_by_phi1_psi1" : [[0.0, 0.0], 1.0],
-                    "h_by_phi1_b1"   : [[0.0, 0.0], 1.0],
+                    "h_if_phi1_psi1" : [[0.0, 0.0], 1.0],
+                    "h_if_phi1_b1"   : [[0.0, 0.0], 1.0],
                 },
                 "friend": {
                     "fphi" : [[0.0, 0.0], 1.0],
                     "fm"   : [[0.0, 0.0], 1.0],
                     "fo"   : [[0.0, 0.0], 1.0],
-                    "fh_by_fphi1_fpsi1" : [[0.0, 0.0], 1.0],
-                    "fh_by_fphi1_fb1"   : [[0.0, 0.0], 1.0],
+                    "fh_if_fphi1_fpsi1" : [[0.0, 0.0], 1.0],
+                    "fh_if_fphi1_fb1"   : [[0.0, 0.0], 1.0],
                 },
                 "social": {
                     "kphi" : [[0.0, 0.0], 1.0],
                     "km"   : [[0.0, 0.0], 1.0],
                     "ko"   : [[0.0, 0.0], 1.0],
-                    "kh_by_kphi1_kpsi1" : [[0.0, 0.0], 1.0],
-                    "kh_by_kphi1_kb1"   : [[0.0, 0.0], 1.0],
+                    "kh_if_kphi1_kpsi1" : [[0.0, 0.0], 1.0],
+                    "kh_if_kphi1_kb1"   : [[0.0, 0.0], 1.0],
                 }
             },
             "base_rates": {
@@ -224,7 +224,7 @@ mod tests {
                         { "Fixed" : [[1.0, 0.00], 0.00] },
                         { "Fixed" : [[0.0, 0.70], 0.30] },
                     ],
-                    "params_h_psi_b_by_phi0" : {
+                    "params_h_psi_b_if_phi0" : {
                         "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
                         "by_cause0": { "Fixed" : [[0.50, 0.40], 0.10] },
                         "by_cause1": {
@@ -249,7 +249,7 @@ mod tests {
                         { "Fixed" : [[0.90, 0.00], 0.10] },
                         { "Fixed" : [[0.00, 0.99], 0.01] },
                     ],
-                    "params_fh_fpsi_fb_by_fphi0" : {
+                    "params_fh_fpsi_fb_if_fphi0" : {
                         "Abs": {
                             "no_cause" : { "Fixed" : [[0.95, 0.00], 0.05] },
                             "by_cause0" : { "Fixed" : [[0.55, 0.35], 0.10] },
@@ -276,7 +276,7 @@ mod tests {
                         { "Fixed" : [[1.00, 0.00], 0.00] },
                         { "Fixed" : [[0.25, 0.65], 0.10] },
                     ],
-                    "params_kh_kpsi_kb_by_kphi0" : {
+                    "params_kh_kpsi_kb_if_kphi0" : {
                         "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
                         "by_cause0": { "Fixed" : [[0.30, 0.60], 0.10] },
                         "by_cause1": {
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(runtime.seed_state, 0);
         assert_eq!(runtime.iteration_count, 1);
         assert_eq!(
-            agent_params.initial_opinions.base.h_by_phi1_b1,
+            agent_params.initial_opinions.base.h_if_phi1_b1,
             SimplexD1::vacuous()
         );
         assert!(matches!(

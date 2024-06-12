@@ -36,22 +36,22 @@ psi  = [[0.0, 0.0], 1.0]
 phi  = [[0.0, 0.0], 1.0]
 m    = [[0.0, 0.0], 1.0]
 o    = [[0.0, 0.0], 1.0]
-h_by_phi1_psi1 = [[0.0, 0.0], 1.0]
-h_by_phi1_b1 = [[0.0, 0.0], 1.0]
+h_if_phi1_psi1 = [[0.0, 0.0], 1.0]
+h_if_phi1_b1 = [[0.0, 0.0], 1.0]
 
 [initial_opinions.friend]
 fphi = [[0.0, 0.0], 1.0]
 fm   = [[0.0, 0.0], 1.0]
 fo   = [[0.0, 0.0], 1.0]
-fh_by_fphi1_fpsi1 = [[0.0, 0.0], 1.0]
-fh_by_fphi1_fb1 = [[0.0, 0.0], 1.0]
+fh_if_fphi1_fpsi1 = [[0.0, 0.0], 1.0]
+fh_if_fphi1_fb1 = [[0.0, 0.0], 1.0]
 
 [initial_opinions.social]
 kphi = [[0.0, 0.0], 1.0]
 km   = [[0.0, 0.0], 1.0]
 ko   = [[0.0, 0.0], 1.0]
-kh_by_kphi1_kpsi1 = [[0.0, 0.0], 1.0]
-kh_by_kphi1_kb1 = [[0.0, 0.0], 1.0]
+kh_if_kphi1_kpsi1 = [[0.0, 0.0], 1.0]
+kh_if_kphi1_kb1 = [[0.0, 0.0], 1.0]
 
 [initial_conditions.base]
 a_fh = [
@@ -74,7 +74,7 @@ thetad_h = [
     { Fixed = [[1.0, 0.00], 0.00] },
     { Fixed = [[0.0, 0.70], 0.30] },
 ]
-[initial_conditions.base.params_h_psi_b_by_phi0]
+[initial_conditions.base.params_h_psi_b_if_phi0]
 no_cause = { Fixed = [[0.95, 0.00], 0.05] }
 by_cause0 = { Fixed = [[0.50, 0.40], 0.10] }
 by_cause1 = { Rel = { coef_b = [5.0, 10.0], coef_u = 5.0, error = 0.00001 } }
@@ -93,7 +93,7 @@ fb_fm = [
     { Fixed = [[0.90, 0.00], 0.10] },
     { Fixed = [[0.00, 0.99], 0.01] },
 ]
-[initial_conditions.friend.params_fh_fpsi_fb_by_fphi0]
+[initial_conditions.friend.params_fh_fpsi_fb_if_fphi0]
 Rel = { coef_b = [5.0, 10.0], coef_u = 5.0, error = 0.00001 }
 
 [initial_conditions.social]
@@ -109,7 +109,7 @@ kb_km = [
     { Fixed = [[1.00, 0.00], 0.00] },
     { Fixed = [[0.25, 0.65], 0.10] },
 ]
-[initial_conditions.social.params_kh_kpsi_kb_by_kphi0]
+[initial_conditions.social.params_kh_kpsi_kb_if_kphi0]
 no_cause = { Fixed = [[0.95, 0.00], 0.05] }
 by_cause0 = { Fixed = [[0.60, 0.30], 0.10] }
 by_cause1 = { Rel = { coef_b = [5.0, 10.0], coef_u = 5.0, error = 0.00001 } }

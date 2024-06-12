@@ -19,8 +19,8 @@ pub struct InfoContent<'a, V: Float> {
     pub m: &'a SimplexD1<M, V>,
     pub o: &'a SimplexD1<O, V>,
     pub phi: &'a SimplexD1<Phi, V>,
-    pub h_by_phi1_psi1: &'a SimplexD1<H, V>,
-    pub h_by_phi1_b1: &'a SimplexD1<H, V>,
+    pub h_if_phi1_psi1: &'a SimplexD1<H, V>,
+    pub h_if_phi1_b1: &'a SimplexD1<H, V>,
 }
 
 impl<'a, V: Float> InfoContent<'a, V> {
@@ -29,16 +29,16 @@ impl<'a, V: Float> InfoContent<'a, V> {
         m: &'a SimplexD1<M, V>,
         o: &'a SimplexD1<O, V>,
         phi: &'a SimplexD1<Phi, V>,
-        h_by_phi1_psi1: &'a SimplexD1<H, V>,
-        h_by_phi1_b1: &'a SimplexD1<H, V>,
+        h_if_phi1_psi1: &'a SimplexD1<H, V>,
+        h_if_phi1_b1: &'a SimplexD1<H, V>,
     ) -> Self {
         Self {
             psi,
             m,
             o,
             phi,
-            h_by_phi1_psi1,
-            h_by_phi1_b1,
+            h_if_phi1_psi1,
+            h_if_phi1_b1,
         }
     }
 }
@@ -115,9 +115,9 @@ where
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
         phi: SimplexD1<Phi, V>,
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        h_by_phi1_psi1: SimplexD1<H, V>,
+        h_if_phi1_psi1: SimplexD1<H, V>,
         #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        h_by_phi1_b1: SimplexD1<H, V>,
+        h_if_phi1_b1: SimplexD1<H, V>,
     },
 }
 
@@ -156,8 +156,8 @@ pub struct InfoBuilder<V: Float> {
     vacuous_m: SimplexD1<M, V>,
     vacuous_o: SimplexD1<O, V>,
     vacuous_phi: SimplexD1<Phi, V>,
-    vacuous_h_by_phi1_psi1: SimplexD1<H, V>,
-    vacuous_h_by_phi1_b1: SimplexD1<H, V>,
+    vacuous_h_if_phi1_psi1: SimplexD1<H, V>,
+    vacuous_h_if_phi1_b1: SimplexD1<H, V>,
 }
 
 impl<V> InfoBuilder<V>
@@ -170,8 +170,8 @@ where
             vacuous_m: SimplexD1::vacuous(),
             vacuous_o: SimplexD1::vacuous(),
             vacuous_phi: SimplexD1::vacuous(),
-            vacuous_h_by_phi1_psi1: SimplexD1::vacuous(),
-            vacuous_h_by_phi1_b1: SimplexD1::vacuous(),
+            vacuous_h_if_phi1_psi1: SimplexD1::vacuous(),
+            vacuous_h_if_phi1_b1: SimplexD1::vacuous(),
         }
     }
 
@@ -181,8 +181,8 @@ where
             &self.vacuous_m,
             &self.vacuous_o,
             &self.vacuous_phi,
-            &self.vacuous_h_by_phi1_psi1,
-            &self.vacuous_h_by_phi1_b1,
+            &self.vacuous_h_if_phi1_psi1,
+            &self.vacuous_h_if_phi1_b1,
         );
         let label = match obj {
             InfoObject::Misinfo { psi } => {
@@ -200,12 +200,12 @@ where
             }
             InfoObject::Inhibitive {
                 phi,
-                h_by_phi1_psi1,
-                h_by_phi1_b1,
+                h_if_phi1_psi1,
+                h_if_phi1_b1,
             } => {
                 content.phi = phi;
-                content.h_by_phi1_psi1 = h_by_phi1_psi1;
-                content.h_by_phi1_b1 = h_by_phi1_b1;
+                content.h_if_phi1_psi1 = h_if_phi1_psi1;
+                content.h_if_phi1_b1 = h_if_phi1_b1;
                 InfoLabel::Inhibitive
             }
         };

@@ -5,7 +5,7 @@ Misinfo = { psi = [[0.00, 0.99], 0.01] }
 [[info_objects]]
 Corrective = { psi = [[0.99, 0.00], 0.01], m = [[0.0, 1.0], 0.0] }
 [[info_objects]]
-Inhibitive = { phi = [[0.0, 1.0], 0.0], h_by_phi1_psi1 = [[0.1, 0.7], 0.2], h_by_phi1_b1 = [[0.1, 0.7], 0.2] }
+Inhibitive = { phi = [[0.0, 1.0], 0.0], h_if_phi1_psi1 = [[0.1, 0.7], 0.2], h_if_phi1_b1 = [[0.1, 0.7], 0.2] }
 
 [[events]]
 time = 0

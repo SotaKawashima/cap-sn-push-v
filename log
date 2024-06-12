@@ -1,6 +1,0 @@
-   Compiling cap-sn v0.16.3 (/Users/masaakimiyashita/dev/cap-sn)
-    Finished dev [unoptimized + debuginfo] target(s) in 7.33s
-     Running `target/debug/cap-sn -g test/config/general.toml -r test/config/runtime1.toml -a test/config/agent_params2.toml -s test/config/scenario.toml test -o`
-thread 'main' panicked at /Users/masaakimiyashita/dev/cap-sn/src/config.rs:22:14:
-test/config/runtime1.toml not found: IOError(Os { code: 2, kind: NotFound, message: "No such file or directory" })
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
