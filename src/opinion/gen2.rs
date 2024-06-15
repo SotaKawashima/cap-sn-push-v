@@ -8,25 +8,9 @@ use subjective_logic::{
     ops::{Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection},
 };
 
-use super::{FPhi, FPsi, KPhi, KPsi, MyFloat, Phi, Psi, Theta, Thetad, A, B, FH, H, KH, O};
+use crate::info::gen2::InfoContent;
 
-pub enum InfoContent<V: MyFloat> {
-    Misinfo {
-        op: SimplexD1<Psi, V>,
-    },
-    Correction {
-        op: SimplexD1<Psi, V>,
-        misinfo: SimplexD1<Psi, V>,
-        trust_misinfo: V,
-    },
-    Observation {
-        op: SimplexD1<O, V>,
-    },
-    Inhibition {
-        op1: SimplexD1<Phi, V>,
-        op2: MArrD3<Phi, Psi, B, SimplexD1<H, V>>,
-    },
-}
+use super::{FPhi, FPsi, KPhi, KPsi, MyFloat, Phi, Psi, Theta, Thetad, A, B, FH, H, KH, O};
 
 #[derive(Default)]
 struct StateOpinions<V: MyFloat> {

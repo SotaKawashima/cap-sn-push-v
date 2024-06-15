@@ -1,3 +1,5 @@
+pub mod gen2;
+
 use std::{fmt::Display, ops::AddAssign};
 
 use approx::UlpsEq;
