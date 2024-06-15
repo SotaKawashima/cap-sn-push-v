@@ -9,6 +9,7 @@ use std::{
     fmt,
     iter::Sum,
 };
+use subjective_logic::multi_array::labeled::MArrD1;
 use tracing::{debug, info};
 
 use crate::{
@@ -16,8 +17,9 @@ use crate::{
     dist::{IValue, IValueParam},
     info::{Info, TrustParams},
     opinion::{
+        gen2::{self, Trusts},
         ConditionalOpinions, GlobalBaseRates, InitialConditions, InitialOpinions, MyFloat,
-        Opinions, TempOpinions,
+        Opinions, Theta,
     },
     value::{EValue, EValueParam},
 };
@@ -57,10 +59,11 @@ pub struct BehaviorByInfo {
 }
 
 #[derive(Default)]
-pub struct Agent<V: Float> {
+pub struct Agent<V: Float + MyFloat> {
     cpt: CPT<V>,
     prospect: Prospect<V>,
     ops: Opinions<V>,
+    ops_gen2: gen2::MyOpinions<V>,
     conds: ConditionalOpinions<V>,
     access_prob: V,
     friend_access_prob: V,
@@ -145,9 +148,8 @@ impl DelayActionStatus {
     }
 }
 
-impl<V> Agent<V>
+impl<V: MyFloat> Agent<V>
 where
-    V: Float + UlpsEq + SampleUniform,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
@@ -222,46 +224,55 @@ where
             .info_trust_map
             .entry(info.idx)
             .or_insert_with(|| agent_params.trust_params.gen_map(rng)(info));
-        let friend_trust = receipt_prob * self.friend_access_prob * trust;
-        let social_trust = receipt_prob * self.social_access_prob * trust;
+        // let friend_trust = receipt_prob * self.friend_access_prob * trust;
+        // let social_trust = receipt_prob * self.social_access_prob * trust;
 
-        let mut new_ops = self
-            .ops
-            .update(info.content, trust, friend_trust, social_trust);
-        let temp_ops = new_ops.compute(
-            info.content,
-            social_trust,
-            &self.conds,
-            &agent_params.base_rates,
-        );
+        let trusts = Trusts {
+            info: trust,
+            friend: self.friend_access_prob * receipt_prob,
+            social: self.social_access_prob * receipt_prob,
+            mis_friend: todo!(),
+            mis_social: todo!(),
+            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
+        };
+        let p = todo!();
 
         // compute values of prospects
         let sharing_status = self.sharing_statuses.entry(info.idx).or_default();
-        let sharing = 'a: {
-            if sharing_status.is_done() {
-                break 'a false;
+        let mut sharing = false;
+        self.ops_gen2.receive(&p, trusts, |ded, pred_ded| {
+            if !sharing_status.is_done() {
+                sharing = false;
             }
-            let (pred_new_fop, ps) = new_ops.predict(
-                &temp_ops,
-                info.content,
-                friend_trust,
-                self.friend_arrival_rate * self.friend_access_prob * trust,
-                &self.conds,
-                &agent_params.base_rates,
-            );
-            let values: [V; 2] =
-                array::from_fn(|i| self.cpt.valuate(&self.prospect.sharing[i], &ps[i]));
-            info!(target: "     Y", V = ?values);
+            let values = [
+                self.cpt
+                    .valuate(&self.prospect.sharing[0], &ded.p_a_thetad()),
+                self.cpt
+                    .valuate(&self.prospect.sharing[1], &pred_ded.p_a_thetad()),
+            ];
             sharing_status.decide(values);
-            if sharing_status.is_done() {
-                new_ops.replace_pred_fop(pred_new_fop);
-                true
-            } else {
-                false
+            if !self.selfish_status.is_done() {
+                let p_theta = ded.p_theta();
+                debug!(target: "    TH", P = ?p_theta);
+                let values: [V; 2] =
+                    array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p_theta));
+                info!(target: "     X", V = ?values);
+                self.selfish_status.decide(values, self.delay_selfish);
+                info!(target: "selfsh", status = ?self.selfish_status);
             }
-        };
-        self.ops = new_ops;
-        self.decide_selfish(temp_ops);
+            info!(target: "     Y", V = ?values);
+            sharing_status.is_done()
+        });
+        // let mut new_ops = self
+        //     .ops
+        //     .update(info.content, trust, friend_trust, social_trust);
+        // let temp_ops = new_ops.compute(
+        //     info.content,
+        //     social_trust,
+        //     &self.conds,
+        //     &agent_params.base_rates,
+        // );
+        // self.ops = new_ops;
 
         BehaviorByInfo {
             sharing,
@@ -293,19 +304,19 @@ where
         );
         new_ops.replace_pred_fop(pred_fop);
         self.ops = new_ops;
-        self.decide_selfish(temp);
+        self.decide_selfish(&temp.get_theta_projection());
     }
 
-    fn decide_selfish(&mut self, temp_ops: TempOpinions<V>)
+    fn decide_selfish(&mut self, p_theta: &MArrD1<Theta, V>)
     where
         V: NumAssign + Sum + fmt::Debug + Default,
     {
         if self.selfish_status.is_done() {
             return;
         }
-        let p = temp_ops.get_theta_projection();
-        debug!(target: "    TH", P = ?p);
-        let values: [V; 2] = array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p));
+        debug!(target: "    TH", P = ?p_theta);
+        let values: [V; 2] =
+            array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], p_theta));
         info!(target: "     X", V = ?values);
         self.selfish_status.decide(values, self.delay_selfish);
         info!(target: "selfsh", status = ?self.selfish_status);

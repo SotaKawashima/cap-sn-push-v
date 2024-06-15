@@ -1,3 +1,4 @@
+pub mod gen2;
 pub mod paramter;
 
 use crate::info::InfoContent;
@@ -536,6 +537,20 @@ pub struct Opinions<V: Float> {
 }
 
 #[derive(Debug, Default)]
+struct MyOpinions<V: Float> {
+    op: BaseOpinions<V>,
+    sop: CollectiveOpinions<V>,
+    fop: FriendOpinions<V>,
+    fb: OpinionD1<FB, V>,
+    kb: OpinionD1<KB, V>,
+    kh: OpinionD1<KH, V>,
+    b: OpinionD1<B, V>,
+    a: OpinionD1<A, V>,
+    theta: OpinionD1<Theta, V>,
+    thetad: OpinionD1<Thetad, V>,
+}
+
+#[derive(Debug, Default, Clone)]
 struct BaseOpinions<V: Float> {
     psi: OpinionD1<Psi, V>,
     phi: OpinionD1<Phi, V>,
@@ -545,7 +560,7 @@ struct BaseOpinions<V: Float> {
     h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CollectiveOpinions<V: Float> {
     ko: OpinionD1<KO, V>,
     km: OpinionD1<KM, V>,
@@ -1029,6 +1044,88 @@ impl<V: Float> Opinions<V> {
         Self { op, fop, sop }
     }
 
+    pub fn receive_info(
+        self,
+        info: InfoContent<'_, V>,
+        trust: V,
+        friend_trust: V,
+        social_trust: V,
+        conds: &ConditionalOpinions<V>,
+        base_rates: &GlobalBaseRates<V>,
+    ) -> MyOpinions<V>
+    where
+        V: MyFloat,
+    {
+        let Opinions { op, sop, fop } = self.update(info, trust, friend_trust, social_trust);
+        let kb = sop.compute_kb(&conds.social, &base_rates.social);
+        let kpsi = CollectiveOpinions::compute_kpsi(
+            &info.psi.to_owned().conv(),
+            &op.m,
+            social_trust,
+            &conds.social,
+            &base_rates.social,
+        );
+        let kh = sop.compute_kh(&kb, &kpsi, &conds.social, &base_rates.social);
+        let b = op.compute_b(&kh, &conds.base, &base_rates.base);
+        let h = op.compute_h(&b, &conds.base, &base_rates.base);
+        let theta = op.compute_theta(&h, &conds.base, &base_rates.base);
+        let fb = fop.compute_fb(&conds.friend, &base_rates.friend);
+        let info_fpsi = info.psi.to_owned().conv();
+        let fpsi_ded = FriendOpinions::deduce_fpsi(&op.m, &conds.friend, &base_rates.friend);
+        let fpsi = FriendOpinions::compute_fpsi(&info_fpsi, &fpsi_ded, friend_trust);
+        let fh = fop.compute_fh(&fb, &fpsi, &conds.friend, &base_rates.friend);
+        let a = op.compute_a(&fh, &conds.base, &base_rates.base);
+        let thetad = op.compute_thetad(&h, &conds.base, &base_rates.base);
+
+        MyOpinions {
+            op,
+            sop,
+            fop,
+            fb,
+            kb,
+            kh,
+            b,
+            a,
+            theta,
+            thetad,
+        }
+    }
+
+    pub fn predict2(
+        &self,
+        info: InfoContent<'_, V>,
+        friend_trust: V,
+        pred_friend_trust: V,
+        social_trust: V,
+        conds: &ConditionalOpinions<V>,
+        base_rates: &GlobalBaseRates<V>,
+    ) -> MyOpinions<V>
+    where
+        V: MyFloat,
+    {
+        let temp_ops = self.compute(info, social_trust, conds, &base_rates);
+        let (pred_new_fop, _) = self.predict(
+            &temp_ops,
+            info,
+            friend_trust,
+            pred_friend_trust,
+            conds,
+            base_rates,
+        );
+        MyOpinions {
+            sop: self.sop.clone(),
+            op: self.op.clone(),
+            fop: pred_new_fop,
+            fb: todo!(),
+            kb: todo!(),
+            kh: todo!(),
+            b: todo!(),
+            a: todo!(),
+            theta: todo!(),
+            thetad: todo!(),
+        }
+    }
+
     pub fn update(
         &self,
         info: InfoContent<'_, V>,
@@ -1040,8 +1137,8 @@ impl<V: Float> Opinions<V> {
         V: UlpsEq + NumAssign + Sum + fmt::Debug,
     {
         let op = self.op.update(info, trust);
-        let sop = self.sop.update(info, friend_trust);
-        let fop = self.fop.update(info, social_trust);
+        let sop = self.sop.update(info, social_trust);
+        let fop = self.fop.update(info, friend_trust);
 
         Self { op, sop, fop }
     }
