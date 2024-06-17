@@ -1,18 +1,19 @@
 use approx::UlpsEq;
-use num_traits::{Float, FromPrimitive};
+use itertools::Itertools;
+use num_traits::Float;
 use rand::Rng;
 use rand_distr::{Dirichlet, Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
-use std::{iter::Sum, marker::PhantomData, ops::AddAssign};
+use std::{marker::PhantomData, ops::AddAssign};
 use subjective_logic::{
     approx_ext,
     domain::{Domain, Keys},
-    iter::{Container, ContainerMap},
-    marr_d1,
     mul::labeled::SimplexD1,
     multi_array::labeled::MArrD1,
     ops::{Indexes, Zeros},
 };
+
+use super::MyFloat;
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub enum SimplexParam<V> {
@@ -162,13 +163,13 @@ where
     pub by_cause1: DependentParam<D, V, SimplexDist<D, V>>,
 }
 
-impl<C0, C1, D, V> Distribution<(MArrD1<C0, SimplexD1<D, V>>, MArrD1<C1, SimplexD1<D, V>>)>
-    for ConditionParams<C0, C1, D, V>
+// (MArrD1<C0, SimplexD1<D, V>>, MArrD1<C1, SimplexD1<D, V>>)
+impl<C0, C1, D, V> Distribution<Vec<Vec<SimplexD1<D, V>>>> for ConditionParams<C0, C1, D, V>
 where
     C0: Domain,
     C1: Domain,
     D: Domain<Idx = usize>,
-    V: Float + AddAssign + UlpsEq + FromPrimitive + Sum + std::fmt::Debug,
+    V: MyFloat,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -177,14 +178,12 @@ where
     fn sample<R: Rng + ?Sized>(
         &self,
         rng: &mut R,
-    ) -> (MArrD1<C0, SimplexD1<D, V>>, MArrD1<C1, SimplexD1<D, V>>) {
+        // ) -> (MArrD1<C0, SimplexD1<D, V>>, MArrD1<C1, SimplexD1<D, V>>)
+    ) -> Vec<Vec<SimplexD1<D, V>>> {
         let no_cause = self.no_cause.sample(rng);
         let by_cause0 = self.by_cause0.sample(rng);
         let by_cause1 = self.by_cause1.sample(rng, &by_cause0);
-        (
-            marr_d1![no_cause.clone(), by_cause0],
-            marr_d1![no_cause, by_cause1],
-        )
+        vec![vec![no_cause.clone(), by_cause0], vec![no_cause, by_cause1]]
     }
 }
 
@@ -220,6 +219,28 @@ where
     }
 }
 
+impl<D, V> TryFrom<DependentParam<D, V, Vec<SimplexParam<V>>>>
+    for DependentParam<D, V, Vec<SimplexDist<D, V>>>
+where
+    D: Domain<Idx = usize>,
+    V: Float + UlpsEq + AddAssign,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    type Error = <SimplexParam<V> as TryInto<SimplexDist<D, V>>>::Error;
+
+    fn try_from(value: DependentParam<D, V, Vec<SimplexParam<V>>>) -> Result<Self, Self::Error> {
+        match value {
+            DependentParam::Rel(rel) => Ok(Self::Rel(rel)),
+            DependentParam::Abs(abs) => Ok(Self::Abs(
+                abs.into_iter().map(|p| p.try_into()).try_collect()?,
+            )),
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
@@ -239,7 +260,7 @@ fn relative_sample<D, V, R>(
 ) -> SimplexD1<D, V>
 where
     D: Domain<Idx = usize> + Keys<D::Idx>,
-    V: Float + UlpsEq + AddAssign + FromPrimitive + Sum + std::fmt::Debug,
+    V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -279,7 +300,7 @@ where
 impl<D, V> RelativeParam<D, V>
 where
     D: Domain<Idx = usize> + Keys<D::Idx>,
-    V: Float + UlpsEq + AddAssign + FromPrimitive + Sum + std::fmt::Debug,
+    V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -288,28 +309,46 @@ where
         relative_sample(base, &self.coef_b, self.coef_u, self.error, rng)
     }
 
-    pub fn samples<R: Rng + ?Sized, T, U, TI, UI>(
+    pub fn samples1<'a, R: Rng + ?Sized>(
         &self,
         rng: &mut R,
-        base: &(T, U),
-    ) -> (T::Map<SimplexD1<D, V>>, U::Map<SimplexD1<D, V>>)
+        base_iter: impl Iterator<Item = &'a SimplexD1<D, V>>,
+    ) -> Vec<SimplexD1<D, V>>
     where
-        TI: Domain,
-        T: Container<TI::Idx, Output = SimplexD1<D, V>> + ContainerMap<TI::Idx>,
-        UI: Domain,
-        U: Container<UI::Idx, Output = SimplexD1<D, V>> + ContainerMap<UI::Idx>,
+        V: 'a,
+        D: 'a,
     {
-        (
-            T::map(|d| relative_sample(&base.0[d], &self.coef_b, self.coef_u, self.error, rng)),
-            U::map(|d| relative_sample(&base.1[d], &self.coef_b, self.coef_u, self.error, rng)),
-        )
+        base_iter
+            .map(|base| relative_sample(&base, &self.coef_b, self.coef_u, self.error, rng))
+            .collect()
+        // (
+        //     T::map(|d| relative_sample(&base.0[d], &self.coef_b, self.coef_u, self.error, rng)),
+        //     U::map(|d| relative_sample(&base.1[d], &self.coef_b, self.coef_u, self.error, rng)),
+        // )
+    }
+    pub fn samples2<'a, R: Rng + ?Sized>(
+        &self,
+        rng: &mut R,
+        base_iters: Vec<Box<dyn Iterator<Item = &SimplexD1<D, V>> + 'a>>,
+    ) -> Vec<Vec<SimplexD1<D, V>>> {
+        base_iters
+            .into_iter()
+            .map(|iter| {
+                iter.map(|base| relative_sample(&base, &self.coef_b, self.coef_u, self.error, rng))
+                    .collect()
+            })
+            .collect()
+        // (
+        //     T::map(|d| relative_sample(&base.0[d], &self.coef_b, self.coef_u, self.error, rng)),
+        //     U::map(|d| relative_sample(&base.1[d], &self.coef_b, self.coef_u, self.error, rng)),
+        // )
     }
 }
 
 impl<D, V> DependentParam<D, V, SimplexDist<D, V>>
 where
     D: Domain<Idx = usize> + Keys<D::Idx>,
-    V: Float + UlpsEq + AddAssign + FromPrimitive + Sum + std::fmt::Debug,
+    V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
@@ -325,26 +364,52 @@ where
 impl<D, V, S> DependentParam<D, V, S>
 where
     D: Domain<Idx = usize> + Keys<D::Idx>,
-    V: Float + UlpsEq + AddAssign + FromPrimitive + Sum + std::fmt::Debug,
+    V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    pub fn samples<TI, UI, T, U, R: Rng + ?Sized>(
+    pub fn samples2<'a, R: Rng + ?Sized>(
         &self,
         rng: &mut R,
-        base: &(T, U),
-    ) -> (T::Map<SimplexD1<D, V>>, U::Map<SimplexD1<D, V>>)
+        base_iters: Vec<Box<dyn Iterator<Item = &SimplexD1<D, V>> + 'a>>,
+    ) -> Vec<Vec<SimplexD1<D, V>>>
+    // ) -> (T::Map<SimplexD1<D, V>>, U::Map<SimplexD1<D, V>>)
     where
-        S: Distribution<(T::Map<SimplexD1<D, V>>, U::Map<SimplexD1<D, V>>)>,
-        TI: Domain,
-        UI: Domain,
-        T: Container<TI::Idx, Output = SimplexD1<D, V>> + ContainerMap<TI::Idx>,
-        U: Container<UI::Idx, Output = SimplexD1<D, V>> + ContainerMap<UI::Idx>,
+        S: Distribution<Vec<Vec<SimplexD1<D, V>>>>,
+        // (T::Map<SimplexD1<D, V>>, U::Map<SimplexD1<D, V>>)>,
+        // TI: Domain,
+        // UI: Domain,
+        // T: Container<TI::Idx, Output = SimplexD1<D, V>> + ContainerMap<TI::Idx>,
+        // U: Container<UI::Idx, Output = SimplexD1<D, V>> + ContainerMap<UI::Idx>,
     {
         match self {
             Self::Abs(dist) => dist.sample(rng),
-            Self::Rel(rel) => rel.samples::<R, T, U, TI, UI>(rng, base),
+            Self::Rel(rel) => rel.samples2(rng, base_iters),
+        }
+    }
+}
+
+impl<D, V> DependentParam<D, V, Vec<SimplexDist<D, V>>>
+where
+    D: Domain<Idx = usize>,
+    V: MyFloat,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    Open01: Distribution<V>,
+{
+    pub fn samples1<'a, R: Rng + ?Sized>(
+        &self,
+        rng: &mut R,
+        base_iter: impl Iterator<Item = &'a SimplexD1<D, V>>,
+    ) -> Vec<SimplexD1<D, V>>
+    where
+        V: 'a,
+        D: 'a,
+    {
+        match self {
+            Self::Abs(dists) => dists.iter().map(|dist| dist.sample(rng)).collect(),
+            Self::Rel(rel) => rel.samples1(rng, base_iter),
         }
     }
 }

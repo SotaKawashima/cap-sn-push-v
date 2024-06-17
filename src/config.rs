@@ -127,14 +127,7 @@ mod tests {
     use std::fs::read_to_string;
 
     use super::{General, Runtime};
-    use crate::agent::AgentParams;
-    use crate::info::InfoObject;
-    use crate::opinion::paramter::SimplexDist;
-    use crate::scenario::{Inform, Scenario, ScenarioParam};
-    use graph_lib::prelude::Graph;
     use serde_json::json;
-    use subjective_logic::marr_d1;
-    use subjective_logic::mul::labeled::SimplexD1;
 
     #[test]
     fn test_json_config() -> anyhow::Result<()> {
@@ -143,221 +136,16 @@ mod tests {
                 "location": "./test/",
             },
         });
+        let general = serde_json::from_value::<General>(g)?;
+        println!("{:?}", general);
+
         let runtime = json!({
             "seed_state": 0,
             "num_parallel": 1,
             "iteration_count": 1,
         });
-        let agent_params = json!({
-            "initial_opinions": {
-                "base": {
-                    "psi" : [[0.0, 0.0], 1.0],
-                    "phi" : [[0.0, 0.0], 1.0],
-                    "m"   : [[0.0, 0.0], 1.0],
-                    "o"   : [[0.0, 0.0], 1.0],
-                    "h_if_phi1_psi1" : [[0.0, 0.0], 1.0],
-                    "h_if_phi1_b1"   : [[0.0, 0.0], 1.0],
-                },
-                "friend": {
-                    "fphi" : [[0.0, 0.0], 1.0],
-                    "fm"   : [[0.0, 0.0], 1.0],
-                    "fo"   : [[0.0, 0.0], 1.0],
-                    "fh_if_fphi1_fpsi1" : [[0.0, 0.0], 1.0],
-                    "fh_if_fphi1_fb1"   : [[0.0, 0.0], 1.0],
-                },
-                "social": {
-                    "kphi" : [[0.0, 0.0], 1.0],
-                    "km"   : [[0.0, 0.0], 1.0],
-                    "ko"   : [[0.0, 0.0], 1.0],
-                    "kh_if_kphi1_kpsi1" : [[0.0, 0.0], 1.0],
-                    "kh_if_kphi1_kb1"   : [[0.0, 0.0], 1.0],
-                }
-            },
-            "base_rates": {
-                "base": {
-                    "psi"    : [0.999, 0.001],
-                    "phi"    : [0.999, 0.001],
-                    "m"      : [0.999, 0.001],
-                    "o"      : [0.999, 0.001],
-                    "a"      : [0.999, 0.001],
-                    "b"      : [0.999, 0.001],
-                    "h"      : [0.999, 0.001],
-                    "theta"  : [0.999, 0.001],
-                    "thetad" : [0.999, 0.001],
-                },
-                "friend": {
-                    "fpsi" : [0.999, 0.001],
-                    "fphi" : [0.999, 0.001],
-                    "fm"   : [0.999, 0.001],
-                    "fo"   : [0.999, 0.001],
-                    "fb"   : [0.999, 0.001],
-                    "fh"   : [0.999, 0.001],
-                },
-                "social": {
-                    "kpsi" : [0.999, 0.001],
-                    "kphi" : [0.999, 0.001],
-                    "km"   : [0.999, 0.001],
-                    "ko"   : [0.999, 0.001],
-                    "kb"   : [0.999, 0.001],
-                    "kh"   : [0.999, 0.001],
-                },
-            },
-            "initial_conditions": {
-                "base": {
-                    "a_fh" : [
-                        { "Fixed" : [[0.95, 0.00], 0.05] },
-                        { "Fixed" : [[0.00, 0.95], 0.05] },
-                    ],
-                    "b_kh" : [
-                        { "Fixed" : [[0.90, 0.00], 0.10] },
-                        { "Fixed" : [[0.00, 0.99], 0.01] },
-                    ],
-                    "o_b" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
-                    ],
-                    "theta_h" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
-                    ],
-                    "thetad_h" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
-                    ],
-                    "params_h_psi_b_if_phi0" : {
-                        "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "by_cause0": { "Fixed" : [[0.50, 0.40], 0.10] },
-                        "by_cause1": {
-                            "Rel": {
-                                "coef_b": [5.0, 10.0],
-                                "coef_u": 5.0,
-                                "error": 0.00001
-                            }
-                        }
-                    }
-                },
-                "friend": {
-                    "fpsi_m" : [
-                        { "Fixed" : [[0.99, 0.00], 0.01] },
-                        { "Fixed" : [[0.70, 0.20], 0.10] },
-                    ],
-                    "fo_fb" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
-                    ],
-                    "fb_fm" : [
-                        { "Fixed" : [[0.90, 0.00], 0.10] },
-                        { "Fixed" : [[0.00, 0.99], 0.01] },
-                    ],
-                    "params_fh_fpsi_fb_if_fphi0" : {
-                        "Abs": {
-                            "no_cause" : { "Fixed" : [[0.95, 0.00], 0.05] },
-                            "by_cause0" : { "Fixed" : [[0.55, 0.35], 0.10] },
-                            "by_cause1" : {
-                                "Rel": {
-                                    "coef_b": [5.0, 10.0],
-                                    "coef_u": 5.0,
-                                    "error": 0.00001
-                                }
-                            }
-                        }
-                    }
-                },
-                "social": {
-                    "kpsi_m" : [
-                        { "Fixed" : [[0.99, 0.00], 0.01] },
-                        { "Fixed" : [[0.25, 0.65], 0.10] },
-                    ],
-                    "ko_kb" : [
-                        { "Fixed" : [[1.0, 0.00], 0.00] },
-                        { "Fixed" : [[0.0, 0.70], 0.30] },
-                    ],
-                    "kb_km" : [
-                        { "Fixed" : [[1.00, 0.00], 0.00] },
-                        { "Fixed" : [[0.25, 0.65], 0.10] },
-                    ],
-                    "params_kh_kpsi_kb_if_kphi0" : {
-                        "no_cause": { "Fixed" : [[0.95, 0.00], 0.05] },
-                        "by_cause0": { "Fixed" : [[0.30, 0.60], 0.10] },
-                        "by_cause1": {
-                            "Rel": {
-                                "coef_b": [5.0, 7.0],
-                                "coef_u": 5.0,
-                                "error": 0.00001
-                            }
-                        }
-                    },
-                },
-            },
-            // "pi_prob": 1.0,
-            // "pi_rate": { "base": 0.5 },
-            "delay_selfish": {"Fixed": 0 },
-            "access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-            "friend_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-            "social_access_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-            "friend_arrival_prob": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-            "trust_params": {
-                "misinfo": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-                "corrective": { "base": 0.0, "error": { "dist": { "Beta": { "alpha": 3.0, "beta": 3.0 } }, "low": 0.0, "high": 1.0 } },
-                "observed": { "base": 0.0, "error": { "dist": "Standard", "low": 0.0, "high": 1.0 } },
-                "inhibitive": { "base": 0.0, "error": { "dist": "Standard", "low": 0.5, "high": 1.0 } },
-            },
-            "loss_params": {
-                "x0": {"base": -1.0},
-                "x1_of_x0": {"base": -10.0},
-                "y_of_x0": {"base": -0.001},
-            },
-            "cpt_params": {
-                "alpha":  { "base": 0.88 },
-                "beta":   { "base": 0.88 },
-                "lambda": { "base": 2.25 },
-                "gamma":  { "base": 0.61 },
-                "delta":  { "base": 0.69 },
-            }
-        });
-        let scenario = json!(
-            {
-                "graph": {
-                    "directed": true,
-                    "location": {
-                        "LocalFile": "./test/graph/graph.txt",
-                    },
-                },
-                "info_objects": [
-                    { "Misinfo": { "psi": ([0.00, 0.99], 0.01) } },
-                    { "Corrective": { "psi": ([0.99, 0.00], 0.01), "m": ([0.0, 1.0], 0.0) } }
-                ],
-                "events": [
-                    {
-                        "time": 0,
-                        "informs": [
-                            { "agent_idx": 0, "info_obj_idx": 0, },
-                            { "agent_idx": 1, "info_obj_idx": 0, },
-                        ],
-                    },
-                    {
-                        "time": 1,
-                        "informs": [
-                            { "agent_idx": 2, "info_obj_idx": 1, },
-                        ]
-                    },
-                ],
-                "observer": {
-                    "observer_pop_rate": 0.0,
-                    "observed_info": ([0.0, 1.0], 0.0)
-                }
-            }
-        );
-        let general = serde_json::from_value::<General>(g)?;
         let runtime = serde_json::from_value::<Runtime>(runtime)?;
-        let agent_params = serde_json::from_value::<AgentParams<f32>>(agent_params)?;
-        let scenario = Scenario::try_from(serde_json::from_value::<ScenarioParam<f32>>(scenario)?)?;
-        println!("{:?}", general);
         println!("{:?}", runtime);
-        println!("{:?}", agent_params.initial_opinions);
-        println!("{:?}", scenario.graph);
-        println!("{:?}", scenario.info_objects);
-        println!("{:?}", scenario.table);
         Ok(())
     }
 
@@ -365,62 +153,8 @@ mod tests {
     fn test_toml_config() -> anyhow::Result<()> {
         let runtime =
             toml::from_str::<Runtime>(&read_to_string("./test/config/test_runtime.toml")?)?;
-        let agent_params = toml::from_str::<AgentParams<f32>>(&read_to_string(
-            "./test/config/test_agent_params.toml",
-        )?)?;
-        let scenario: Scenario<f32> = toml::from_str::<ScenarioParam<f32>>(&read_to_string(
-            "./test/config/test_scenario.toml",
-        )?)?
-        .try_into()?;
-
         assert_eq!(runtime.seed_state, 0);
         assert_eq!(runtime.iteration_count, 1);
-        assert_eq!(
-            agent_params.initial_opinions.base.h_if_phi1_b1,
-            SimplexD1::vacuous()
-        );
-        assert!(matches!(
-            &agent_params.initial_conditions.base.theta_h[0],
-            SimplexDist::Fixed(s) if s.b() == &marr_d1![1.0, 0.0] && s.u() == &0.0,
-        ));
-        assert!(matches!(
-            &agent_params.initial_conditions.base.theta_h[1],
-            SimplexDist::Fixed(s) if s.b() == &marr_d1![0.0, 0.7] && s.u() == &0.3,
-        ));
-
-        assert_eq!(scenario.graph.node_count(), 12);
-        assert_eq!(scenario.graph.directed(), false);
-
-        assert!(matches!(
-            scenario.info_objects[0],
-            InfoObject::Misinfo { .. }
-        ));
-        assert!(matches!(
-            scenario.info_objects[1],
-            InfoObject::Corrective { .. }
-        ));
-        assert!(matches!(
-            scenario.info_objects[2],
-            InfoObject::Inhibitive { .. }
-        ));
-
-        assert!(
-            matches!(scenario.table[&0][0], Inform {agent_idx, info_obj_idx} if agent_idx == 0 && info_obj_idx == 0)
-        );
-        assert!(
-            matches!(scenario.table[&0][1], Inform {agent_idx, info_obj_idx} if agent_idx == 1 && info_obj_idx == 0)
-        );
-        assert!(
-            matches!(scenario.table[&1][0], Inform {agent_idx, info_obj_idx} if agent_idx == 2 && info_obj_idx == 1)
-        );
-
-        let observer = scenario.observer.unwrap();
-        assert_eq!(observer.k, 0.01 * 12.0);
-        assert_eq!(observer.observed_info_obj_idx, 3);
-        assert!(matches!(
-            &scenario.info_objects[observer.observed_info_obj_idx],
-            InfoObject::Observed { o } if o.b()[1] == 1.0
-        ));
 
         Ok(())
     }

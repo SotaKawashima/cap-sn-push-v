@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod gen2;
 
 use std::{fmt::Display, ops::AddAssign};
@@ -11,7 +12,7 @@ use serde_with::{serde_as, TryFromInto};
 use subjective_logic::mul::labeled::SimplexD1;
 
 use crate::{
-    opinion::{Phi, Psi, H, M, O},
+    opinion::{MyFloat, Phi, Psi, H, M, O},
     value::{EValue, EValueParam},
 };
 
@@ -57,23 +58,34 @@ where
 }
 
 #[derive(Debug)]
-pub struct Info<'a, V: Float> {
+pub struct Info<'a, V: MyFloat> {
     pub idx: usize,
     num_shared: usize,
     num_viewed: usize,
-    pub label: InfoLabel,
-    pub content: InfoContent<'a, V>,
+    label: InfoLabel,
+    // pub content: InfoContent<'a, V>,
+    pub p: &'a gen2::InfoContent<V>,
 }
 
-impl<'a, V: Float> Info<'a, V> {
-    fn new(idx: usize, label: InfoLabel, content: InfoContent<'a, V>) -> Self {
+impl<'a, V: MyFloat> Info<'a, V> {
+    pub fn new(
+        idx: usize,
+        // label: InfoLabel,
+        // content: InfoContent<'a, V>,
+        obj2: &'a gen2::InfoContent<V>,
+    ) -> Self {
         Self {
             idx,
-            label,
-            content,
+            label: obj2.into(),
+            // content,
             num_shared: Default::default(),
             num_viewed: Default::default(),
+            p: obj2,
         }
+    }
+
+    pub fn label(&self) -> &InfoLabel {
+        &self.label
     }
 
     #[inline]
@@ -164,7 +176,7 @@ pub struct InfoBuilder<V: Float> {
 
 impl<V> InfoBuilder<V>
 where
-    V: Float + UlpsEq + AddAssign,
+    V: MyFloat,
 {
     pub fn new() -> Self {
         Self {
@@ -177,7 +189,7 @@ where
         }
     }
 
-    pub fn build<'a>(&'a self, idx: usize, obj: &'a InfoObject<V>) -> Info<'a, V> {
+    pub fn build<'a>(&'a self, obj: &'a InfoObject<V>) -> (InfoLabel, InfoContent<'a, V>) {
         let mut content = InfoContent::new(
             &self.vacuous_psi,
             &self.vacuous_m,
@@ -211,7 +223,7 @@ where
                 InfoLabel::Inhibitive
             }
         };
-        Info::new(idx, label, content)
+        (label, content)
     }
 }
 
@@ -228,7 +240,7 @@ mod tests {
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct TrustParams<V>
+pub struct InfoTrustParams<V>
 where
     V: Float,
     Open01: Distribution<V>,
@@ -244,9 +256,9 @@ where
     pub inhibitive: EValue<V>,
 }
 
-impl<V> TrustParams<V>
+impl<V> InfoTrustParams<V>
 where
-    V: Float + SampleUniform,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
@@ -261,7 +273,7 @@ where
         let observed = self.observed.sample(rng);
         let inhibitive = self.inhibitive.sample(rng);
 
-        move |info: &Info<V>| match &info.label {
+        move |info: &Info<V>| match &info.label() {
             InfoLabel::Misinfo => misinfo,
             InfoLabel::Corrective => corrective,
             InfoLabel::Observed => observed,

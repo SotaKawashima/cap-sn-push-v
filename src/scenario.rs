@@ -1,17 +1,14 @@
-use approx::UlpsEq;
 use graph_lib::io::{DataFormat, ParseBuilder};
 use graph_lib::prelude::{DiGraphB, Graph, GraphB, UndiGraphB};
-use num_traits::{Float, FromPrimitive, NumAssign};
-use rand_distr::uniform::SampleUniform;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
 use std::collections::{btree_map, BTreeMap, VecDeque};
-use std::{fs::File, io, ops::AddAssign};
+use std::{fs::File, io};
 use subjective_logic::mul::labeled::SimplexD1;
 
-use crate::info::InfoObject;
-use crate::opinion::O;
+use crate::info::gen2::InfoContent;
+use crate::opinion::{MyFloat, O};
 
 #[derive(Debug, serde::Deserialize)]
 struct GraphInfo {
@@ -53,10 +50,10 @@ impl TryFrom<GraphInfo> for GraphB {
 #[derive(Debug, Deserialize)]
 pub struct ScenarioParam<V>
 where
-    V: Float + UlpsEq + AddAssign,
+    V: MyFloat,
 {
     graph: GraphInfo,
-    info_objects: Vec<InfoObject<V>>,
+    infos: Vec<InfoContent<V>>,
     events: Vec<Event>,
     observer: Option<ObserverParam<V>>,
 }
@@ -64,14 +61,14 @@ where
 #[derive(Debug)]
 pub struct Scenario<V>
 where
-    V: Float + UlpsEq + NumAssign + SampleUniform,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
     pub graph: GraphB,
-    pub info_objects: Vec<InfoObject<V>>,
+    pub info_objects: Vec<InfoContent<V>>,
     /// time -> Inform
     pub table: BTreeMap<u32, VecDeque<Inform>>,
     pub observer: Option<Observer<V>>,
@@ -94,7 +91,7 @@ pub struct Inform {
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
-struct ObserverParam<V: Float + UlpsEq + AddAssign> {
+struct ObserverParam<V: MyFloat> {
     observer_pop_rate: V,
     #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
     observed_info: SimplexD1<O, V>,
@@ -110,7 +107,7 @@ pub struct Observer<V> {
 
 impl<V> TryFrom<ScenarioParam<V>> for Scenario<V>
 where
-    V: Float + UlpsEq + NumAssign + SampleUniform + FromPrimitive,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -121,7 +118,7 @@ where
     fn try_from(value: ScenarioParam<V>) -> anyhow::Result<Scenario<V>> {
         let ScenarioParam {
             graph,
-            mut info_objects,
+            infos: mut info_objects,
             events,
             observer,
         } = value;
@@ -149,7 +146,7 @@ where
                  observed_info,
              }| {
                 let k = fnum_nodes * observer_pop_rate;
-                info_objects.push(InfoObject::Observed { o: observed_info });
+                info_objects.push(InfoContent::Observation { op: observed_info });
                 Observer {
                     // observer_pop_rate,
                     observed_info_obj_idx: info_objects.len() - 1,
@@ -166,5 +163,56 @@ where
             mean_degree,
             observer,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use graph_lib::prelude::Graph;
+    use std::fs::read_to_string;
+
+    use super::{Inform, Scenario, ScenarioParam};
+    use crate::info::gen2::InfoContent;
+
+    #[test]
+    fn test_toml() -> anyhow::Result<()> {
+        let scenario: Scenario<f32> = toml::from_str::<ScenarioParam<f32>>(&read_to_string(
+            "./test/config/test_scenario.toml",
+        )?)?
+        .try_into()?;
+        assert_eq!(scenario.graph.node_count(), 12);
+        assert_eq!(scenario.graph.directed(), false);
+
+        assert!(matches!(
+            scenario.info_objects[0],
+            InfoContent::Misinfo { .. }
+        ));
+        assert!(matches!(
+            scenario.info_objects[1],
+            InfoContent::Correction { .. }
+        ));
+        assert!(matches!(
+            scenario.info_objects[2],
+            InfoContent::Inhibition { .. }
+        ));
+
+        assert!(
+            matches!(scenario.table[&0][0], Inform {agent_idx, info_obj_idx} if agent_idx == 0 && info_obj_idx == 0)
+        );
+        assert!(
+            matches!(scenario.table[&0][1], Inform {agent_idx, info_obj_idx} if agent_idx == 1 && info_obj_idx == 0)
+        );
+        assert!(
+            matches!(scenario.table[&1][0], Inform {agent_idx, info_obj_idx} if agent_idx == 2 && info_obj_idx == 1)
+        );
+
+        let observer = scenario.observer.unwrap();
+        assert_eq!(observer.k, 0.01 * 12.0);
+        assert_eq!(observer.observed_info_obj_idx, 3);
+        assert!(matches!(
+            &scenario.info_objects[observer.observed_info_obj_idx],
+            InfoContent::Observation { op } if op.b()[1] == 1.0
+        ));
+        Ok(())
     }
 }

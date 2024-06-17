@@ -1,7 +1,7 @@
 graph = { directed = true, location = { LocalFile = "./test/graph/graph.txt" } }
 
-info_objects = [
-    { Misinfo = { psi = [[0.00, 0.80], 0.20] } },
+infos = [
+    { Misinfo = { op = [[0.00, 0.80], 0.20] } },
 ]
 
 [[events]]

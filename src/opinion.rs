@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod gen2;
 pub mod paramter;
 
@@ -362,7 +363,10 @@ where
 
         let theta_h = MArrD1::from_fn(|h| self.theta_h[h].sample(rng));
         let thetad_h = MArrD1::from_fn(|h| self.thetad_h[h].sample(rng));
-        let (h_psi_if_phi0, h_b_if_phi0) = self.params_h_psi_b_if_phi0.sample(rng);
+        let mut x = self.params_h_psi_b_if_phi0.sample(rng);
+        let h_b_if_phi0 = MArrD1::new(x.pop().unwrap());
+        let h_psi_if_phi0 = MArrD1::new(x.pop().unwrap());
+        // let (h_psi_if_phi0, h_b_if_phi0) = self.params_h_psi_b_if_phi0.sample(rng);
 
         debug!(target: "O||B", w =   ?o_b);
         debug!(target: "B||KTh", w = ?b_kh);
@@ -400,15 +404,19 @@ where
         let fpsi_m = MArrD1::from_fn(|i| self.fpsi_m[i].sample(rng));
         let fb_fm = MArrD1::from_fn(|i| self.fb_fm[i].sample(rng));
         let fo_fb = MArrD1::from_fn(|i| self.fo_fb[i].sample(rng));
-        let (fh_fpsi_if_fphi0, fh_fb_if_fphi0) = self
+        let c = MArrD1::<FPsi, _>::from_fn(|i| base.h_psi_if_phi0[i].clone().conv());
+        let c2 = MArrD1::<FB, _>::from_fn(|i| base.h_b_if_phi0[i].clone().conv());
+        let mut x = self
             .params_fh_fpsi_fb_if_fphi0
-            .samples::<FPsi, FB, _, _, _>(
-                rng,
-                &(
-                    MArrD1::<FPsi, _>::from_fn(|i| base.h_psi_if_phi0[i].clone().conv()),
-                    MArrD1::<FB, _>::from_fn(|i| base.h_b_if_phi0[i].clone().conv()),
-                ),
-            );
+            .samples2(rng, vec![Box::new(c.iter()), Box::new(c2.iter())]);
+
+        let fh_fb_if_fphi0 = MArrD1::new(x.pop().unwrap());
+        let fh_fpsi_if_fphi0 = MArrD1::new(x.pop().unwrap());
+        // let (fh_fpsi_if_fphi0, fh_fb_if_fphi0) = self.params_fh_fpsi_fb_if_fphi0;
+        // .samples::<FPsi, FB, _, _, _>(
+        //     rng,
+        //     ),
+        // );
 
         debug!(target: "FPsi||M", w = ?fpsi_m);
         debug!(target: "FB||FM", w = ?fb_fm);
@@ -470,7 +478,10 @@ where
         let kpsi_m = MArrD1::from_fn(|i| self.kpsi_m[i].sample(rng));
         let ko_kb = MArrD1::from_fn(|i| self.ko_kb[i].sample(rng));
         let kb_km = MArrD1::from_fn(|i| self.kb_km[i].sample(rng));
-        let (kh_kpsi_if_kphi0, kh_kb_if_kphi0) = self.params_kh_kpsi_kb_if_kphi0.sample(rng);
+        let mut x = self.params_kh_kpsi_kb_if_kphi0.sample(rng);
+        let kh_kb_if_kphi0 = MArrD1::new(x.pop().unwrap());
+        let kh_kpsi_if_kphi0 = MArrD1::new(x.pop().unwrap());
+        // let (kh_kpsi_if_kphi0, kh_kb_if_kphi0) = self.params_kh_kpsi_kb_if_kphi0.sample(rng);
 
         debug!(target: "KPsi||M", w = ?kpsi_m);
         debug!(target: "KB||KM",  w = ?kb_km);
@@ -1042,88 +1053,6 @@ impl<V: Float> Opinions<V> {
         );
 
         Self { op, fop, sop }
-    }
-
-    pub fn receive_info(
-        self,
-        info: InfoContent<'_, V>,
-        trust: V,
-        friend_trust: V,
-        social_trust: V,
-        conds: &ConditionalOpinions<V>,
-        base_rates: &GlobalBaseRates<V>,
-    ) -> MyOpinions<V>
-    where
-        V: MyFloat,
-    {
-        let Opinions { op, sop, fop } = self.update(info, trust, friend_trust, social_trust);
-        let kb = sop.compute_kb(&conds.social, &base_rates.social);
-        let kpsi = CollectiveOpinions::compute_kpsi(
-            &info.psi.to_owned().conv(),
-            &op.m,
-            social_trust,
-            &conds.social,
-            &base_rates.social,
-        );
-        let kh = sop.compute_kh(&kb, &kpsi, &conds.social, &base_rates.social);
-        let b = op.compute_b(&kh, &conds.base, &base_rates.base);
-        let h = op.compute_h(&b, &conds.base, &base_rates.base);
-        let theta = op.compute_theta(&h, &conds.base, &base_rates.base);
-        let fb = fop.compute_fb(&conds.friend, &base_rates.friend);
-        let info_fpsi = info.psi.to_owned().conv();
-        let fpsi_ded = FriendOpinions::deduce_fpsi(&op.m, &conds.friend, &base_rates.friend);
-        let fpsi = FriendOpinions::compute_fpsi(&info_fpsi, &fpsi_ded, friend_trust);
-        let fh = fop.compute_fh(&fb, &fpsi, &conds.friend, &base_rates.friend);
-        let a = op.compute_a(&fh, &conds.base, &base_rates.base);
-        let thetad = op.compute_thetad(&h, &conds.base, &base_rates.base);
-
-        MyOpinions {
-            op,
-            sop,
-            fop,
-            fb,
-            kb,
-            kh,
-            b,
-            a,
-            theta,
-            thetad,
-        }
-    }
-
-    pub fn predict2(
-        &self,
-        info: InfoContent<'_, V>,
-        friend_trust: V,
-        pred_friend_trust: V,
-        social_trust: V,
-        conds: &ConditionalOpinions<V>,
-        base_rates: &GlobalBaseRates<V>,
-    ) -> MyOpinions<V>
-    where
-        V: MyFloat,
-    {
-        let temp_ops = self.compute(info, social_trust, conds, &base_rates);
-        let (pred_new_fop, _) = self.predict(
-            &temp_ops,
-            info,
-            friend_trust,
-            pred_friend_trust,
-            conds,
-            base_rates,
-        );
-        MyOpinions {
-            sop: self.sop.clone(),
-            op: self.op.clone(),
-            fop: pred_new_fop,
-            fb: todo!(),
-            kb: todo!(),
-            kh: todo!(),
-            b: todo!(),
-            a: todo!(),
-            theta: todo!(),
-            thetad: todo!(),
-        }
     }
 
     pub fn update(

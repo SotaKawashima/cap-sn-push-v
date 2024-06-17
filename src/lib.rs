@@ -24,7 +24,7 @@ use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
 use agent::{Agent, AgentParams};
 use config::{ConfigData, Runtime};
-use info::{Info, InfoBuilder, InfoLabel};
+use info::{Info, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
 use tokio::sync::{mpsc, Mutex};
@@ -182,7 +182,6 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    info_builder: InfoBuilder<V>,
     agent_params: Arc<AgentParams<V>>,
     scenario: Arc<Scenario<V>>,
     agents: Vec<Agent<V>>,
@@ -200,12 +199,10 @@ where
     where
         V: Default,
     {
-        let info_builder = InfoBuilder::new();
         let agents = (0..scenario.num_nodes)
             .map(|_| Agent::default())
             .collect::<Vec<_>>();
         Self {
-            info_builder,
             agent_params,
             scenario,
             agents,
@@ -216,7 +213,7 @@ where
         for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::DEBUG, "init A", "#" = idx);
             let _guard = span.enter();
-            agent.reset_with(&self.agent_params, &mut rng);
+            agent.reset(&self.agent_params, &mut rng);
         }
 
         let mut infos = Vec::<Info<V>>::new();
@@ -245,17 +242,15 @@ where
                 } in informms
                 {
                     let info_idx = infos.len();
-                    let info = self
-                        .info_builder
-                        .build(info_idx, &info_objects[info_obj_idx]);
-                    info_data_map.entry(info.label).or_default();
+                    let info = Info::new(info_idx, &info_objects[info_obj_idx]);
+                    info_data_map.entry(*info.label()).or_default();
 
                     let span = span!(Level::INFO, "IA", "#" = agent_idx);
                     let _guard = span.enter();
-                    info!(target: "  recv", l = ?info.label, "obj#" = info_obj_idx, "#" = info_idx);
+                    info!(target: "  recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
-                    agent.set_info_opinions(&info, &self.agent_params.base_rates);
+                    agent.set_info_opinions(&info);
                     infos.push(info);
                     if agent.is_willing_selfish() {
                         agents_willing_selfish.push(agent_idx);
@@ -277,7 +272,7 @@ where
             {
                 let agent = &mut self.agents[agent_idx];
                 let info = &mut infos[info_idx];
-                let info_label = info.label;
+                let info_label = info.label();
                 let info_data = info_data_map.get_mut(&info_label).unwrap();
                 info_data.received();
 
@@ -295,7 +290,12 @@ where
                     continue;
                 }
 
-                let b = agent.read_info(info, friend_receipt_prob, &self.agent_params, &mut rng);
+                let b = agent.read_info(
+                    info,
+                    friend_receipt_prob,
+                    &self.agent_params.trust_params,
+                    &mut rng,
+                );
                 info.viewed();
                 info_data.viewed();
                 if b.sharing {
@@ -368,11 +368,6 @@ where
         }
         vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
     }
-}
-
-trait Executor<I> {
-    type Output;
-    fn execute(&mut self, input: I) -> Self::Output;
 }
 
 struct EnvPermit<E> {

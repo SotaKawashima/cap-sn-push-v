@@ -1,25 +1,20 @@
-use approx::UlpsEq;
-use num_traits::{Float, NumAssign};
+use num_traits::Float;
 use rand::Rng;
-use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
 use std::{
     array,
     collections::{BTreeMap, BTreeSet},
-    fmt,
-    iter::Sum,
 };
-use subjective_logic::multi_array::labeled::MArrD1;
 use tracing::{debug, info};
 
 use crate::{
     decision::{CptParams, LossParams, Prospect, CPT},
     dist::{IValue, IValueParam},
-    info::{Info, TrustParams},
+    info::{Info, InfoTrustParams},
     opinion::{
-        gen2::{self, Trusts},
-        ConditionalOpinions, GlobalBaseRates, InitialConditions, InitialOpinions, MyFloat,
-        Opinions, Theta,
+        gen2::{self, DeducedOpinions, InitialOpinions, MyOpinionsUpd, Trusts},
+        MyFloat,
     },
     value::{EValue, EValueParam},
 };
@@ -28,28 +23,43 @@ use crate::{
 #[derive(Debug, serde::Deserialize)]
 pub struct AgentParams<V>
 where
-    V: Float + NumAssign + UlpsEq,
+    V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
     pub initial_opinions: InitialOpinions<V>,
-    pub initial_conditions: InitialConditions<V>,
-    pub base_rates: GlobalBaseRates<V>,
-    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub access_prob: EValue<V>,
-    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub friend_access_prob: EValue<V>,
-    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub social_access_prob: EValue<V>,
-    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    pub friend_arrival_prob: EValue<V>,
     #[serde_as(as = "TryFromInto<IValueParam<V>>")]
     pub delay_selfish: IValue<V>,
-    pub trust_params: TrustParams<V>,
     pub loss_params: LossParams<V>,
     pub cpt_params: CptParams<V>,
+    pub trust_params: TrustParams<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    pub access_prob: EValue<V>,
+}
+
+#[serde_as]
+#[derive(Debug, serde::Deserialize)]
+pub struct TrustParams<V>
+where
+    V: Float,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    friend_access_prob: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    social_access_prob: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    friend_arrival_prob: EValue<V>,
+    info_trust_params: InfoTrustParams<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    friend_misinfo_trust: EValue<V>,
+    #[serde_as(as = "TryFromInto<EValueParam<V>>")]
+    social_misinfo_trust: EValue<V>,
 }
 
 #[derive(Debug)]
@@ -59,21 +69,151 @@ pub struct BehaviorByInfo {
 }
 
 #[derive(Default)]
-pub struct Agent<V: Float + MyFloat> {
-    cpt: CPT<V>,
-    prospect: Prospect<V>,
-    ops: Opinions<V>,
+pub struct Agent<V: MyFloat> {
     ops_gen2: gen2::MyOpinions<V>,
-    conds: ConditionalOpinions<V>,
+    infos_accessed: BTreeSet<usize>,
+    decision: Decision<V>,
+    trust: Trust<V>,
     access_prob: V,
+}
+
+#[derive(Default)]
+struct Trust<V: Float> {
     friend_access_prob: V,
     social_access_prob: V,
     friend_arrival_rate: V,
     info_trust_map: BTreeMap<usize, V>,
-    infos_accessed: BTreeSet<usize>,
+    misinfo_friend: V,
+    misinfo_social: V,
+}
+
+impl<V: Float> Trust<V> {
+    fn reset<R: Rng>(&mut self, trust_params: &TrustParams<V>, rng: &mut R)
+    where
+        V: MyFloat,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+    {
+        self.friend_access_prob = trust_params.friend_access_prob.sample(rng);
+        self.social_access_prob = trust_params.social_access_prob.sample(rng);
+        self.friend_arrival_rate = trust_params.friend_arrival_prob.sample(rng);
+        self.misinfo_friend = trust_params.friend_misinfo_trust.sample(rng);
+        self.misinfo_social = trust_params.social_misinfo_trust.sample(rng);
+        self.info_trust_map.clear();
+    }
+
+    fn to_inform(&self) -> Trusts<V>
+    where
+        V: MyFloat,
+    {
+        Trusts {
+            info: V::one(),
+            friend: V::zero(),
+            social: V::zero(),
+            misinfo_friend: V::one(),
+            misinfo_social: V::one(),
+            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
+        }
+    }
+
+    fn to_sharer<R: Rng>(
+        &mut self,
+        info: &Info<V>,
+        receipt_prob: V,
+        params: &TrustParams<V>,
+        rng: &mut R,
+    ) -> Trusts<V>
+    where
+        V: MyFloat,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+    {
+        let info_trust = *self
+            .info_trust_map
+            .entry(info.idx)
+            .or_insert_with(|| params.info_trust_params.gen_map(rng)(info));
+
+        Trusts {
+            info: info_trust,
+            friend: self.friend_access_prob * receipt_prob,
+            social: self.social_access_prob * receipt_prob,
+            misinfo_friend: self.misinfo_friend,
+            misinfo_social: self.misinfo_social,
+            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Decision<V: Float> {
+    cpt: CPT<V>,
+    prospect: Prospect<V>,
     selfish_status: DelayActionStatus,
     sharing_statuses: BTreeMap<usize, ActionStatus>,
     delay_selfish: u32,
+}
+
+impl<V: MyFloat> Decision<V> {
+    fn values_selfish(&self, ded: &DeducedOpinions<V>) -> [V; 2] {
+        let p_theta = ded.p_theta();
+        debug!(target: "    TH", P = ?p_theta);
+        let values: [V; 2] =
+            array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p_theta));
+        info!(target: "     X", V = ?values);
+        values
+    }
+
+    fn try_decide_selfish(&mut self, upd: &MyOpinionsUpd<V>) {
+        if !self.selfish_status.is_done() {
+            upd.decide1(|ded| {
+                self.selfish_status
+                    .decide(self.values_selfish(ded), self.delay_selfish);
+                info!(target: "selfsh", status = ?self.selfish_status);
+            });
+        }
+    }
+
+    fn predict(&self, upd: &mut MyOpinionsUpd<V>) {
+        upd.decide2(|_, _| true);
+    }
+
+    fn try_decide_sharing(&mut self, upd: &mut MyOpinionsUpd<V>, info_idx: usize) -> bool {
+        let sharing_status = self.sharing_statuses.entry(info_idx).or_default();
+        if sharing_status.is_done() {
+            false
+        } else {
+            upd.decide2(|ded, pred_ded| {
+                let values = [
+                    self.cpt
+                        .valuate(&self.prospect.sharing[0], &ded.p_a_thetad()),
+                    self.cpt
+                        .valuate(&self.prospect.sharing[1], &pred_ded.p_a_thetad()),
+                ];
+                info!(target: "     Y", V = ?values);
+                sharing_status.decide(values);
+                info!(target: "sharng", status = ?sharing_status);
+                sharing_status.is_done()
+            })
+        }
+    }
+
+    fn reset<R: Rng>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
+    where
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+    {
+        self.prospect.reset_with(&agent_params.loss_params, rng);
+        self.cpt.reset_with(&agent_params.cpt_params, rng);
+        self.selfish_status.reset();
+        self.sharing_statuses.clear();
+        self.delay_selfish = agent_params.delay_selfish.sample(rng);
+    }
 }
 
 #[derive(Default, Debug)]
@@ -153,7 +293,7 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    pub fn reset_with<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
+    pub fn reset<R>(&mut self, agent_params: &AgentParams<V>, rng: &mut R)
     where
         V: MyFloat,
         R: Rng,
@@ -161,42 +301,22 @@ where
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        self.prospect.reset_with(&agent_params.loss_params, rng);
-        self.cpt.reset_with(&agent_params.cpt_params, rng);
+        self.decision.reset(agent_params, rng);
+        self.trust.reset(&agent_params.trust_params, rng);
 
-        // if agent_params.pi_prob > rng.gen::<V>() {
-        //     agent_params.pi_rate.sample(rng)
-        // } else {
-        //     V::zero()
-        // },
-
-        self.delay_selfish = agent_params.delay_selfish.sample(rng);
-        self.access_prob = agent_params.access_prob.sample(rng);
-        self.friend_access_prob = agent_params.friend_access_prob.sample(rng);
-        self.social_access_prob = agent_params.social_access_prob.sample(rng);
-        self.friend_arrival_rate = agent_params.friend_arrival_prob.sample(rng);
-
-        let sample = agent_params.initial_conditions.sample(rng);
-        self.ops = Opinions::new(
-            agent_params.initial_opinions.clone(),
-            &agent_params.base_rates,
-            &sample,
-        );
-        self.conds = ConditionalOpinions::from_sample(sample, &agent_params.base_rates);
-
-        self.info_trust_map.clear();
-        self.selfish_status.reset();
-        self.sharing_statuses.clear();
         self.infos_accessed.clear();
+        self.access_prob = agent_params.access_prob.sample(rng);
+
+        self.ops_gen2.reset(&agent_params.initial_opinions, rng);
     }
 
     pub fn is_willing_selfish(&self) -> bool {
-        self.selfish_status.is_willing()
+        self.decision.selfish_status.is_willing()
     }
 
     pub fn progress_selfish_status(&mut self) -> bool {
-        let p = self.selfish_status.progress();
-        debug!(target: "selfsh", status = ?self.selfish_status);
+        let p = self.decision.selfish_status.progress();
+        debug!(target: "selfsh", status = ?self.decision.selfish_status);
         p
     }
 
@@ -209,70 +329,21 @@ where
         &mut self,
         info: &Info<V>,
         receipt_prob: V,
-        agent_params: &AgentParams<V>,
+        trust_params: &TrustParams<V>,
         rng: &mut impl Rng,
     ) -> BehaviorByInfo
     where
-        V: Sum + Default + fmt::Debug + NumAssign,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
         let first_access = self.infos_accessed.insert(info.idx);
-
-        let trust = *self
-            .info_trust_map
-            .entry(info.idx)
-            .or_insert_with(|| agent_params.trust_params.gen_map(rng)(info));
-        // let friend_trust = receipt_prob * self.friend_access_prob * trust;
-        // let social_trust = receipt_prob * self.social_access_prob * trust;
-
-        let trusts = Trusts {
-            info: trust,
-            friend: self.friend_access_prob * receipt_prob,
-            social: self.social_access_prob * receipt_prob,
-            mis_friend: todo!(),
-            mis_social: todo!(),
-            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
-        };
-        let p = todo!();
+        let trusts = self.trust.to_sharer(info, receipt_prob, trust_params, rng);
 
         // compute values of prospects
-        let sharing_status = self.sharing_statuses.entry(info.idx).or_default();
-        let mut sharing = false;
-        self.ops_gen2.receive(&p, trusts, |ded, pred_ded| {
-            if !sharing_status.is_done() {
-                sharing = false;
-            }
-            let values = [
-                self.cpt
-                    .valuate(&self.prospect.sharing[0], &ded.p_a_thetad()),
-                self.cpt
-                    .valuate(&self.prospect.sharing[1], &pred_ded.p_a_thetad()),
-            ];
-            sharing_status.decide(values);
-            if !self.selfish_status.is_done() {
-                let p_theta = ded.p_theta();
-                debug!(target: "    TH", P = ?p_theta);
-                let values: [V; 2] =
-                    array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p_theta));
-                info!(target: "     X", V = ?values);
-                self.selfish_status.decide(values, self.delay_selfish);
-                info!(target: "selfsh", status = ?self.selfish_status);
-            }
-            info!(target: "     Y", V = ?values);
-            sharing_status.is_done()
-        });
-        // let mut new_ops = self
-        //     .ops
-        //     .update(info.content, trust, friend_trust, social_trust);
-        // let temp_ops = new_ops.compute(
-        //     info.content,
-        //     social_trust,
-        //     &self.conds,
-        //     &agent_params.base_rates,
-        // );
-        // self.ops = new_ops;
+        let mut upd = self.ops_gen2.receive(info.p, trusts);
+        self.decision.try_decide_selfish(&upd);
+        let sharing = self.decision.try_decide_sharing(&mut upd, info.idx);
 
         BehaviorByInfo {
             sharing,
@@ -280,54 +351,21 @@ where
         }
     }
 
-    pub fn set_info_opinions(&mut self, info: &Info<V>, base_rates: &GlobalBaseRates<V>)
-    where
-        V: Sum + Default + fmt::Debug + NumAssign,
-    {
-        let trust = V::one();
-        let friend_trust = V::zero(); // * self.friend_access_prob * trust;
-        let social_trust = V::zero(); // * self.social_access_prob * trust;
+    pub fn set_info_opinions(&mut self, info: &Info<V>) {
+        let trusts = self.trust.to_inform();
 
-        let mut new_ops = self
-            .ops
-            .update(info.content, trust, friend_trust, social_trust);
-        let temp = new_ops.compute(info.content, social_trust, &self.conds, base_rates);
-
-        // posting info is equivalent to sharing it to friends with max trust.
-        let (pred_fop, _) = new_ops.predict(
-            &temp,
-            info.content,
-            friend_trust,
-            self.friend_arrival_rate * self.friend_access_prob, // * trust,
-            &self.conds,
-            base_rates,
-        );
-        new_ops.replace_pred_fop(pred_fop);
-        self.ops = new_ops;
-        self.decide_selfish(&temp.get_theta_projection());
-    }
-
-    fn decide_selfish(&mut self, p_theta: &MArrD1<Theta, V>)
-    where
-        V: NumAssign + Sum + fmt::Debug + Default,
-    {
-        if self.selfish_status.is_done() {
-            return;
-        }
-        debug!(target: "    TH", P = ?p_theta);
-        let values: [V; 2] =
-            array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], p_theta));
-        info!(target: "     X", V = ?values);
-        self.selfish_status.decide(values, self.delay_selfish);
-        info!(target: "selfsh", status = ?self.selfish_status);
+        let mut upd = self.ops_gen2.receive(info.p, trusts);
+        self.decision.try_decide_selfish(&upd);
+        self.decision.predict(&mut upd);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::agent::ActionStatus;
+    use serde::Deserialize;
+    use std::fs::read_to_string;
 
-    use super::DelayActionStatus;
+    use super::{ActionStatus, AgentParams, DelayActionStatus};
 
     #[test]
     fn test_action_status() {
@@ -370,5 +408,22 @@ mod tests {
         assert!(matches!(s, DelayActionStatus::Willing(0)));
         s.progress();
         assert!(s.is_done());
+    }
+
+    #[test]
+    fn test_toml() -> anyhow::Result<()> {
+        let initial_opinions = toml::from_str::<toml::Value>(&read_to_string(
+            "./test/config/test_initial_opinions.toml",
+        )?)?;
+        let mut agent_params = toml::from_str::<toml::Value>(&read_to_string(
+            "./test/config/test_agent_params.toml",
+        )?)?;
+        agent_params
+            .as_table_mut()
+            .unwrap()
+            .insert("initial_opinions".to_string(), initial_opinions);
+
+        AgentParams::<f32>::deserialize(agent_params)?;
+        Ok(())
     }
 }

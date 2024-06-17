@@ -1,11 +1,8 @@
 graph = { directed = true, location = { LocalFile = "./test/graph/grapht.txt" }, transposed = true }
 
-info_objects = [
-    # { Misinfo = { psi = [[0.00, 0.99], 0.01] } },
-    { Misinfo = { psi = [[0.00, 0.80], 0.20] } },
-    { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 0.99 ], 0.01 ] } },
-    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 0.99 ], 0.01 ] } },
-    # { Corrective = { psi = [ [ 0.99, 0.00 ], 0.01 ], m = [ [ 0.0, 1.0 ], 0.0 ] } },
+infos = [
+    { Misinfo = { op = [[0.00, 0.80], 0.20] } },
+    { Correction = { op = [[0.99, 0.00], 0.01], misinfo = [[0.00, 0.80], 0.20], trust_misinfo = 0.0 } },
 ]
 
 [[events]]
