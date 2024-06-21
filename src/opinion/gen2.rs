@@ -583,6 +583,7 @@ impl<V: MyFloat> MyOpinions<V> {
         diff.swap(&mut self.state);
 
         info!("{:?}", &self.state);
+        info!("{:?}", &self.ded);
 
         self.ded = self.ded.deduce(&self.state);
         MyOpinionsUpd {
