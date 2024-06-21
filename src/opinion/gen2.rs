@@ -339,14 +339,7 @@ impl<V: MyFloat> StateOpinions<V> {
             b,
             h,
         ) else {
-            tracing::error!(
-                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-                &self.h_psi_if_phi0,
-                &self.h_b_if_phi0,
-                &self.psi.base_rate,
-                &b,
-                &h
-            );
+            tracing::error!("failed to merge into h_psi_if_phi0");
             panic!("failed to merge");
         };
         let Some(h_psi_b_if_phi1) = MArrD1::<H, _>::merge_cond2(
@@ -356,14 +349,7 @@ impl<V: MyFloat> StateOpinions<V> {
             b,
             h,
         ) else {
-            tracing::error!(
-                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-                &self.h_psi_if_phi1,
-                &self.h_b_if_phi1,
-                &self.psi.base_rate,
-                &b,
-                &h
-            );
+            tracing::error!("failed to merge into h_psi_if_phi1");
             panic!("failed to merge");
         };
         MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
@@ -580,12 +566,14 @@ impl<V: MyFloat> MyOpinions<V> {
         trusts: Trusts<V>,
     ) -> MyOpinionsUpd<'a, V> {
         let mut diff = self.state.receive(p, &trusts);
-        diff.swap(&mut self.state);
+        info!("{:?}", &diff);
 
+        diff.swap(&mut self.state);
         info!("{:?}", &self.state);
-        info!("{:?}", &self.ded);
 
         self.ded = self.ded.deduce(&self.state);
+        info!("{:?}", &self.ded);
+
         MyOpinionsUpd {
             inner: self,
             p,
