@@ -231,7 +231,7 @@ where
 
         while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
         {
-            let span = span!(Level::INFO, "st", t);
+            let span = span!(Level::INFO, "st", i = num_iter, t);
             let _guard = span.enter();
             let mut pop_data = PopData::default();
 
