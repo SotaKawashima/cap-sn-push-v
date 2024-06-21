@@ -336,7 +336,10 @@ impl<V: MyFloat> StateOpinions<V> {
             b,
             h,
         )
-        .expect("failed to merge into Psi,B,phi0=>H");
+        .expect(&format!(
+            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+            &self.h_psi_if_phi0, &self.h_b_if_phi0, &self.psi.base_rate, &b, &h
+        ));
         let h_psi_b_if_phi1 = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi1,
             &self.h_b_if_phi1,
@@ -344,7 +347,10 @@ impl<V: MyFloat> StateOpinions<V> {
             b,
             h,
         )
-        .expect("failed to merge into Psi,B,phi0=>H");
+        .expect(&format!(
+            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+            &self.h_psi_if_phi1, &self.h_b_if_phi1, &self.psi.base_rate, &b, &h
+        ));
         MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
     }
 
@@ -353,8 +359,10 @@ impl<V: MyFloat> StateOpinions<V> {
             .o_b
             .inverse(b, &self.o.base_rate)
             .expect("failed to invert B=>O");
-        MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b)
-            .expect("failed to merge into KH,O=>B")
+        MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b).expect(&format!(
+            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+            &self.b_kh, &b_o, &kh, &self.o.base_rate, &b
+        ))
     }
 
     fn reset<R: Rng>(
