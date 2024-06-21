@@ -13,6 +13,7 @@ use subjective_logic::{
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
     ops::{Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection},
 };
+use tracing::debug;
 
 use crate::info::gen2::InfoContent;
 
@@ -160,6 +161,7 @@ struct StateOpinions<V: MyFloat> {
     thetad_h: MArrD1<H, SimplexD1<Thetad, V>>,
 }
 
+#[derive(Debug)]
 enum DiffOpinions<V: MyFloat> {
     Causal {
         psi: OpinionD1<Psi, V>,
@@ -180,6 +182,7 @@ enum DiffOpinions<V: MyFloat> {
     },
 }
 
+#[derive(Debug)]
 enum PredDiffOpinions<V: MyFloat> {
     Causal {
         fpsi: OpinionD1<FPsi, V>,
@@ -377,13 +380,6 @@ impl<V: MyFloat> StateOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        // self.conds = ConditionalOpinions::from_sample(sample, &agent_params.base_rates);
-        // let sample = agent_params.initial_conditions.sample(rng);
-        // self.ops = Opinions::new(
-        //     agent_params.initial_opinions.clone(),
-        //     &agent_params.base_rates,
-        //     &sample,
-        // );
         let (h_b_if_phi0, h_psi_if_phi0) = {
             let mut x = conditions.params_h_psi_b_if_phi0.sample(rng);
             (
@@ -562,6 +558,8 @@ impl<V: MyFloat> MyOpinions<V> {
         trusts: Trusts<V>,
     ) -> MyOpinionsUpd<'a, V> {
         let mut diff = self.state.receive(p, &trusts);
+        debug!("{:?}", diff);
+
         diff.swap(&mut self.state);
         self.ded = self.ded.deduce(&self.state);
         MyOpinionsUpd {
@@ -577,6 +575,8 @@ impl<V: MyFloat> MyOpinions<V> {
         trusts: &Trusts<V>,
     ) -> (PredDiffOpinions<V>, DeducedOpinions<V>) {
         let mut pred_diff = self.state.predict(p, trusts);
+        debug!("{:?}", pred_diff);
+
         pred_diff.swap(&mut self.state);
         let pred_ded = self.ded.deduce(&self.state);
         (pred_diff, pred_ded)
