@@ -13,7 +13,7 @@ use subjective_logic::{
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
     ops::{Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection},
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::info::gen2::InfoContent;
 
@@ -139,7 +139,7 @@ where
     conditions: InitialConditions<V>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct StateOpinions<V: MyFloat> {
     psi: OpinionD1<Psi, V>,
     phi: OpinionD1<Phi, V>,
@@ -332,28 +332,40 @@ impl<V: MyFloat> StateOpinions<V> {
         b: &MArrD1<B, V>,
         h: &MArrD1<H, V>,
     ) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
-        let h_psi_b_if_phi0 = MArrD1::<H, _>::merge_cond2(
+        let Some(h_psi_b_if_phi0) = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi0,
             &self.h_b_if_phi0,
             &self.psi.base_rate,
             b,
             h,
-        )
-        .expect(&format!(
-            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-            &self.h_psi_if_phi0, &self.h_b_if_phi0, &self.psi.base_rate, &b, &h
-        ));
-        let h_psi_b_if_phi1 = MArrD1::<H, _>::merge_cond2(
+        ) else {
+            tracing::error!(
+                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+                &self.h_psi_if_phi0,
+                &self.h_b_if_phi0,
+                &self.psi.base_rate,
+                &b,
+                &h
+            );
+            panic!("failed to merge");
+        };
+        let Some(h_psi_b_if_phi1) = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi1,
             &self.h_b_if_phi1,
             &self.psi.base_rate,
             b,
             h,
-        )
-        .expect(&format!(
-            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-            &self.h_psi_if_phi1, &self.h_b_if_phi1, &self.psi.base_rate, &b, &h
-        ));
+        ) else {
+            tracing::error!(
+                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+                &self.h_psi_if_phi1,
+                &self.h_b_if_phi1,
+                &self.psi.base_rate,
+                &b,
+                &h
+            );
+            panic!("failed to merge");
+        };
         MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
     }
 
@@ -362,10 +374,20 @@ impl<V: MyFloat> StateOpinions<V> {
             .o_b
             .inverse(b, &self.o.base_rate)
             .expect("failed to invert B=>O");
-        MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b).expect(&format!(
-            "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-            &self.b_kh, &b_o, &kh, &self.o.base_rate, &b
-        ))
+        let Some(b_kh_o) = MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b)
+        else {
+            tracing::error!(
+                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
+                &self.b_kh,
+                &b_o,
+                &kh,
+                &self.o.base_rate,
+                &b
+            );
+            panic!("failed to merge");
+        };
+
+        b_kh_o
     }
 
     fn reset<R: Rng>(
@@ -558,9 +580,10 @@ impl<V: MyFloat> MyOpinions<V> {
         trusts: Trusts<V>,
     ) -> MyOpinionsUpd<'a, V> {
         let mut diff = self.state.receive(p, &trusts);
-        debug!("{:?}", diff);
-
         diff.swap(&mut self.state);
+
+        info!("{:?}", &self.state);
+
         self.ded = self.ded.deduce(&self.state);
         MyOpinionsUpd {
             inner: self,

@@ -28,7 +28,7 @@ use info::{Info, InfoLabel};
 use scenario::{Inform, Scenario, ScenarioParam};
 use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
 use tokio::sync::{mpsc, Mutex};
-use tracing::{info, span, Level};
+use tracing::*;
 
 pub struct Runner<V>
 where
@@ -247,7 +247,7 @@ where
 
                     let span = span!(Level::INFO, "IA", "#" = agent_idx);
                     let _guard = span.enter();
-                    info!(target: "  recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
+                    debug!(target: "  recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
                     agent.set_info_opinions(&info);
@@ -284,7 +284,7 @@ where
                         - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
                         .powf(self.scenario.mean_degree);
 
-                info!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
+                debug!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
 
                 if rng.gen::<V>() > agent.access_prob() {
                     continue;

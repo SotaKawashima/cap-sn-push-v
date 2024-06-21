@@ -6,7 +6,7 @@ use std::{
     array,
     collections::{BTreeMap, BTreeSet},
 };
-use tracing::{debug, info};
+use tracing::*;
 
 use crate::{
     decision::{CptParams, LossParams, Prospect, CPT},
@@ -163,7 +163,7 @@ impl<V: MyFloat> Decision<V> {
         debug!(target: "    TH", P = ?p_theta);
         let values: [V; 2] =
             array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p_theta));
-        info!(target: "     X", V = ?values);
+        debug!(target: "     X", V = ?values);
         values
     }
 
@@ -172,7 +172,7 @@ impl<V: MyFloat> Decision<V> {
             upd.decide1(|ded| {
                 self.selfish_status
                     .decide(self.values_selfish(ded), self.delay_selfish);
-                info!(target: "selfsh", status = ?self.selfish_status);
+                debug!(target: "selfsh", status = ?self.selfish_status);
             });
         }
     }
@@ -193,9 +193,9 @@ impl<V: MyFloat> Decision<V> {
                     self.cpt
                         .valuate(&self.prospect.sharing[1], &pred_ded.p_a_thetad()),
                 ];
-                info!(target: "     Y", V = ?values);
+                debug!(target: "     Y", V = ?values);
                 sharing_status.decide(values);
-                info!(target: "sharng", status = ?sharing_status);
+                debug!(target: "sharng", status = ?sharing_status);
                 sharing_status.is_done()
             })
         }
