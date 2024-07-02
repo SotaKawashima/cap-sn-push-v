@@ -648,6 +648,7 @@ impl<V: MyFloat> MyOpinions<V> {
         self.state.reset(&opinions.state);
         self.ded.reset(&opinions.deduction_base_rates);
         self.fixed = FixedOpinions::new(&opinions.fixed, rng);
+        debug!("{:?}", self.fixed);
     }
 
     pub fn receive<'a>(
