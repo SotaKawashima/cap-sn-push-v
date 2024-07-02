@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
 use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::{fs::File, io};
-use subjective_logic::mul::labeled::SimplexD1;
+use subjective_logic::mul::labeled::OpinionD1;
 
 use crate::info::gen2::InfoContent;
 use crate::opinion::{MyFloat, O};
@@ -93,8 +93,8 @@ pub struct Inform {
 #[derive(Debug, serde::Deserialize)]
 struct ObserverParam<V: MyFloat> {
     observer_pop_rate: V,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    observed_info: SimplexD1<O, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    observed_info: OpinionD1<O, V>,
 }
 
 #[derive(Debug)]

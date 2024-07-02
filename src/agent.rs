@@ -11,7 +11,7 @@ use tracing::*;
 use crate::{
     decision::{CptParams, LossParams, Prospect, CPT},
     dist::{IValue, IValueParam},
-    info::{Info, InfoTrustParams},
+    info::{Info, InfoLabel, InfoTrustParams},
     opinion::{
         gen2::{self, DeducedOpinions, InitialOpinions, MyOpinionsUpd, Trusts},
         MyFloat,
@@ -83,6 +83,7 @@ struct Trust<V: Float> {
     social_access_prob: V,
     friend_arrival_rate: V,
     info_trust_map: BTreeMap<usize, V>,
+    corr_misinfo_trust_map: BTreeMap<usize, V>,
     misinfo_friend: V,
     misinfo_social: V,
 }
@@ -102,6 +103,7 @@ impl<V: Float> Trust<V> {
         self.misinfo_friend = trust_params.friend_misinfo_trust.sample(rng);
         self.misinfo_social = trust_params.social_misinfo_trust.sample(rng);
         self.info_trust_map.clear();
+        self.corr_misinfo_trust_map.clear();
     }
 
     fn to_inform(&self) -> Trusts<V>
@@ -110,10 +112,11 @@ impl<V: Float> Trust<V> {
     {
         Trusts {
             info: V::one(),
+            corr_misinfo: V::zero(),
             friend: V::zero(),
             social: V::zero(),
-            misinfo_friend: V::one(),
-            misinfo_social: V::one(),
+            pi_friend: V::one(),
+            pi_social: V::one(),
             pred_friend: self.friend_arrival_rate * self.friend_access_prob,
         }
     }
@@ -132,17 +135,29 @@ impl<V: Float> Trust<V> {
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
     {
+        let trust_sampler = params.info_trust_params.get_sampler(info.label());
         let info_trust = *self
             .info_trust_map
             .entry(info.idx)
-            .or_insert_with(|| params.info_trust_params.gen_map(rng)(info));
+            .or_insert_with(|| trust_sampler.sample(rng));
+        let corr_misinfo_trust =
+            *self
+                .corr_misinfo_trust_map
+                .entry(info.idx)
+                .or_insert_with(|| {
+                    params
+                        .info_trust_params
+                        .get_sampler(&InfoLabel::Misinfo)
+                        .sample(rng)
+                });
 
         Trusts {
             info: info_trust,
+            corr_misinfo: corr_misinfo_trust,
             friend: self.friend_access_prob * receipt_prob,
             social: self.social_access_prob * receipt_prob,
-            misinfo_friend: self.misinfo_friend,
-            misinfo_social: self.misinfo_social,
+            pi_friend: self.misinfo_friend,
+            pi_social: self.misinfo_social,
             pred_friend: self.friend_arrival_rate * self.friend_access_prob,
         }
     }

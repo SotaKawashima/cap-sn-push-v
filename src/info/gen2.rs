@@ -1,6 +1,9 @@
 use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
-use subjective_logic::{mul::labeled::SimplexD1, multi_array::labeled::MArrD1};
+use subjective_logic::{
+    mul::labeled::{OpinionD1, SimplexD1},
+    multi_array::labeled::MArrD1,
+};
 
 use crate::opinion::{MyFloat, Phi, Psi, B, H, O};
 
@@ -11,23 +14,22 @@ use super::InfoLabel;
 #[serde(bound(deserialize = "V: Deserialize<'de>"))]
 pub enum InfoContent<V: MyFloat> {
     Misinfo {
-        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        op: SimplexD1<Psi, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+        op: OpinionD1<Psi, V>,
     },
     Correction {
-        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        op: SimplexD1<Psi, V>,
-        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        misinfo: SimplexD1<Psi, V>,
-        trust_misinfo: V,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+        op: OpinionD1<Psi, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+        misinfo: OpinionD1<Psi, V>,
     },
     Observation {
-        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        op: SimplexD1<O, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+        op: OpinionD1<O, V>,
     },
     Inhibition {
-        #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-        op1: SimplexD1<Phi, V>,
+        #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+        op1: OpinionD1<Phi, V>,
         #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
         op2: MArrD1<Psi, SimplexD1<H, V>>,
         #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]

@@ -280,4 +280,13 @@ where
             InfoLabel::Inhibitive => inhibitive,
         }
     }
+
+    pub fn get_sampler(&self, info_label: &InfoLabel) -> &EValue<V> {
+        match info_label {
+            InfoLabel::Misinfo => &self.misinfo,
+            InfoLabel::Corrective => &self.corrective,
+            InfoLabel::Observed => &self.observed,
+            InfoLabel::Inhibitive => &self.inhibitive,
+        }
+    }
 }
