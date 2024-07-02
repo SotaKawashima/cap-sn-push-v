@@ -8,12 +8,12 @@ use subjective_logic::{
     iter::FromFn,
     mul::{
         labeled::{OpinionD1, OpinionD2, OpinionD3, OpinionRefD1, SimplexD1},
-        InverseCondition, MergeJointConditions2, OpinionRef,
+        InverseCondition, MergeJointConditions2,
     },
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
     ops::{Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection},
 };
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::info::gen2::InfoContent;
 
@@ -23,23 +23,9 @@ use super::{
 };
 
 #[serde_as]
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Clone)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
 struct InitialBaseRates<V> {
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    psi: MArrD1<Psi, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    phi: MArrD1<Phi, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    o: MArrD1<O, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    fpsi: MArrD1<FPsi, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    fphi: MArrD1<FPhi, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    kpsi: MArrD1<KPsi, V>,
-    #[serde_as(as = "TryFromInto<Vec<V>>")]
-    kphi: MArrD1<KPhi, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     a: MArrD1<A, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
@@ -57,29 +43,37 @@ struct InitialBaseRates<V> {
 }
 
 #[serde_as]
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Clone)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-struct InitialSimplexes<V: MyFloat> {
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    psi: SimplexD1<Psi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    phi: SimplexD1<Phi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    o: SimplexD1<O, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    fpsi: SimplexD1<FPsi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    fphi: SimplexD1<FPhi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    kpsi: SimplexD1<KPsi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V)>")]
-    kphi: SimplexD1<KPhi, V>,
+struct InitialState<V: MyFloat> {
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    psi: OpinionD1<Psi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    phi: OpinionD1<Phi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    o: OpinionD1<O, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    fpsi: OpinionD1<FPsi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    fphi: OpinionD1<FPhi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    kpsi: OpinionD1<KPsi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    kphi: OpinionD1<KPhi, V>,
+    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
+    h_psi_if_phi1: MArrD1<Psi, SimplexD1<H, V>>,
+    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
+    h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
+    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
+    fh_fpsi_if_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
+    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
+    kh_kpsi_if_kphi1: MArrD1<KPsi, SimplexD1<KH, V>>,
 }
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-struct InitialConditions<V>
+struct InitialFixed<V>
 where
     V: MyFloat,
     Standard: Distribution<V>,
@@ -87,25 +81,6 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    /// parameters of conditional opinions $\Psi \implies H$ and $B \implies H$ when $\phi_0$ is true
-    params_h_psi_b_if_phi0: ConditionParams<Psi, B, H, V>,
-    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
-    h_psi_if_phi1: MArrD1<Psi, SimplexD1<H, V>>,
-    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
-    h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
-
-    /// parameters of conditional opinions $\Psi^F \implies H^F$ when $\phi^F_0$ is true
-    #[serde_as(as = "TryFromInto<DependentParam<FH, V, Vec<SimplexParam<V>>>>")]
-    params_fh_fpsi_if_fphi0: DependentParam<FH, V, Vec<SimplexDist<FH, V>>>,
-    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
-    fh_fpsi_if_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
-
-    /// parameters of conditional opinions $\Psi^K \implies H^K$ when $\phi^K_0$ is true
-    #[serde_as(as = "TryFromInto<DependentParam<KH, V, Vec<SimplexParam<V>>>>")]
-    params_kh_kpsi_if_kphi0: DependentParam<KH, V, Vec<SimplexDist<KH, V>>>,
-    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
-    kh_kpsi_if_kphi1: MArrD1<KPsi, SimplexD1<KH, V>>,
-
     /// $H^F \implies A$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
     a_fh: MArrD1<FH, SimplexDist<A, V>>,
@@ -121,6 +96,14 @@ where
     /// $H \implies \Theta'$
     #[serde_as(as = "TryFromInto<Vec<SimplexParam<V>>>")]
     thetad_h: MArrD1<H, SimplexDist<Thetad, V>>,
+    /// parameters of conditional opinions $\Psi \implies H$ and $B \implies H$ when $\phi_0$ is true
+    h_psi_b_if_phi0: ConditionParams<Psi, B, H, V>,
+    /// parameters of conditional opinions $\Psi^F \implies H^F$ when $\phi^F_0$ is true
+    #[serde_as(as = "TryFromInto<DependentParam<FH, V, Vec<SimplexParam<V>>>>")]
+    fh_fpsi_if_fphi0: DependentParam<FH, V, Vec<SimplexDist<FH, V>>>,
+    /// parameters of conditional opinions $\Psi^K \implies H^K$ when $\phi^K_0$ is true
+    #[serde_as(as = "TryFromInto<DependentParam<KH, V, Vec<SimplexParam<V>>>>")]
+    kh_kpsi_if_kphi0: DependentParam<KH, V, Vec<SimplexDist<KH, V>>>,
 }
 
 #[serde_as]
@@ -134,9 +117,9 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    base_rates: InitialBaseRates<V>,
-    simplexes: InitialSimplexes<V>,
-    conditions: InitialConditions<V>,
+    state: InitialState<V>,
+    fixed: InitialFixed<V>,
+    deduction_base_rates: InitialBaseRates<V>,
 }
 
 #[derive(Default, Debug)]
@@ -144,21 +127,27 @@ struct StateOpinions<V: MyFloat> {
     psi: OpinionD1<Psi, V>,
     phi: OpinionD1<Phi, V>,
     o: OpinionD1<O, V>,
-    h_psi_if_phi0: MArrD1<Psi, SimplexD1<H, V>>,
-    h_b_if_phi0: MArrD1<B, SimplexD1<H, V>>,
     h_psi_if_phi1: MArrD1<Psi, SimplexD1<H, V>>,
     h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
     fpsi: OpinionD1<FPsi, V>,
     fphi: OpinionD1<FPhi, V>,
-    fh_fphi_fpsi: MArrD2<FPhi, FPsi, SimplexD1<FH, V>>,
+    fh_fpsi_if_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
     kpsi: OpinionD1<KPsi, V>,
     kphi: OpinionD1<KPhi, V>,
-    kh_kphi_kpsi: MArrD2<KPhi, KPsi, SimplexD1<KH, V>>,
+    kh_kpsi_if_kphi1: MArrD1<KPsi, SimplexD1<KH, V>>,
+}
+
+#[derive(Default, Debug)]
+struct FixedOpinions<V: MyFloat> {
     o_b: MArrD1<B, SimplexD1<O, V>>,
     b_kh: MArrD1<KH, SimplexD1<B, V>>,
     a_fh: MArrD1<FH, SimplexD1<A, V>>,
     theta_h: MArrD1<H, SimplexD1<Theta, V>>,
     thetad_h: MArrD1<H, SimplexD1<Thetad, V>>,
+    h_psi_if_phi0: MArrD1<Psi, SimplexD1<H, V>>,
+    h_b_if_phi0: MArrD1<B, SimplexD1<H, V>>,
+    fh_fpsi_if_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
+    kh_kpsi_if_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
 }
 
 #[derive(Debug)]
@@ -251,6 +240,43 @@ fn transform_simplex<
     SimplexD1::new_unchecked(MArrD1::from_fn(|i| q[i] * e), V::one() - e)
 }
 
+fn merge_fh<'a, V: MyFloat>(
+    state: &'a StateOpinions<V>,
+    fixed: &'a FixedOpinions<V>,
+) -> MArrD2<FPhi, FPsi, &'a SimplexD1<FH, V>> {
+    let fh_fphi_fpsi = MArrD2::new(vec![
+        fixed.fh_fpsi_if_fphi0.as_ref(),
+        state.fh_fpsi_if_fphi1.as_ref(),
+    ]);
+    debug!("{:?}", fh_fphi_fpsi);
+    fh_fphi_fpsi
+}
+
+fn merge_kh<'a, V: MyFloat>(
+    state: &'a StateOpinions<V>,
+    fixed: &'a FixedOpinions<V>,
+) -> MArrD2<KPhi, KPsi, &'a SimplexD1<KH, V>> {
+    let kh_kphi_kpsi = MArrD2::new(vec![
+        fixed.kh_kpsi_if_kphi0.as_ref(),
+        state.kh_kpsi_if_kphi1.as_ref(),
+    ]);
+    debug!("{:?}", kh_kphi_kpsi);
+    kh_kphi_kpsi
+}
+
+fn merge_h<V: MyFloat>(
+    state: &StateOpinions<V>,
+    fixed: &FixedOpinions<V>,
+    b: &MArrD1<B, V>,
+    h: &MArrD1<H, V>,
+) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
+    let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, b, h);
+    let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(b, h);
+    let h_phi_psi_b = MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1]);
+    debug!("{:?}", h_phi_psi_b);
+    h_phi_psi_b
+}
+
 impl<V: MyFloat> StateOpinions<V> {
     fn receive(
         &self,
@@ -311,17 +337,13 @@ impl<V: MyFloat> StateOpinions<V> {
                 );
                 let ah = &ded.h.base_rate;
                 let fh_fpsi_if_fphi1 =
-                    MArrD1::from_iter(self.fh_fphi_fpsi.down(1).iter().zip(&op2_dsc).map(
-                        |(c, o)| {
-                            FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.friend))
-                        },
-                    ));
+                    MArrD1::from_iter(self.fh_fpsi_if_fphi1.iter().zip(&op2_dsc).map(|(c, o)| {
+                        FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.friend))
+                    }));
                 let kh_kpsi_if_kphi1 =
-                    MArrD1::from_iter(self.kh_kphi_kpsi.down(1).iter().zip(&op2_dsc).map(
-                        |(c, o)| {
-                            FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.social))
-                        },
-                    ));
+                    MArrD1::from_iter(self.kh_kpsi_if_kphi1.iter().zip(&op2_dsc).map(|(c, o)| {
+                        FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.social))
+                    }));
                 DiffOpinions::Inhibition {
                     phi,
                     fphi,
@@ -362,18 +384,17 @@ impl<V: MyFloat> StateOpinions<V> {
                     &transform(op1.discount(trusts.info).as_ref(), trusts.pred_friend),
                 );
                 let ah = &ded.h.base_rate;
-                let fh_fpsi_if_fphi1 =
-                    MArrD1::from_iter(self.fh_fphi_fpsi.down(1).iter().zip(op2.iter()).map(
-                        |(c, o)| {
-                            FuseOp::Wgh.fuse(
-                                c,
-                                &transform_simplex(
-                                    o.discount(trusts.info).projection(ah),
-                                    trusts.friend,
-                                ),
-                            )
-                        },
-                    ));
+                let fh_fpsi_if_fphi1 = MArrD1::from_iter(
+                    self.fh_fpsi_if_fphi1.iter().zip(op2.iter()).map(|(c, o)| {
+                        FuseOp::Wgh.fuse(
+                            c,
+                            &transform_simplex(
+                                o.discount(trusts.info).projection(ah),
+                                trusts.friend,
+                            ),
+                        )
+                    }),
+                );
                 PredDiffOpinions::Inhibition {
                     fphi,
                     fh_fpsi_if_fphi1,
@@ -383,18 +404,11 @@ impl<V: MyFloat> StateOpinions<V> {
         }
     }
 
-    fn h_phi_psi_b(
+    fn h_psi_b_if_phi1(
         &self,
         b: &MArrD1<B, V>,
         h: &MArrD1<H, V>,
-    ) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
-        let h_psi_b_if_phi0 = MArrD1::<H, _>::merge_cond2(
-            &self.h_psi_if_phi0,
-            &self.h_b_if_phi0,
-            &self.psi.base_rate,
-            b,
-            h,
-        );
+    ) -> MArrD2<Psi, B, SimplexD1<H, V>> {
         let h_psi_b_if_phi1 = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi1,
             &self.h_b_if_phi1,
@@ -402,95 +416,128 @@ impl<V: MyFloat> StateOpinions<V> {
             b,
             h,
         );
-        MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
+        h_psi_b_if_phi1
     }
 
-    fn b_kh_o(&self, b: &MArrD1<B, V>, kh: &MArrD1<KH, V>) -> MArrD2<KH, O, SimplexD1<B, V>> {
-        let b_o = self.o_b.inverse(b, &self.o.base_rate);
-        let b_kh_o = MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b);
+    fn reset(&mut self, state: &InitialState<V>)
+    where
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+        Open01: Distribution<V>,
+    {
+        let InitialState {
+            psi,
+            phi,
+            o,
+            fpsi,
+            fphi,
+            kpsi,
+            kphi,
+            h_psi_if_phi1,
+            h_b_if_phi1,
+            fh_fpsi_if_fphi1,
+            kh_kpsi_if_kphi1,
+        } = state.clone();
+
+        *self = Self {
+            psi,
+            phi,
+            o,
+            h_psi_if_phi1,
+            h_b_if_phi1,
+            fpsi,
+            fphi,
+            fh_fpsi_if_fphi1,
+            kpsi,
+            kphi,
+            kh_kpsi_if_kphi1,
+        };
+    }
+}
+
+impl<V: MyFloat> FixedOpinions<V> {
+    fn h_psi_b_if_phi0(
+        &self,
+        psi: &MArrD1<Psi, V>,
+        b: &MArrD1<B, V>,
+        h: &MArrD1<H, V>,
+    ) -> MArrD2<Psi, B, SimplexD1<H, V>> {
+        let h_psi_b_if_phi0 =
+            MArrD1::<H, _>::merge_cond2(&self.h_psi_if_phi0, &self.h_b_if_phi0, psi, b, h);
+        h_psi_b_if_phi0
+    }
+
+    fn b_kh_o(
+        &self,
+        b: &MArrD1<B, V>,
+        kh: &MArrD1<KH, V>,
+        o: &MArrD1<O, V>,
+    ) -> MArrD2<KH, O, SimplexD1<B, V>> {
+        let b_o = self.o_b.inverse(b, o);
+        let b_kh_o = MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, o, b);
+        debug!("{:?}", b_kh_o);
         b_kh_o
     }
 
-    fn reset<R: Rng>(
-        &mut self,
-        simplexes: &InitialSimplexes<V>,
-        conditions: &InitialConditions<V>,
-        base_rates: &InitialBaseRates<V>,
-        rng: &mut R,
-    ) where
+    fn new<R: Rng>(fixed: &InitialFixed<V>, rng: &mut R) -> Self
+    where
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
         let (h_b_if_phi0, h_psi_if_phi0) = {
-            let mut x = conditions.params_h_psi_b_if_phi0.sample(rng);
+            let mut x = fixed.h_psi_b_if_phi0.sample(rng);
             (
                 MArrD1::<B, _>::new(x.pop().unwrap()),
                 MArrD1::<Psi, _>::new(x.pop().unwrap()),
             )
         };
-
         let fh_fpsi_if_fphi0 = {
             let base =
                 MArrD1::<FPhi, SimplexD1<FH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
-            let x = conditions
-                .params_fh_fpsi_if_fphi0
-                .samples1(rng, base.iter());
+            let x = fixed.fh_fpsi_if_fphi0.samples1(rng, base.iter());
             MArrD1::<FPsi, _>::new(x)
         };
-        let fh_fphi_fpsi = MArrD2::new(vec![fh_fpsi_if_fphi0, conditions.fh_fpsi_if_fphi1.clone()]);
-
         let kh_kpsi_if_kphi0 = {
             let base =
                 MArrD1::<KPhi, SimplexD1<KH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
-            let x = conditions
-                .params_kh_kpsi_if_kphi0
-                .samples1(rng, base.iter());
+            let x = fixed.kh_kpsi_if_kphi0.samples1(rng, base.iter());
             MArrD1::<KPsi, _>::new(x)
         };
-        let kh_kphi_kpsi = MArrD2::new(vec![kh_kpsi_if_kphi0, conditions.kh_kpsi_if_kphi1.clone()]);
 
-        *self = Self {
-            psi: OpinionRef::from((&simplexes.psi, &base_rates.psi)).cloned(),
-            phi: OpinionRef::from((&simplexes.phi, &base_rates.phi)).cloned(),
-            o: OpinionRef::from((&simplexes.o, &base_rates.o)).cloned(),
-            fpsi: OpinionRef::from((&simplexes.fpsi, &base_rates.fpsi)).cloned(),
-            fphi: OpinionRef::from((&simplexes.fphi, &base_rates.fphi)).cloned(),
-            kpsi: OpinionRef::from((&simplexes.kpsi, &base_rates.kpsi)).cloned(),
-            kphi: OpinionRef::from((&simplexes.kphi, &base_rates.kphi)).cloned(),
-            h_psi_if_phi0,
+        Self {
+            o_b: MArrD1::from_fn(|i| fixed.o_b[i].sample(rng)),
+            b_kh: MArrD1::from_fn(|i| fixed.b_kh[i].sample(rng)),
+            a_fh: MArrD1::from_fn(|i| fixed.a_fh[i].sample(rng)),
+            theta_h: MArrD1::from_fn(|i| fixed.theta_h[i].sample(rng)),
+            thetad_h: MArrD1::from_fn(|i| fixed.thetad_h[i].sample(rng)),
             h_b_if_phi0,
-            h_psi_if_phi1: conditions.h_psi_if_phi1.clone(),
-            h_b_if_phi1: conditions.h_b_if_phi1.clone(),
-            fh_fphi_fpsi,
-            kh_kphi_kpsi,
-            o_b: MArrD1::from_fn(|i| conditions.o_b[i].sample(rng)),
-            b_kh: MArrD1::from_fn(|i| conditions.b_kh[i].sample(rng)),
-            a_fh: MArrD1::from_fn(|i| conditions.a_fh[i].sample(rng)),
-            theta_h: MArrD1::from_fn(|i| conditions.theta_h[i].sample(rng)),
-            thetad_h: MArrD1::from_fn(|i| conditions.thetad_h[i].sample(rng)),
+            h_psi_if_phi0,
+            fh_fpsi_if_fphi0,
+            kh_kpsi_if_kphi0,
         }
     }
 }
 
 impl<V: MyFloat> DeducedOpinions<V> {
-    fn deduce(&self, state: &StateOpinions<V>) -> Self {
+    fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> Self {
         let kh = OpinionD2::product2(&state.kphi, &state.kpsi)
-            .deduce_with(&state.kh_kphi_kpsi, || self.kh.base_rate.clone());
-        let b = OpinionD2::product2(&kh, &state.o)
-            .deduce_with(&state.b_kh_o(&self.b.base_rate, &kh.base_rate), || {
-                self.b.base_rate.clone()
-            });
-        let h = OpinionD3::product3(&state.phi, &state.psi, &b)
-            .deduce_with(&state.h_phi_psi_b(&b.base_rate, &self.h.base_rate), || {
-                self.h.base_rate.clone()
-            });
+            .deduce_with(&merge_kh(state, fixed), || self.kh.base_rate.clone());
+        let b = OpinionD2::product2(&kh, &state.o).deduce_with(
+            &fixed.b_kh_o(&self.b.base_rate, &kh.base_rate, &state.o.base_rate),
+            || self.b.base_rate.clone(),
+        );
+        let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(
+            &merge_h(state, fixed, &b.base_rate, &self.h.base_rate),
+            || self.h.base_rate.clone(),
+        );
         let fh = OpinionD2::product2(&state.fphi, &state.fpsi)
-            .deduce_with(&state.fh_fphi_fpsi, || self.fh.base_rate.clone());
-        let a = fh.deduce_with(&state.a_fh, || self.a.base_rate.clone());
-        let theta = h.deduce_with(&state.theta_h, || self.theta.base_rate.clone());
-        let thetad = h.deduce_with(&state.thetad_h, || self.thetad.base_rate.clone());
+            .deduce_with(&merge_fh(state, fixed), || self.fh.base_rate.clone());
+        let a = fh.deduce_with(&fixed.a_fh, || self.a.base_rate.clone());
+        let theta = h.deduce_with(&fixed.theta_h, || self.theta.base_rate.clone());
+        let thetad = h.deduce_with(&fixed.thetad_h, || self.thetad.base_rate.clone());
 
         Self {
             h,
@@ -512,13 +559,24 @@ impl<V: MyFloat> DeducedOpinions<V> {
     }
 
     fn reset(&mut self, base_rates: &InitialBaseRates<V>) {
-        self.a = OpinionD1::vacuous_with(base_rates.a.clone());
-        self.b = OpinionD1::vacuous_with(base_rates.b.clone());
-        self.h = OpinionD1::vacuous_with(base_rates.h.clone());
-        self.fh = OpinionD1::vacuous_with(base_rates.fh.clone());
-        self.kh = OpinionD1::vacuous_with(base_rates.kh.clone());
-        self.theta = OpinionD1::vacuous_with(base_rates.theta.clone());
-        self.thetad = OpinionD1::vacuous_with(base_rates.thetad.clone());
+        let InitialBaseRates {
+            a,
+            b,
+            h,
+            fh,
+            kh,
+            theta,
+            thetad,
+        } = base_rates.clone();
+        *self = Self {
+            a: OpinionD1::vacuous_with(a),
+            b: OpinionD1::vacuous_with(b),
+            h: OpinionD1::vacuous_with(h),
+            fh: OpinionD1::vacuous_with(fh),
+            kh: OpinionD1::vacuous_with(kh),
+            theta: OpinionD1::vacuous_with(theta),
+            thetad: OpinionD1::vacuous_with(thetad),
+        }
     }
 }
 
@@ -547,8 +605,8 @@ impl<V: MyFloat> DiffOpinions<V> {
                 mem::swap(&mut state.kphi, kphi);
                 mem::swap(&mut state.h_psi_if_phi1, h_psi_if_phi1);
                 mem::swap(&mut state.h_b_if_phi1, h_b_if_phi1);
-                mem::swap(state.fh_fphi_fpsi.down_mut(1), fh_fpsi_if_fphi1);
-                mem::swap(state.kh_kphi_kpsi.down_mut(1), kh_kpsi_if_kphi1);
+                mem::swap(&mut state.fh_fpsi_if_fphi1, fh_fpsi_if_fphi1);
+                mem::swap(&mut state.kh_kpsi_if_kphi1, kh_kpsi_if_kphi1);
             }
         }
     }
@@ -565,7 +623,7 @@ impl<V: MyFloat> PredDiffOpinions<V> {
                 fh_fpsi_if_fphi1,
             } => {
                 mem::swap(fphi, &mut state.fphi);
-                mem::swap(fh_fpsi_if_fphi1, state.fh_fphi_fpsi.down_mut(1));
+                mem::swap(fh_fpsi_if_fphi1, &mut state.fh_fpsi_if_fphi1);
             }
             PredDiffOpinions::None => {}
         }
@@ -576,6 +634,7 @@ impl<V: MyFloat> PredDiffOpinions<V> {
 pub struct MyOpinions<V: MyFloat> {
     state: StateOpinions<V>,
     ded: DeducedOpinions<V>,
+    fixed: FixedOpinions<V>,
 }
 
 impl<V: MyFloat> MyOpinions<V> {
@@ -586,13 +645,9 @@ impl<V: MyFloat> MyOpinions<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        self.state.reset(
-            &opinions.simplexes,
-            &opinions.conditions,
-            &opinions.base_rates,
-            rng,
-        );
-        self.ded.reset(&opinions.base_rates);
+        self.state.reset(&opinions.state);
+        self.ded.reset(&opinions.deduction_base_rates);
+        self.fixed = FixedOpinions::new(&opinions.fixed, rng);
     }
 
     pub fn receive<'a>(
@@ -601,13 +656,13 @@ impl<V: MyFloat> MyOpinions<V> {
         trusts: Trusts<V>,
     ) -> MyOpinionsUpd<'a, V> {
         let mut diff = self.state.receive(p, &trusts, &self.ded);
-        info!("{:?}", &diff);
+        debug!("{:?}", &diff);
 
         diff.swap(&mut self.state);
-        info!("{:?}", &self.state);
+        debug!("{:?}", &self.state);
 
-        self.ded = self.ded.deduce(&self.state);
-        info!("{:?}", &self.ded);
+        self.ded = self.ded.deduce(&self.state, &self.fixed);
+        debug!("{:?}", &self.ded);
 
         MyOpinionsUpd {
             inner: self,
@@ -625,7 +680,7 @@ impl<V: MyFloat> MyOpinions<V> {
         debug!("{:?}", pred_diff);
 
         pred_diff.swap(&mut self.state);
-        let pred_ded = self.ded.deduce(&self.state);
+        let pred_ded = self.ded.deduce(&self.state, &self.fixed);
         (pred_diff, pred_ded)
     }
 }
@@ -685,16 +740,15 @@ mod tests {
         let initial_opinions = toml::from_str::<InitialOpinions<f32>>(&read_to_string(
             "./test/config/test_initial_opinions.toml",
         )?)?;
-        assert_eq!(initial_opinions.simplexes.fphi, SimplexD1::vacuous());
         assert!(matches!(
-            &initial_opinions.conditions.theta_h[0],
+            &initial_opinions.fixed.theta_h[0],
             SimplexDist::Fixed(s) if s.b() == &marr_d1![1.0, 0.0] && s.u() == &0.0,
         ));
         assert!(matches!(
-            &initial_opinions.conditions.theta_h[1],
+            &initial_opinions.fixed.theta_h[1],
             SimplexDist::Fixed(s) if s.b() == &marr_d1![0.0, 0.7] && s.u() == &0.3,
         ));
-        assert!(initial_opinions.base_rates.a == marr_d1![0.999, 0.001]);
+        assert!(initial_opinions.deduction_base_rates.a == marr_d1![0.99, 0.01]);
         Ok(())
     }
 

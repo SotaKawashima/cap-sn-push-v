@@ -26,32 +26,43 @@ corrective = { base = 0.95 } #, error = { dist = { Beta = { alpha = 4.5, beta = 
 observed   = { base = 0.0, error = { dist = "Standard" } }
 inhibitive = { base = 0.0, error = { dist = "Standard", low = 0.5, high = 1.0 } }
 
-[initial_opinions.base_rates]
-psi    = [0.999, 0.001]
-phi    = [0.999, 0.001]
-fpsi   = [0.999, 0.001]
-fphi   = [0.999, 0.001]
-kpsi   = [0.999, 0.001]
-kphi   = [0.999, 0.001]
-o      = [0.999, 0.001]
-a      = [0.999, 0.001]
-b      = [0.999, 0.001]
-h      = [0.999, 0.001]
-fh     = [0.999, 0.001]
-kh     = [0.999, 0.001]
-theta  = [0.999, 0.001]
-thetad = [0.999, 0.001]
+[initial_opinions.deduction_base_rates]
+o      = [0.99, 0.01]
+a      = [0.99, 0.01]
+b      = [0.99, 0.01]
+h      = [0.99, 0.01]
+fh     = [0.99, 0.01]
+kh     = [0.99, 0.01]
+theta  = [0.99, 0.01]
+thetad = [0.99, 0.01]
 
-[initial_opinions.simplexes]
-psi  = [[0.0, 0.0], 1.0]
-phi  = [[0.0, 0.0], 1.0]
-fpsi = [[0.0, 0.0], 1.0]
-fphi = [[0.0, 0.0], 1.0]
-kpsi = [[0.0, 0.0], 1.0]
-kphi = [[0.0, 0.0], 1.0]
-o    = [[0.0, 0.0], 1.0]
+[initial_opinions.state]
+psi  = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+phi  = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+fpsi = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+fphi = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+kpsi = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+kphi = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+o    = [[0.0, 0.0], 1.0, [0.99, 0.01]]
+h_psi_if_phi1 = [
+    [[0.0, 0.0], 1.0],
+    [[0.0, 0.0], 1.0],
+]
+h_b_if_phi1 = [
+    [[0.0, 0.0], 1.0],
+    [[0.0, 0.0], 1.0],
+]
 
-[initial_opinions.conditions]
+fh_fpsi_if_fphi1 = [
+    [[0.0, 0.0], 1.0],
+    [[0.0, 0.0], 1.0],
+]
+kh_kpsi_if_kphi1 = [
+    [[0.0, 0.0], 1.0],
+    [[0.0, 0.0], 1.0],
+]
+
+[initial_opinions.fixed]
 a_fh = [
     { Fixed = [[0.95, 0.00], 0.05] },
     { Fixed = [[0.00, 0.95], 0.05] },
@@ -72,33 +83,16 @@ thetad_h = [
     { Fixed = [[1.0, 0.00], 0.00] },
     { Fixed = [[0.0, 0.70], 0.30] },
 ]
-h_psi_if_phi1 = [
-    [[0.0, 0.0], 1.0],
-    [[0.0, 0.0], 1.0],
-]
-h_b_if_phi1 = [
-    [[0.0, 0.0], 1.0],
-    [[0.0, 0.0], 1.0],
-]
 
-fh_fpsi_if_fphi1 = [
-    [[0.0, 0.0], 1.0],
-    [[0.0, 0.0], 1.0],
-]
-kh_kpsi_if_kphi1 = [
-    [[0.0, 0.0], 1.0],
-    [[0.0, 0.0], 1.0],
-]
-
-[initial_opinions.conditions.params_h_psi_b_if_phi0]
+[initial_opinions.fixed.h_psi_b_if_phi0]
 no_cause  = { Fixed = [[0.95, 0.00], 0.05] }
 by_cause0 = { Fixed = [[0.50, 0.40], 0.10] }
 by_cause1 = { Rel = { coef_b = [5.0, 10.0], coef_u = 5.0, error = 0.00001 } }
 
-[initial_opinions.conditions.params_fh_fpsi_if_fphi0]
+[initial_opinions.fixed.fh_fpsi_if_fphi0]
 Rel = { coef_b = [5.0, 10.0], coef_u = 5.0, error = 0.00001 }
 
-[initial_opinions.conditions.params_kh_kpsi_if_kphi0]
+[initial_opinions.fixed.kh_kpsi_if_kphi0]
 Abs = [
     { Fixed = [[0.95, 0.00], 0.05] },
     { Fixed = [[0.60, 0.30], 0.10] },

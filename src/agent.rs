@@ -175,10 +175,10 @@ struct Decision<V: Float> {
 impl<V: MyFloat> Decision<V> {
     fn values_selfish(&self, ded: &DeducedOpinions<V>) -> [V; 2] {
         let p_theta = ded.p_theta();
-        debug!(target: "    TH", P = ?p_theta);
+        info!(target: "    TH", P = ?p_theta);
         let values: [V; 2] =
             array::from_fn(|i| self.cpt.valuate(&self.prospect.selfish[i], &p_theta));
-        debug!(target: "     X", V = ?values);
+        info!(target: "     X", V = ?values);
         values
     }
 
@@ -187,7 +187,7 @@ impl<V: MyFloat> Decision<V> {
             upd.decide1(|ded| {
                 self.selfish_status
                     .decide(self.values_selfish(ded), self.delay_selfish);
-                debug!(target: "selfsh", status = ?self.selfish_status);
+                info!(target: "selfsh", status = ?self.selfish_status);
             });
         }
     }
@@ -208,9 +208,9 @@ impl<V: MyFloat> Decision<V> {
                     self.cpt
                         .valuate(&self.prospect.sharing[1], &pred_ded.p_a_thetad()),
                 ];
-                debug!(target: "     Y", V = ?values);
+                info!(target: "     Y", V = ?values);
                 sharing_status.decide(values);
-                debug!(target: "sharng", status = ?sharing_status);
+                info!(target: "sharng", status = ?sharing_status);
                 sharing_status.is_done()
             })
         }
@@ -331,7 +331,7 @@ where
 
     pub fn progress_selfish_status(&mut self) -> bool {
         let p = self.decision.selfish_status.progress();
-        debug!(target: "selfsh", status = ?self.decision.selfish_status);
+        info!(target: "selfsh", status = ?self.decision.selfish_status);
         p
     }
 
