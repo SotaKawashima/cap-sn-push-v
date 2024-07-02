@@ -703,8 +703,8 @@ impl<V: Float> BaseOpinions<V> {
             &base_rates.psi,
             &base_rates.b,
             &base_rates.h,
-        )
-        .unwrap_or_else(|| MArrD2::new(vec![self.h_b_if_phi1.clone(), self.h_b_if_phi1.clone()]));
+        );
+        // .unwrap_or_else(|| MArrD2::new(vec![self.h_b_if_phi1.clone(), self.h_b_if_phi1.clone()]));
 
         let cond_h =
             MArrD3::<Phi, _, _, _>::new(vec![conds.h_psi_b_if_phi0.clone(), h_psi_b_if_phi1]);
@@ -815,13 +815,13 @@ impl<V: Float> CollectiveOpinions<V> {
             &base_rates.kpsi,
             &base_rates.kb,
             &base_rates.kh,
-        )
-        .unwrap_or_else(|| {
-            MArrD2::new(vec![
-                self.kh_kb_if_kphi1.clone(),
-                self.kh_kb_if_kphi1.clone(),
-            ])
-        });
+        );
+        // .unwrap_or_else(|| {
+        //     MArrD2::new(vec![
+        //         self.kh_kb_if_kphi1.clone(),
+        //         self.kh_kb_if_kphi1.clone(),
+        //     ])
+        // });
         let cond_kh = MArrD3::<KPhi, _, _, _>::new(vec![
             conds.kh_kpsi_kb_if_kpsi0.clone(),
             kh_kpsi_kb_if_kpsi1,
@@ -974,13 +974,13 @@ impl<V: Float> FriendOpinions<V> {
             &base_rates.fpsi,
             &base_rates.fb,
             &base_rates.fh,
-        )
-        .unwrap_or_else(|| {
-            MArrD2::new(vec![
-                self.fh_fb_if_fphi1.clone(),
-                self.fh_fb_if_fphi1.clone(),
-            ])
-        });
+        );
+        // .unwrap_or_else(|| {
+        //     MArrD2::new(vec![
+        //         self.fh_fb_if_fphi1.clone(),
+        //         self.fh_fb_if_fphi1.clone(),
+        //     ])
+        // });
         let cond_fh =
             MArrD3::<FPhi, _, _, _>::new(vec![conds.fh_fpsi_fb_if_fpsi0.clone(), fh_fpsi_fb_fpsi1]);
         let mw = OpinionD3::product3(&self.fphi, fb, fpsi);
@@ -1224,20 +1224,19 @@ where
             &base_rates.base.psi,
             &base_rates.base.b,
             &base_rates.base.h,
-        )
-        .expect("failed to merge into Psi,B,phi0=>H");
+        );
+        // .expect("failed to merge into Psi,B,phi0=>H");
 
-        let b_o = o_b
-            .inverse(&base_rates.base.b, &base_rates.base.o)
-            .expect("failed to invert B=>O");
+        let b_o = o_b.inverse(&base_rates.base.b, &base_rates.base.o);
+        // .expect("failed to invert B=>O");
         let b_kh_o = MArrD1::<B, _>::merge_cond2(
             &b_kh,
             &b_o,
             &base_rates.social.kh,
             &base_rates.base.o,
             &base_rates.base.b,
-        )
-        .expect("failed to merge into KH,O=>B");
+        );
+        // .expect("failed to merge into KH,O=>B");
 
         Self {
             a_fh,
@@ -1275,20 +1274,19 @@ impl<V: MyFloat> FriendConditionalOpinions<V> {
             &base_rates.fpsi,
             &base_rates.fb,
             &base_rates.fh,
-        )
-        .expect("failed to merge into FPsi,FB,Fpsi0=>FH");
+        );
+        // .expect("failed to merge into FPsi,FB,Fpsi0=>FH");
 
-        let fb_fo = fo_fb
-            .inverse(&base_rates.fb, &base_rates.fo)
-            .expect("failed to invert FB=>FO");
+        let fb_fo = fo_fb.inverse(&base_rates.fb, &base_rates.fo);
+        // .expect("failed to invert FB=>FO");
         let fb_fm_fo = MArrD1::<FB, _>::merge_cond2(
             &fb_fm,
             &fb_fo,
             &base_rates.fm,
             &base_rates.fo,
             &base_rates.fb,
-        )
-        .expect("failed to merge into FM,FO=>FB");
+        );
+        // .expect("failed to merge into FM,FO=>FB");
 
         Self {
             fb_fm_fo,
@@ -1324,20 +1322,19 @@ impl<V: MyFloat> SocialConditionalOpinions<V> {
             &base_rates.kpsi,
             &base_rates.kb,
             &base_rates.kh,
-        )
-        .expect("failed to merge into KPsi,KB,Kpsi0=>KH");
+        );
+        // .expect("failed to merge into KPsi,KB,Kpsi0=>KH");
 
-        let kb_ko = ko_kb
-            .inverse(&base_rates.kb, &base_rates.ko)
-            .expect("failed to invert KB=>KO");
+        let kb_ko = ko_kb.inverse(&base_rates.kb, &base_rates.ko);
+        // .expect("failed to invert KB=>KO");
         let kb_km_ko = MArrD1::<KB, _>::merge_cond2(
             &kb_km,
             &kb_ko,
             &base_rates.km,
             &base_rates.ko,
             &base_rates.kb,
-        )
-        .expect("failed to merge into KM,KO=>KB");
+        );
+        // .expect("failed to merge into KM,KO=>KB");
 
         Self {
             kpsi_m,

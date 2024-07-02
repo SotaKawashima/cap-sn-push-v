@@ -388,47 +388,26 @@ impl<V: MyFloat> StateOpinions<V> {
         b: &MArrD1<B, V>,
         h: &MArrD1<H, V>,
     ) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
-        let Some(h_psi_b_if_phi0) = MArrD1::<H, _>::merge_cond2(
+        let h_psi_b_if_phi0 = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi0,
             &self.h_b_if_phi0,
             &self.psi.base_rate,
             b,
             h,
-        ) else {
-            tracing::error!("failed to merge into h_psi_if_phi0");
-            panic!("failed to merge");
-        };
-        let Some(h_psi_b_if_phi1) = MArrD1::<H, _>::merge_cond2(
+        );
+        let h_psi_b_if_phi1 = MArrD1::<H, _>::merge_cond2(
             &self.h_psi_if_phi1,
             &self.h_b_if_phi1,
             &self.psi.base_rate,
             b,
             h,
-        ) else {
-            tracing::error!("failed to merge into h_psi_if_phi1");
-            panic!("failed to merge");
-        };
+        );
         MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
     }
 
     fn b_kh_o(&self, b: &MArrD1<B, V>, kh: &MArrD1<KH, V>) -> MArrD2<KH, O, SimplexD1<B, V>> {
-        let b_o = self
-            .o_b
-            .inverse(b, &self.o.base_rate)
-            .expect("failed to invert B=>O");
-        let Some(b_kh_o) = MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b)
-        else {
-            tracing::error!(
-                "failed to merge {:?} & {:?} & {:?} & {:?} & {:?}",
-                &self.b_kh,
-                &b_o,
-                &kh,
-                &self.o.base_rate,
-                &b
-            );
-            panic!("failed to merge");
-        };
-
+        let b_o = self.o_b.inverse(b, &self.o.base_rate);
+        let b_kh_o = MArrD1::<B, _>::merge_cond2(&self.b_kh, &b_o, kh, &self.o.base_rate, b);
         b_kh_o
     }
 
@@ -498,20 +477,20 @@ impl<V: MyFloat> StateOpinions<V> {
 impl<V: MyFloat> DeducedOpinions<V> {
     fn deduce(&self, state: &StateOpinions<V>) -> Self {
         let kh = OpinionD2::product2(&state.kphi, &state.kpsi)
-            .deduce_with(&state.kh_kphi_kpsi, self.kh.base_rate.clone());
-        let b = OpinionD2::product2(&kh, &state.o).deduce_with(
-            &state.b_kh_o(&self.b.base_rate, &kh.base_rate),
-            self.b.base_rate.clone(),
-        );
-        let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(
-            &state.h_phi_psi_b(&b.base_rate, &self.h.base_rate),
-            self.h.base_rate.clone(),
-        );
+            .deduce_with(&state.kh_kphi_kpsi, || self.kh.base_rate.clone());
+        let b = OpinionD2::product2(&kh, &state.o)
+            .deduce_with(&state.b_kh_o(&self.b.base_rate, &kh.base_rate), || {
+                self.b.base_rate.clone()
+            });
+        let h = OpinionD3::product3(&state.phi, &state.psi, &b)
+            .deduce_with(&state.h_phi_psi_b(&b.base_rate, &self.h.base_rate), || {
+                self.h.base_rate.clone()
+            });
         let fh = OpinionD2::product2(&state.fphi, &state.fpsi)
-            .deduce_with(&state.fh_fphi_fpsi, self.fh.base_rate.clone());
-        let a = fh.deduce_with(&state.a_fh, self.a.base_rate.clone());
-        let theta = h.deduce_with(&state.theta_h, self.theta.base_rate.clone());
-        let thetad = h.deduce_with(&state.thetad_h, self.thetad.base_rate.clone());
+            .deduce_with(&state.fh_fphi_fpsi, || self.fh.base_rate.clone());
+        let a = fh.deduce_with(&state.a_fh, || self.a.base_rate.clone());
+        let theta = h.deduce_with(&state.theta_h, || self.theta.base_rate.clone());
+        let thetad = h.deduce_with(&state.thetad_h, || self.thetad.base_rate.clone());
 
         Self {
             h,
@@ -726,7 +705,7 @@ mod tests {
         cf: &MArrD1<FPsi, SimplexD1<FH, V>>,
         ah: &MArrD1<H, V>,
     ) {
-        let h = psi.deduce_with(c, ah.clone());
+        let h = psi.deduce_with(c, || ah.clone());
         let fh = fpsi.deduce(cf);
         println!("h {:?}", h);
         println!("Ph {:?}", h.projection());
@@ -807,7 +786,7 @@ mod tests {
                     FuseOp::Wgh.fuse_assign(&mut self.fpsi, &est_m);
                 }
             }
-            let h = self.psi.deduce_with(&self.c, self.ah.clone());
+            let h = self.psi.deduce_with(&self.c, || self.ah.clone());
             let fh = self.fpsi.deduce(&self.cf).unwrap();
             println!("-");
             println!("psi {:?}", self.psi);
@@ -847,9 +826,9 @@ mod tests {
             V: Float + Debug + Sum + UlpsEq + NumAssign,
         {
             let cf0 = OpinionD1::new(marr_d1![V::one(), V::zero()], V::zero(), apsi.clone())
-                .deduce_with(c, ah.clone());
+                .deduce_with(c, || ah.clone());
             let cf1 = OpinionD1::new(marr_d1![V::zero(), V::one()], V::zero(), apsi.clone())
-                .deduce_with(c, ah.clone());
+                .deduce_with(c, || ah.clone());
             let cf = MArrD1::new(vec![cf0.simplex.conv(), cf1.simplex.conv()]);
             cf
         }
