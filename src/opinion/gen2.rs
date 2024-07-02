@@ -16,10 +16,11 @@ use subjective_logic::{
 use tracing::debug;
 
 use crate::info::gen2::InfoContent;
+use crate::value::{EValue, EValueParam};
 
 use super::{
     paramter::{ConditionParams, DependentParam, SimplexDist, SimplexParam},
-    FPhi, FPsi, KPhi, KPsi, MyFloat, Phi, Psi, Theta, Thetad, A, B, FH, H, KH, O,
+    FPhi, FPsi, KPhi, KPsi, MyFloat, Phi, Psi, Theta, Thetad, A, B, FH, FO, H, KH, KO, O,
 };
 
 #[serde_as]
@@ -52,6 +53,10 @@ struct InitialState<V: MyFloat> {
     phi: OpinionD1<Phi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     o: OpinionD1<O, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    fo: OpinionD1<FO, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    ko: OpinionD1<KO, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     fpsi: OpinionD1<FPsi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
@@ -104,6 +109,11 @@ where
     /// parameters of conditional opinions $\Psi^K \implies H^K$ when $\phi^K_0$ is true
     #[serde_as(as = "TryFromInto<DependentParam<KH, V, Vec<SimplexParam<V>>>>")]
     kh_kpsi_if_kphi0: DependentParam<KH, V, Vec<SimplexDist<KH, V>>>,
+
+    #[serde_as(as = "TryFromInto<Vec<EValueParam<V>>>")]
+    uncertainty_fh_fo_if_fphi0: MArrD1<FO, EValue<V>>,
+    #[serde_as(as = "TryFromInto<Vec<EValueParam<V>>>")]
+    uncertainty_fh_fo_if_fphi1: MArrD1<FO, EValue<V>>,
 }
 
 #[serde_as]
@@ -127,6 +137,8 @@ struct StateOpinions<V: MyFloat> {
     psi: OpinionD1<Psi, V>,
     phi: OpinionD1<Phi, V>,
     o: OpinionD1<O, V>,
+    fo: OpinionD1<FO, V>,
+    ko: OpinionD1<KO, V>,
     h_psi_if_phi1: MArrD1<Psi, SimplexD1<H, V>>,
     h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
     fpsi: OpinionD1<FPsi, V>,
@@ -148,6 +160,8 @@ struct FixedOpinions<V: MyFloat> {
     h_b_if_phi0: MArrD1<B, SimplexD1<H, V>>,
     fh_fpsi_if_fphi0: MArrD1<FPsi, SimplexD1<FH, V>>,
     kh_kpsi_if_kphi0: MArrD1<KPsi, SimplexD1<KH, V>>,
+    uncertainty_fh_fo_if_fphi0: MArrD1<FO, V>,
+    uncertainty_fh_fo_if_fphi1: MArrD1<FO, V>,
 }
 
 #[derive(Debug)]
@@ -159,6 +173,8 @@ enum DiffOpinions<V: MyFloat> {
     },
     Observed {
         o: OpinionD1<O, V>,
+        fo: OpinionD1<FO, V>,
+        ko: OpinionD1<KO, V>,
     },
     Inhibition {
         phi: OpinionD1<Phi, V>,
@@ -176,11 +192,13 @@ enum PredDiffOpinions<V: MyFloat> {
     Causal {
         fpsi: OpinionD1<FPsi, V>,
     },
+    Observed {
+        fo: OpinionD1<FO, V>,
+    },
     Inhibition {
         fphi: OpinionD1<FPhi, V>,
         fh_fpsi_if_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
     },
-    None,
 }
 
 #[derive(Debug, Default)]
@@ -240,43 +258,6 @@ fn transform_simplex<
     SimplexD1::new_unchecked(MArrD1::from_fn(|i| q[i] * e), V::one() - e)
 }
 
-fn merge_fh<'a, V: MyFloat>(
-    state: &'a StateOpinions<V>,
-    fixed: &'a FixedOpinions<V>,
-) -> MArrD2<FPhi, FPsi, &'a SimplexD1<FH, V>> {
-    let fh_fphi_fpsi = MArrD2::new(vec![
-        fixed.fh_fpsi_if_fphi0.as_ref(),
-        state.fh_fpsi_if_fphi1.as_ref(),
-    ]);
-    debug!("{:?}", fh_fphi_fpsi);
-    fh_fphi_fpsi
-}
-
-fn merge_kh<'a, V: MyFloat>(
-    state: &'a StateOpinions<V>,
-    fixed: &'a FixedOpinions<V>,
-) -> MArrD2<KPhi, KPsi, &'a SimplexD1<KH, V>> {
-    let kh_kphi_kpsi = MArrD2::new(vec![
-        fixed.kh_kpsi_if_kphi0.as_ref(),
-        state.kh_kpsi_if_kphi1.as_ref(),
-    ]);
-    debug!("{:?}", kh_kphi_kpsi);
-    kh_kphi_kpsi
-}
-
-fn merge_h<V: MyFloat>(
-    state: &StateOpinions<V>,
-    fixed: &FixedOpinions<V>,
-    b: &MArrD1<B, V>,
-    h: &MArrD1<H, V>,
-) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
-    let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, b, h);
-    let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(b, h);
-    let h_phi_psi_b = MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1]);
-    debug!("{:?}", h_phi_psi_b);
-    h_phi_psi_b
-}
-
 impl<V: MyFloat> StateOpinions<V> {
     fn receive(
         &self,
@@ -305,7 +286,9 @@ impl<V: MyFloat> StateOpinions<V> {
             InfoContent::Observation { op } => {
                 let op = op.discount(trusts.info);
                 let o = FuseOp::Wgh.fuse(&self.o, &op);
-                DiffOpinions::Observed { o }
+                let fo = FuseOp::Wgh.fuse(&self.fo, &transform(op.as_ref(), trusts.friend));
+                let ko = FuseOp::Wgh.fuse(&self.ko, &transform(op.as_ref(), trusts.social));
+                DiffOpinions::Observed { o, fo, ko }
             }
             InfoContent::Inhibition { op1, op2, op3 } => {
                 let op1_dsc = op1.discount(trusts.info);
@@ -371,6 +354,13 @@ impl<V: MyFloat> StateOpinions<V> {
                 );
                 PredDiffOpinions::Causal { fpsi }
             }
+            InfoContent::Observation { op } => {
+                let fo = FuseOp::Wgh.fuse(
+                    &self.fo,
+                    &transform(op.discount(trusts.info).as_ref(), trusts.pred_friend),
+                );
+                PredDiffOpinions::Observed { fo }
+            }
             InfoContent::Correction { op, .. } => {
                 let fpsi = FuseOp::Wgh.fuse(
                     &self.fpsi,
@@ -400,7 +390,6 @@ impl<V: MyFloat> StateOpinions<V> {
                     fh_fpsi_if_fphi1,
                 }
             }
-            _ => PredDiffOpinions::None,
         }
     }
 
@@ -430,6 +419,8 @@ impl<V: MyFloat> StateOpinions<V> {
             psi,
             phi,
             o,
+            fo,
+            ko,
             fpsi,
             fphi,
             kpsi,
@@ -444,6 +435,8 @@ impl<V: MyFloat> StateOpinions<V> {
             psi,
             phi,
             o,
+            fo,
+            ko,
             h_psi_if_phi1,
             h_b_if_phi1,
             fpsi,
@@ -517,24 +510,163 @@ impl<V: MyFloat> FixedOpinions<V> {
             h_psi_if_phi0,
             fh_fpsi_if_fphi0,
             kh_kpsi_if_kphi0,
+            uncertainty_fh_fo_if_fphi0: MArrD1::from_fn(|i| {
+                fixed.uncertainty_fh_fo_if_fphi0[i].sample(rng)
+            }),
+            uncertainty_fh_fo_if_fphi1: MArrD1::from_fn(|i| {
+                fixed.uncertainty_fh_fo_if_fphi1[i].sample(rng)
+            }),
         }
     }
 }
 
+fn deduce_fh<V: MyFloat>(
+    state: &StateOpinions<V>,
+    fixed: &FixedOpinions<V>,
+    b_o: &MArrD1<O, SimplexD1<B, V>>,
+    b: &MArrD1<B, V>,
+    h: &MArrD1<H, V>,
+    fh: &MArrD1<FH, V>,
+) -> OpinionD1<FH, V> {
+    let fh_fo_if_fphi0 = MArrD1::<FO, _>::from_fn(|fo| {
+        transform_simplex::<_, FH, _>(
+            OpinionRefD1::from((&b_o[fo], b))
+                .deduce_with(&fixed.h_b_if_phi0, || h.clone())
+                .projection(),
+            fixed.uncertainty_fh_fo_if_fphi0[fo],
+        )
+    });
+    let fh_fo_if_fphi1 = MArrD1::<FO, _>::from_fn(|fo| {
+        transform_simplex::<_, FH, _>(
+            OpinionRefD1::from((&b_o[fo], b))
+                .deduce_with(&state.h_b_if_phi1, || h.clone())
+                .projection(),
+            fixed.uncertainty_fh_fo_if_fphi1[fo],
+        )
+    });
+    let fh_fpsi_fo_if_fphi0 = MArrD1::<FH, _>::merge_cond2(
+        &fixed.fh_fpsi_if_fphi0,
+        &fh_fo_if_fphi0,
+        &state.fpsi.base_rate,
+        &state.fo.base_rate,
+        fh,
+    );
+    let fh_fpsi_fo_if_fphi1 = MArrD1::<FH, _>::merge_cond2(
+        &state.fh_fpsi_if_fphi1,
+        &fh_fo_if_fphi1,
+        &state.fpsi.base_rate,
+        &state.fo.base_rate,
+        fh,
+    );
+    let fh_fphi_fpsi_fo =
+        MArrD3::<FPhi, FPsi, FO, _>::new(vec![fh_fpsi_fo_if_fphi0, fh_fpsi_fo_if_fphi1]);
+
+    debug!("{:?}", fh_fphi_fpsi_fo);
+
+    let fh = OpinionD3::product3(&state.fphi, &state.fpsi, &state.fo)
+        .deduce_with(&fh_fphi_fpsi_fo, || fh.clone());
+    fh
+}
+
+fn deduce_kh<V: MyFloat>(
+    state: &StateOpinions<V>,
+    fixed: &FixedOpinions<V>,
+    b_o: &MArrD1<O, SimplexD1<B, V>>,
+    b: &MArrD1<B, V>,
+    h: &MArrD1<H, V>,
+    kh: &MArrD1<KH, V>,
+) -> OpinionD1<KH, V> {
+    let kh_ko_if_kphi0 = MArrD1::<KO, _>::from_fn(|ko| {
+        transform_simplex::<_, KH, _>(
+            OpinionRefD1::from((&b_o[ko], b))
+                .deduce_with(&fixed.h_b_if_phi0, || h.clone())
+                .projection(),
+            V::zero(),
+        )
+    });
+    let kh_ko_if_kphi1 = MArrD1::<KO, _>::from_fn(|ko| {
+        transform_simplex::<_, KH, _>(
+            OpinionRefD1::from((&b_o[ko], b))
+                .deduce_with(&state.h_b_if_phi1, || h.clone())
+                .projection(),
+            V::zero(),
+        )
+    });
+    let kh_kpsi_ko_if_kphi0 = MArrD1::<KH, _>::merge_cond2(
+        &fixed.kh_kpsi_if_kphi0,
+        &kh_ko_if_kphi0,
+        &state.kpsi.base_rate,
+        &state.ko.base_rate,
+        kh,
+    );
+    let kh_kpsi_ko_if_kphi1 = MArrD1::<KH, _>::merge_cond2(
+        &state.kh_kpsi_if_kphi1,
+        &kh_ko_if_kphi1,
+        &state.kpsi.base_rate,
+        &state.ko.base_rate,
+        kh,
+    );
+    let kh_kphi_kpsi_ko =
+        MArrD3::<KPhi, KPsi, KO, _>::new(vec![kh_kpsi_ko_if_kphi0, kh_kpsi_ko_if_kphi1]);
+
+    debug!("{:?}", kh_kphi_kpsi_ko);
+
+    let kh = OpinionD3::product3(&state.kphi, &state.kpsi, &state.ko)
+        .deduce_with(&kh_kphi_kpsi_ko, || kh.clone());
+    kh
+}
+
+fn deduce_b<V: MyFloat>(
+    state: &StateOpinions<V>,
+    fixed: &FixedOpinions<V>,
+    b_o: &MArrD1<O, SimplexD1<B, V>>,
+    kh: &OpinionD1<KH, V>,
+    b: &MArrD1<B, V>,
+) -> OpinionD1<B, V> {
+    let b_kh_o =
+        MArrD1::<B, _>::merge_cond2(&fixed.b_kh, b_o, &kh.base_rate, &state.o.base_rate, b);
+    debug!("{:?}", b_kh_o);
+    let b = OpinionD2::product2(kh, &state.o).deduce_with(&b_kh_o, || b.clone());
+    b
+}
+
+fn deduce_h<V: MyFloat>(
+    state: &StateOpinions<V>,
+    fixed: &FixedOpinions<V>,
+    b: &OpinionD1<B, V>,
+    h: &MArrD1<H, V>,
+) -> OpinionD1<H, V> {
+    let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, &b.base_rate, h);
+    let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(&b.base_rate, h);
+    let h_phi_psi_b = MArrD3::<Phi, _, _, _>::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1]);
+    debug!("{:?}", h_phi_psi_b);
+
+    let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(&h_phi_psi_b, || h.clone());
+    h
+}
+
 impl<V: MyFloat> DeducedOpinions<V> {
     fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> Self {
-        let kh = OpinionD2::product2(&state.kphi, &state.kpsi)
-            .deduce_with(&merge_kh(state, fixed), || self.kh.base_rate.clone());
-        let b = OpinionD2::product2(&kh, &state.o).deduce_with(
-            &fixed.b_kh_o(&self.b.base_rate, &kh.base_rate, &state.o.base_rate),
-            || self.b.base_rate.clone(),
+        let ab = &self.b.base_rate;
+        let b_o = fixed.o_b.inverse(ab, &state.o.base_rate);
+        let fh = deduce_fh(
+            state,
+            fixed,
+            &b_o,
+            &self.b.base_rate,
+            &self.h.base_rate,
+            &self.fh.base_rate,
         );
-        let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(
-            &merge_h(state, fixed, &b.base_rate, &self.h.base_rate),
-            || self.h.base_rate.clone(),
+        let kh = deduce_kh(
+            state,
+            fixed,
+            &b_o,
+            &self.b.base_rate,
+            &self.h.base_rate,
+            &self.kh.base_rate,
         );
-        let fh = OpinionD2::product2(&state.fphi, &state.fpsi)
-            .deduce_with(&merge_fh(state, fixed), || self.fh.base_rate.clone());
+        let b = deduce_b(state, fixed, &b_o, &kh, &self.b.base_rate);
+        let h = deduce_h(state, fixed, &b, &self.h.base_rate);
         let a = fh.deduce_with(&fixed.a_fh, || self.a.base_rate.clone());
         let theta = h.deduce_with(&fixed.theta_h, || self.theta.base_rate.clone());
         let thetad = h.deduce_with(&fixed.thetad_h, || self.thetad.base_rate.clone());
@@ -588,8 +720,10 @@ impl<V: MyFloat> DiffOpinions<V> {
                 mem::swap(&mut state.fpsi, fpsi);
                 mem::swap(&mut state.kpsi, kpsi);
             }
-            DiffOpinions::Observed { o } => {
+            DiffOpinions::Observed { o, fo, ko } => {
                 mem::swap(&mut state.o, o);
+                mem::swap(&mut state.fo, fo);
+                mem::swap(&mut state.ko, ko);
             }
             DiffOpinions::Inhibition {
                 phi,
@@ -618,6 +752,9 @@ impl<V: MyFloat> PredDiffOpinions<V> {
             PredDiffOpinions::Causal { fpsi } => {
                 mem::swap(fpsi, &mut state.fpsi);
             }
+            PredDiffOpinions::Observed { fo } => {
+                mem::swap(fo, &mut state.fo);
+            }
             PredDiffOpinions::Inhibition {
                 fphi,
                 fh_fpsi_if_fphi1,
@@ -625,7 +762,6 @@ impl<V: MyFloat> PredDiffOpinions<V> {
                 mem::swap(fphi, &mut state.fphi);
                 mem::swap(fh_fpsi_if_fphi1, &mut state.fh_fpsi_if_fphi1);
             }
-            PredDiffOpinions::None => {}
         }
     }
 }

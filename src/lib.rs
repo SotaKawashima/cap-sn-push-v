@@ -286,7 +286,7 @@ where
                         - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
                         .powf(self.scenario.mean_degree);
 
-                debug!(target: "  recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
+                debug!(target: "recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
 
                 if rng.gen::<V>() > agent.access_prob() {
                     continue;

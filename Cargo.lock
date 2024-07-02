@@ -1915,8 +1915,8 @@ dependencies = [
 
 [[package]]
 name = "subjective-logic"
-version = "0.9.16"
-source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.9.16#92a3cf1afb82a9c5132313cb9e7d6da3e1226df9"
+version = "0.9.17"
+source = "git+https://github.com/shinomi-lab/subjective-logic.git?tag=v0.9.17#4f67a01c470a71ae9c945cbe510575b3247d0c4b"
 dependencies = [
  "approx",
  "itertools",
