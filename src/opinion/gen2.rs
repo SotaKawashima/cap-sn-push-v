@@ -725,13 +725,13 @@ mod tests {
     use subjective_logic::domain::DomainConv;
     use subjective_logic::iter::FromFn;
     use subjective_logic::mul::labeled::OpinionD1;
-    use subjective_logic::mul::mbr;
+    use subjective_logic::mul::{mbr, MergeJointConditions2};
     use subjective_logic::multi_array::labeled::MArrD1;
     use subjective_logic::ops::{Deduction, Discount, FuseAssign, FuseOp, Projection};
     use subjective_logic::{marr_d1, mul::labeled::SimplexD1};
 
     use crate::opinion::gen2::transform;
-    use crate::opinion::{FPsi, MyFloat, Psi, FH, H};
+    use crate::opinion::{FPsi, MyFloat, Psi, B, FH, H};
 
     use super::super::paramter::SimplexDist;
     use super::InitialOpinions;
@@ -940,5 +940,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn merge() {
+        let h_psi_if_phi0 = marr_d1!(Psi; [
+            SimplexD1::new(marr_d1!(H; [0.95f32, 0.01]), 0.04),
+            SimplexD1::new(marr_d1!(H; [0.01, 0.95]), 0.04),
+        ]);
+
+        let h_b_if_phi0 = marr_d1!(B; [
+            SimplexD1::new(marr_d1!(H; [0.95, 0.01]), 0.04),
+            SimplexD1::new(marr_d1!(H; [1.8101491e-5, 0.9998891]),9.2769165e-5),
+        ]);
+        // let h_psi_if_phi1 = marr_d1!(Psi; [SimplexD1::vacuous(), SimplexD1::vacuous()]);
+        // let h_b_if_phi1 = marr_d1!(Psi; [SimplexD1::vacuous(), SimplexD1::vacuous()]);
+
+        let psi = marr_d1!(Psi; [0.1, 0.9]);
+        let b = marr_d1!(B; [0.5, 0.5]);
+        let h = marr_d1!(H; [0.99, 0.01]);
+        let c = MArrD1::<H, _>::merge_cond2(&h_psi_if_phi0, &h_b_if_phi0, &psi, &b, &h);
+
+        println!("{:?}", c);
     }
 }
