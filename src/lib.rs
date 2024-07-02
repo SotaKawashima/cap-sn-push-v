@@ -210,8 +210,10 @@ where
     }
 
     fn execute<R: Rng>(&mut self, num_iter: u32, mut rng: R) -> Vec<Stat> {
+        let span = span!(Level::INFO, "iter", i = num_iter);
+        let _guard = span.enter();
         for (idx, agent) in self.agents.iter_mut().enumerate() {
-            let span = span!(Level::DEBUG, "init A", "#" = idx);
+            let span = span!(Level::INFO, "init", "#" = idx);
             let _guard = span.enter();
             agent.reset(&self.agent_params, &mut rng);
         }
@@ -231,7 +233,7 @@ where
 
         while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
         {
-            let span = span!(Level::INFO, "st", i = num_iter, t);
+            let span = span!(Level::INFO, "step", t);
             let _guard = span.enter();
             let mut pop_data = PopData::default();
 
