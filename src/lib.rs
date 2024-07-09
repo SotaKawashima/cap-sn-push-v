@@ -249,7 +249,7 @@ where
 
                     let span = span!(Level::INFO, "IA", "#" = agent_idx);
                     let _guard = span.enter();
-                    debug!(target: "  recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
+                    debug!(target: "recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
 
                     let agent = &mut self.agents[agent_idx];
                     agent.set_info_opinions(&info);
