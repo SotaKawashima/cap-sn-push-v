@@ -71,7 +71,7 @@ where
     pub info_objects: Vec<InfoContent<V>>,
     /// time -> Inform
     pub table: BTreeMap<u32, VecDeque<Inform>>,
-    pub observer: Option<Observer<V>>,
+    pub observer: Option<Observer>,
     pub fnum_nodes: V,
     pub mean_degree: V,
     pub num_nodes: usize,
@@ -98,11 +98,11 @@ struct ObserverParam<V: MyFloat> {
 }
 
 #[derive(Debug)]
-pub struct Observer<V> {
+pub struct Observer {
     // pub observer_pop_rate: V,
     pub observed_info_obj_idx: usize,
-    /// number of times to try to send observed info in a step
-    pub k: V,
+    /// number of times to try to send observed info in a step (no duplication)
+    pub k: usize,
 }
 
 impl<V> TryFrom<ScenarioParam<V>> for Scenario<V>
@@ -145,7 +145,7 @@ where
                  observer_pop_rate,
                  observed_info,
              }| {
-                let k = fnum_nodes * observer_pop_rate;
+                let k = (fnum_nodes * observer_pop_rate).round().to_usize().unwrap();
                 info_objects.push(InfoContent::Observation { op: observed_info });
                 Observer {
                     // observer_pop_rate,
@@ -207,7 +207,7 @@ mod tests {
         );
 
         let observer = scenario.observer.unwrap();
-        assert_eq!(observer.k, 0.01 * 12.0);
+        assert_eq!(observer.k, 0);
         assert_eq!(observer.observed_info_obj_idx, 3);
         assert!(matches!(
             &scenario.info_objects[observer.observed_info_obj_idx],

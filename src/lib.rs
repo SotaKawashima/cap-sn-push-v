@@ -281,20 +281,20 @@ where
                 let span = span!(Level::INFO, "SA", "#" = agent_idx);
                 let _guard = span.enter();
 
-                let friend_receipt_prob = V::one()
+                let receipt_prob = V::one()
                     - (V::one()
                         - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
                         .powf(self.scenario.mean_degree);
 
-                debug!(target: "recv", l = ?info_label, "#" = info_idx, r = ?friend_receipt_prob);
+                debug!(target: "recv", l = ?info_label, "#" = info_idx, r = ?receipt_prob);
 
-                if rng.gen::<V>() > agent.access_prob() {
+                if rng.gen::<V>() >= agent.access_prob() {
                     continue;
                 }
 
                 let b = agent.read_info(
                     info,
-                    friend_receipt_prob,
+                    receipt_prob,
                     &self.agent_params.trust_params,
                     &mut rng,
                 );
@@ -342,12 +342,10 @@ where
             // register observer agents
             if let Some(observer) = &self.scenario.observer {
                 if pop_data.num_selfish > 0 {
-                    // E[k] = observer.k
-                    let k = observer.k.trunc().to_usize().unwrap()
-                        + if observer.k.fract() > rng.gen() { 1 } else { 0 };
                     let observer_prob =
                         V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
-                    for agent_idx in rand::seq::index::sample(&mut rng, self.scenario.num_nodes, k)
+                    for agent_idx in
+                        rand::seq::index::sample(&mut rng, self.scenario.num_nodes, observer.k)
                     {
                         if observer_prob > rng.gen() {
                             let informs = event_table.entry(t + 1).or_default();

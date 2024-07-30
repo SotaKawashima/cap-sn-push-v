@@ -81,7 +81,7 @@ pub struct Agent<V: MyFloat> {
 struct Trust<V: Float> {
     friend_access_prob: V,
     social_access_prob: V,
-    friend_arrival_rate: V,
+    friend_arrival_prob: V,
     info_trust_map: BTreeMap<usize, V>,
     corr_misinfo_trust_map: BTreeMap<usize, V>,
     misinfo_friend: V,
@@ -99,7 +99,7 @@ impl<V: Float> Trust<V> {
     {
         self.friend_access_prob = trust_params.friend_access_prob.sample(rng);
         self.social_access_prob = trust_params.social_access_prob.sample(rng);
-        self.friend_arrival_rate = trust_params.friend_arrival_prob.sample(rng);
+        self.friend_arrival_prob = trust_params.friend_arrival_prob.sample(rng);
         self.misinfo_friend = trust_params.friend_misinfo_trust.sample(rng);
         self.misinfo_social = trust_params.social_misinfo_trust.sample(rng);
         self.info_trust_map.clear();
@@ -117,7 +117,7 @@ impl<V: Float> Trust<V> {
             social: V::zero(),
             pi_friend: V::one(),
             pi_social: V::one(),
-            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
+            pred_friend: self.friend_access_prob * self.friend_arrival_prob,
         }
     }
 
@@ -158,7 +158,7 @@ impl<V: Float> Trust<V> {
             social: self.social_access_prob * receipt_prob,
             pi_friend: self.misinfo_friend,
             pi_social: self.misinfo_social,
-            pred_friend: self.friend_arrival_rate * self.friend_access_prob,
+            pred_friend: self.friend_access_prob * self.friend_arrival_prob,
         }
     }
 }
