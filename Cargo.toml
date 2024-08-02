@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "base", "input", "v1"
-]
+, "v2"]
 
 [workspace.dependencies]
 subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.9.17" }
