@@ -100,7 +100,6 @@ where
 {
     agent_params: AgentParams<V>,
     scenario: Scenario<V>,
-    num_agents: usize,
 }
 
 impl<V> ExecV1<V>
@@ -114,7 +113,6 @@ where
     fn new(agent_params: AgentParams<V>, scenario: Scenario<V>) -> Self {
         Self {
             agent_params,
-            num_agents: scenario.num_nodes,
             scenario,
         }
     }
@@ -151,7 +149,7 @@ where
         InstanceV1 {
             info_trust_map: BTreeMap::<usize, V>::new(),
             corr_misinfo_trust_map: BTreeMap::<usize, V>::new(),
-            observable: Vec::from_iter(0..self.num_agents),
+            observable: Vec::from_iter(0..self.scenario.num_nodes),
             event_table: self.scenario.table.clone(),
         }
     }
