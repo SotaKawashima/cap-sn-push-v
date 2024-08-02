@@ -32,9 +32,6 @@ where
         &self.graph
     }
 
-    fn instance_ext(&self) -> Instance {
-        todo!()
-    }
     fn reset<R: Rng>(&self, memory: &mut Memory<V, AgentExt>, rng: &mut R) {}
 }
 
@@ -57,6 +54,10 @@ where
     Exp1: Distribution<V>,
     R: Rng,
 {
+    fn from_exec(exec: &Exec) -> Self {
+        todo!()
+    }
+
     fn is_continued(&self) -> bool {
         todo!()
     }

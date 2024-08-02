@@ -79,7 +79,6 @@ pub trait Executor<V, M, X> {
     fn num_agents(&self) -> usize;
     fn graph(&self) -> &GraphB;
     fn reset<R: Rng>(&self, memory: &mut Memory<V, M>, rng: &mut R);
-    fn instance_ext(&self) -> X;
     fn execute<R>(&self, memory: &mut Memory<V, M>, num_iter: u32, mut rng: R) -> Vec<Stat>
     where
         V: MyFloat,
@@ -96,13 +95,13 @@ pub trait Executor<V, M, X> {
         let _guard = span.enter();
         self.reset(memory, &mut rng);
 
-        let instance = InstanceWrapper::new(self, rng, self.instance_ext());
+        let instance = InstanceWrapper::new(self, rng, X::from_exec(self));
         instance.my_loop(memory, num_iter)
     }
 }
 
 pub struct InstanceWrapper<'a, E, V, R, X> {
-    pub e: &'a E,
+    pub exec: &'a E,
     pub infos: Vec<Info<'a, V>>,
     pub info_data_table: BTreeMap<InfoLabel, InfoData>,
     pub rng: R,
@@ -126,7 +125,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         let total_num_selfish = 0;
         let rps = Vec::new();
         Self {
-            e,
+            exec: e,
             infos,
             info_data_table,
             rng,
@@ -250,7 +249,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             .into_iter()
             .chain(s.into_iter())
             .flat_map(|(agent_idx, info_idx)| {
-                self.e
+                self.exec
                     .graph()
                     .successors(agent_idx.0)
                     .map(move |&bid| (bid.into(), info_idx))
@@ -299,6 +298,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
 }
 
 pub trait InstanceExt<V, R, E>: Sized {
+    fn from_exec(exec: &E) -> Self;
     fn is_continued(&self) -> bool;
     fn get_producers_with<'a>(
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,

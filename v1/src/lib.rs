@@ -173,15 +173,6 @@ where
             agent.reset(&self.agent_params, rng);
         }
     }
-
-    fn instance_ext(&self) -> InstanceV1<V> {
-        InstanceV1 {
-            info_trust_map: BTreeMap::<usize, V>::new(),
-            corr_misinfo_trust_map: BTreeMap::<usize, V>::new(),
-            observable: Vec::from_iter(0..self.scenario.num_nodes),
-            event_table: self.scenario.table.clone(),
-        }
-    }
 }
 
 /*
@@ -291,6 +282,15 @@ where
     Exp1: Distribution<V>,
     R: Rng,
 {
+    fn from_exec(exec: &ExecV1<V>) -> Self {
+        Self {
+            info_trust_map: BTreeMap::<usize, V>::new(),
+            corr_misinfo_trust_map: BTreeMap::<usize, V>::new(),
+            observable: Vec::from_iter(0..exec.scenario.num_nodes),
+            event_table: exec.scenario.table.clone(),
+        }
+    }
+
     fn is_continued(&self) -> bool {
         !self.event_table.is_empty()
     }
@@ -302,7 +302,7 @@ where
         let mut contents = Vec::new();
         // register observer agents
         // senders of observed info have priority over existing senders.
-        if let Some(observer) = &ins.e.scenario.observer {
+        if let Some(observer) = &ins.exec.scenario.observer {
             ins.ext.observable.retain(|&agent_idx| {
                 if ins.total_num_selfish <= observer.threshold {
                     return true;
@@ -315,7 +315,7 @@ where
                 }
                 contents.push((
                     agent_idx.into(),
-                    &ins.e.scenario.info_contents[observer.observed_info_obj_idx],
+                    &ins.exec.scenario.info_contents[observer.observed_info_obj_idx],
                 ));
                 false
             });
@@ -328,7 +328,7 @@ where
             for i in informms {
                 contents.push((
                     i.agent_idx.into(),
-                    &ins.e.scenario.info_contents[i.info_obj_idx],
+                    &ins.exec.scenario.info_contents[i.info_obj_idx],
                 ));
             }
         }
@@ -340,7 +340,7 @@ where
         info_idx: usize,
     ) -> (Trusts<V>, AccessProb<V>) {
         let info = &ins.infos[info_idx];
-        let params = &ins.e.agent_params.trust_params;
+        let params = &ins.exec.agent_params.trust_params;
         let rng = &mut ins.rng;
         let friend_access_prob = params.friend_access_prob.sample(rng);
         let social_access_prob = params.social_access_prob.sample(rng);
@@ -365,8 +365,8 @@ where
             });
 
         let receipt_prob = V::one()
-            - (V::one() - V::from_usize(info.num_shared()).unwrap() / ins.e.scenario.fnum_nodes)
-                .powf(ins.e.scenario.mean_degree);
+            - (V::one() - V::from_usize(info.num_shared()).unwrap() / ins.exec.scenario.fnum_nodes)
+                .powf(ins.exec.scenario.mean_degree);
         (
             Trusts {
                 p: info_trust,
@@ -400,13 +400,13 @@ where
                 fp: V::zero(),
                 kp: V::zero(),
                 pred_fp: ins
-                    .e
+                    .exec
                     .agent_params
                     .trust_params
                     .friend_access_prob
                     .sample(&mut ins.rng)
                     * ins
-                        .e
+                        .exec
                         .agent_params
                         .trust_params
                         .friend_arrival_prob
