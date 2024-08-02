@@ -32,7 +32,7 @@ impl<V: MyFloat, Ax> Memory<V, Ax> {
         Self { agents, id }
     }
 
-    fn agent(&mut self, idx: usize) -> &mut AgentWrapper<V, Ax> {
+    fn get_agent_mut(&mut self, idx: usize) -> &mut AgentWrapper<V, Ax> {
         &mut self.agents[idx]
     }
 }
@@ -55,6 +55,24 @@ impl<V, X> AgentWrapper<V, X> {
 
 pub trait AgentExtTrait<V>: Sized {
     fn visit_prob(wrapper: &AgentWrapper<V, Self>) -> V;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AgentIdx(pub usize);
+
+impl From<usize> for AgentIdx {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct InfoIdx(pub usize);
+
+impl From<usize> for InfoIdx {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
 }
 
 pub trait Executor<V, M, X> {
@@ -88,12 +106,12 @@ pub struct InstanceWrapper<'a, E, V, R, X> {
     pub infos: Vec<Info<'a, V>>,
     pub info_data_table: BTreeMap<InfoLabel, InfoData>,
     pub rng: R,
-    pub selfishes: Vec<usize>,
+    pub selfishes: Vec<AgentIdx>,
     pub info_stat: InfoStat,
     pub agent_stat: AgentStat,
     pub pop_stat: PopStat,
     pub total_num_selfish: usize,
-    pub rps: Vec<(usize, usize)>,
+    pub rps: Vec<(AgentIdx, InfoIdx)>,
     pub ext: X,
 }
 
@@ -101,7 +119,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
     pub fn new(e: &'a E, rng: R, ext: X) -> Self {
         let infos = Vec::<Info<V>>::new();
         let info_data_table = BTreeMap::<InfoLabel, InfoData>::new();
-        let selfishes = Vec::<usize>::new();
+        let selfishes = Vec::new();
         let info_stat = InfoStat::default();
         let agent_stat = AgentStat::default();
         let pop_stat = PopStat::default();
@@ -136,17 +154,17 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         debug!(target: "recv", l = ?info.label(), "#" = info.idx);
     }
 
-    fn info(&mut self, info_idx: usize) -> (&mut Info<'a, V>, &mut InfoData) {
+    fn get_info_mut(&mut self, info_idx: usize) -> (&mut Info<'a, V>, &mut InfoData) {
         let info = &mut self.infos[info_idx];
         let d = self.info_data_table.get_mut(info.label()).unwrap();
         (info, d)
     }
-    pub fn new_info(&mut self, obj: &'a InfoContent<V>) -> usize {
+    pub fn new_info(&mut self, obj: &'a InfoContent<V>) -> InfoIdx {
         let info_idx = self.infos.len();
         let info = Info::new(info_idx, obj);
         self.info_data_table.entry(*info.label()).or_default();
         self.infos.push(info);
-        info_idx
+        info_idx.into()
     }
 
     fn my_loop<Ax>(mut self, memory: &mut Memory<V, Ax>, num_iter: u32) -> Vec<Stat>
@@ -187,12 +205,12 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
     {
         let ips = self.info_producers(t);
         for &(agent_idx, info_idx) in &ips {
-            let span = span!(Level::INFO, "IA", "#" = agent_idx);
+            let span = span!(Level::INFO, "IA", "#" = agent_idx.0);
             let _guard = span.enter();
             let (trusts, ap) = X::get_informer(self);
-            let info = &self.infos[info_idx];
+            let info = &self.infos[info_idx.0];
             debug!(target: "recv", l = ?info.label(), "#" = info.idx);
-            let agent = memory.agent(agent_idx);
+            let agent = memory.get_agent_mut(agent_idx.0);
             agent.core.set_info_opinions(&info, trusts, ap);
             if agent.core.is_willing_selfish() {
                 self.selfishes.push(agent_idx);
@@ -201,17 +219,17 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
 
         let mut s = Vec::new();
         for (agent_idx, info_idx) in mem::take(&mut self.rps) {
-            let span = span!(Level::INFO, "SA", "#" = agent_idx);
+            let span = span!(Level::INFO, "SA", "#" = agent_idx.0);
             let _guard = span.enter();
 
-            self.received_info(info_idx);
-            if self.rng.gen::<V>() >= Ax::visit_prob(memory.agent(agent_idx)) {
+            self.received_info(info_idx.0);
+            if self.rng.gen::<V>() >= Ax::visit_prob(memory.get_agent_mut(agent_idx.0)) {
                 continue;
             }
 
-            let (trusts, ap) = X::get_sharer(self, info_idx);
-            let (info, d) = self.info(info_idx);
-            let agent = memory.agent(agent_idx);
+            let (trusts, ap) = X::get_sharer(self, info_idx.0);
+            let (info, d) = self.get_info_mut(info_idx.0);
+            let agent = memory.get_agent_mut(agent_idx.0);
             let b = agent.core.read_info(info, trusts, ap);
             info.viewed();
             d.viewed();
@@ -234,8 +252,8 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             .flat_map(|(agent_idx, info_idx)| {
                 self.e
                     .graph()
-                    .successors(agent_idx)
-                    .map(move |bid| (*bid, info_idx))
+                    .successors(agent_idx.0)
+                    .map(move |&bid| (bid.into(), info_idx))
             })
             .collect_vec();
         next_rps.shuffle(&mut self.rng);
@@ -244,11 +262,11 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         let mut pop_data = PopData::default();
         let mut temp = Vec::new(); // mem::take(&mut self.selfishes);
         for agent_idx in &self.selfishes {
-            let agent = memory.agent(*agent_idx);
-            let span = span!(Level::INFO, "Ag", "#" = agent_idx);
+            let agent = memory.get_agent_mut(agent_idx.0);
+            let span = span!(Level::INFO, "Ag", "#" = agent_idx.0);
             let _guard = span.enter();
             if agent.core.progress_selfish_status() {
-                self.agent_stat.push_selfish(num_iter, t, *agent_idx);
+                self.agent_stat.push_selfish(num_iter, t, agent_idx.0);
                 pop_data.selfish();
                 self.total_num_selfish += 1;
             }
@@ -261,7 +279,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         self.push_info_stats(num_iter, t);
     }
 
-    fn info_producers<M>(&mut self, t: u32) -> Vec<(usize, usize)>
+    fn info_producers<M>(&mut self, t: u32) -> Vec<(AgentIdx, InfoIdx)>
     where
         E: Executor<V, M, X>,
         V: MyFloat,
@@ -273,7 +291,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         X: InstanceExt<V, R, E>,
     {
         let mut ips = Vec::new();
-        for (agent_idx, obj) in X::info_contents(self, t) {
+        for (agent_idx, obj) in X::get_producers_with(self, t) {
             ips.push((agent_idx, self.new_info(obj)));
         }
         ips
@@ -282,10 +300,10 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
 
 pub trait InstanceExt<V, R, E>: Sized {
     fn is_continued(&self) -> bool;
-    fn info_contents<'a>(
+    fn get_producers_with<'a>(
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
         t: u32,
-    ) -> Vec<(usize, &'a InfoContent<V>)>;
+    ) -> Vec<(AgentIdx, &'a InfoContent<V>)>;
     fn get_informer<'a>(ins: &mut InstanceWrapper<'a, E, V, R, Self>)
         -> (Trusts<V>, AccessProb<V>);
     fn get_sharer<'a>(

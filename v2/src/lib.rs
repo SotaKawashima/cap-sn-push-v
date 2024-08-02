@@ -1,6 +1,8 @@
 use base::{
-    executor::{AgentExtTrait, AgentWrapper, Executor, InstanceExt, Memory},
-    opinion::MyFloat,
+    executor::{
+        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory,
+    },
+    opinion::{AccessProb, MyFloat, Trusts},
 };
 use graph_lib::prelude::{Graph, GraphB};
 use rand::Rng;
@@ -59,23 +61,23 @@ where
         todo!()
     }
 
-    fn info_contents<'a>(
-        ins: &mut base::executor::InstanceWrapper<'a, Exec, V, R, Self>,
+    fn get_producers_with<'a>(
+        ins: &mut InstanceWrapper<'a, Exec, V, R, Self>,
         t: u32,
-    ) -> Vec<(usize, &'a base::info::InfoContent<V>)> {
+    ) -> Vec<(AgentIdx, &'a base::info::InfoContent<V>)> {
         todo!()
     }
 
     fn get_informer<'a>(
-        ins: &mut base::executor::InstanceWrapper<'a, Exec, V, R, Self>,
-    ) -> (base::opinion::Trusts<V>, base::opinion::AccessProb<V>) {
+        ins: &mut InstanceWrapper<'a, Exec, V, R, Self>,
+    ) -> (Trusts<V>, AccessProb<V>) {
         todo!()
     }
 
     fn get_sharer<'a>(
-        ins: &mut base::executor::InstanceWrapper<'a, Exec, V, R, Self>,
+        ins: &mut InstanceWrapper<'a, Exec, V, R, Self>,
         info_idx: usize,
-    ) -> (base::opinion::Trusts<V>, base::opinion::AccessProb<V>) {
+    ) -> (Trusts<V>, AccessProb<V>) {
         todo!()
     }
 }

@@ -4,7 +4,9 @@ mod scenario;
 use std::path::PathBuf;
 
 use base::{
-    executor::{AgentExtTrait, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory},
+    executor::{
+        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory,
+    },
     info::{InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
     runner::{run, RuntimeParams},
@@ -293,10 +295,10 @@ where
         !self.event_table.is_empty()
     }
 
-    fn info_contents<'a>(
+    fn get_producers_with<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
         t: u32,
-    ) -> Vec<(usize, &'a InfoContent<V>)> {
+    ) -> Vec<(AgentIdx, &'a InfoContent<V>)> {
         let mut contents = Vec::new();
         // register observer agents
         // senders of observed info have priority over existing senders.
@@ -312,7 +314,7 @@ where
                     return true;
                 }
                 contents.push((
-                    agent_idx,
+                    agent_idx.into(),
                     &ins.e.scenario.info_contents[observer.observed_info_obj_idx],
                 ));
                 false
@@ -324,7 +326,10 @@ where
 
         if let Some(informms) = ins.ext.event_table.remove(&t) {
             for i in informms {
-                contents.push((i.agent_idx, &ins.e.scenario.info_contents[i.info_obj_idx]));
+                contents.push((
+                    i.agent_idx.into(),
+                    &ins.e.scenario.info_contents[i.info_obj_idx],
+                ));
             }
         }
         contents
