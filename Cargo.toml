@@ -22,3 +22,4 @@ itertools = "0.13"
 tokio = { version = "1.37", features = ["rt", "macros", "rt-multi-thread", "sync", "time"] }
 polars-arrow = { version = "0.40", features = ["io_ipc", "io_ipc_write_async", "io_ipc_compression"] }
 thiserror = "1.0"
+num_cpus = "1.8"

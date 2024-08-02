@@ -4,12 +4,12 @@ mod scenario;
 use std::path::PathBuf;
 
 use base::{
-    agent::Agent,
-    executor::{Executor, InstanceExt, InstanceWrapper, Memory},
+    executor::{AgentExtTrait, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory},
     info::{InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
     runner::{run, RuntimeParams},
     stat::FileWriters,
+    util::Reset,
 };
 use input::format::DataFormat;
 
@@ -85,9 +85,8 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let num_nodes = scenario_data.num_nodes;
     let exec = ExecV1::<V>::new(agent_params_data, scenario_data);
-    run::<V, _, InstanceV1<V>>(writers, &runtime_data, exec, num_nodes, num_cpus::get()).await
+    run::<V, _, AgentExt<V>, InstanceV1<V>>(writers, &runtime_data, exec, num_cpus::get()).await
 }
 
 struct ExecV1<V>
@@ -118,14 +117,18 @@ where
     }
 }
 
-struct InstanceV1<V: MyFloat> {
-    event_table: BTreeMap<u32, VecDeque<Inform>>,
-    observable: Vec<usize>,
-    info_trust_map: BTreeMap<usize, V>,
-    corr_misinfo_trust_map: BTreeMap<usize, V>,
+#[derive(Default)]
+struct AgentExt<V> {
+    visit_prob: V,
 }
 
-impl<'a, V: MyFloat> Executor<V, InstanceV1<V>> for ExecV1<V>
+impl<V: MyFloat> AgentExtTrait<V> for AgentExt<V> {
+    fn visit_prob(wrapper: &AgentWrapper<V, Self>) -> V {
+        wrapper.ext.visit_prob
+    }
+}
+
+impl<V> Reset<AgentExt<V>> for AgentParams<V>
 where
     V: MyFloat,
     Open01: Distribution<V>,
@@ -133,15 +136,41 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
+    fn reset<R: Rng>(&self, value: &mut AgentExt<V>, rng: &mut R) {
+        value.visit_prob = self.access_prob.sample(rng);
+    }
+}
+
+struct InstanceV1<V> {
+    event_table: BTreeMap<u32, VecDeque<Inform>>,
+    observable: Vec<usize>,
+    info_trust_map: BTreeMap<usize, V>,
+    corr_misinfo_trust_map: BTreeMap<usize, V>,
+}
+
+impl<'a, V> Executor<V, AgentExt<V>, InstanceV1<V>> for ExecV1<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    fn num_agents(&self) -> usize {
+        self.scenario.num_nodes
+    }
+
     fn graph(&self) -> &GraphB {
         &self.scenario.graph
     }
 
-    fn reset<R: Rng>(&self, memory: &mut Memory<V>, rng: &mut R) {
+    fn reset<R: Rng>(&self, memory: &mut Memory<V, AgentExt<V>>, rng: &mut R) {
         for (idx, agent) in memory.agents.iter_mut().enumerate() {
             let span = span!(Level::INFO, "init", "#" = idx);
             let _guard = span.enter();
             agent.reset(&self.agent_params, rng);
+            // let q = memory.ext.visit_prob_map.entry(idx).or_default();
+            // *q = self.agent_params.access_prob.sample(rng);
         }
     }
 
@@ -156,6 +185,16 @@ where
 }
 
 /*
+// self.decision.reset(param, rng);
+// self.access_prob = agent_params.access_prob.sample(rng);
+// self.ops_gen2.reset(&agent_params.initial_opinions, rng);
+// self.trust.reset(&agent_params.trust_params, rng);
+// receipt_prob: V,
+// trust_params: &TrustParams<V>,
+// rng: &mut impl Rng,
+// let trusts = self.trust.to_sharer(info, receipt_prob, trust_params, rng);
+// let trusts = self.trust.to_inform();
+
 #[derive(Default)]
 struct Trust<V: Float> {
     friend_access_prob: V,
@@ -347,9 +386,6 @@ where
         )
     }
 
-    fn q(&self, agent: &Agent<V>) -> V {
-        agent.access_prob()
-    }
     fn get_informer<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
     ) -> (Trusts<V>, AccessProb<V>) {

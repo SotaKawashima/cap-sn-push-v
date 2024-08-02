@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
+use crate::executor::AgentExtTrait;
 use crate::stat::FileWriters;
 use crate::{
     executor::{Executor, InstanceExt, Memory},
@@ -21,11 +22,10 @@ pub struct RuntimeParams {
     pub iteration_count: u32,
 }
 
-pub async fn run<V, Ex, X>(
+pub async fn run<V, Ex, M, X>(
     mut writers: FileWriters,
     runtime: &RuntimeParams,
     exec: Ex,
-    num_nodes: usize,
     permits: usize,
 ) -> anyhow::Result<()>
 where
@@ -35,7 +35,8 @@ where
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
-    Ex: Executor<V, X> + Send + Sync + 'static,
+    Ex: Executor<V, M, X> + Send + Sync + 'static,
+    M: AgentExtTrait<V> + Default + Send + 'static,
     X: InstanceExt<V, SmallRng, Ex> + Send + 'static,
 {
     println!("initialising...");
@@ -54,7 +55,7 @@ where
         .collect::<Result<Vec<_>, _>>()?;
 
     let exec = Arc::new(exec);
-    let mut manager = Manager::new(permits, |_| Memory::new(num_nodes));
+    let mut manager = Manager::new(permits, |_| Memory::new(exec.as_ref()));
 
     let mut jhs = Vec::new();
     print!("started.");
@@ -105,7 +106,7 @@ pub struct EnvPermit<E> {
     env: Arc<Mutex<E>>,
 }
 
-impl<V> EnvPermit<Memory<V>>
+impl<V, M> EnvPermit<Memory<V, M>>
 where
     V: MyFloat + 'static,
 {
@@ -121,9 +122,9 @@ where
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
-        Ex: Executor<V, X> + Send + Sync + 'static,
-        X: InstanceExt<V, R, Ex>,
-        X: Send,
+        Ex: Executor<V, M, X> + Send + Sync + 'static,
+        M: AgentExtTrait<V> + Default + Send + 'static,
+        X: InstanceExt<V, R, Ex> + Send,
     {
         let env = self.env.clone();
         let handle = tokio::spawn(async move {

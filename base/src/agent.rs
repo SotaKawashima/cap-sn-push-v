@@ -22,10 +22,9 @@ pub struct BehaviorByInfo {
 
 #[derive(Default)]
 pub struct Agent<V> {
-    pub ops_gen2: MyOpinions<V>,
+    pub ops: MyOpinions<V>,
     pub infos_accessed: BTreeSet<usize>,
     pub decision: Decision<V>,
-    pub access_prob: V,
 }
 
 #[derive(Default)]
@@ -175,7 +174,6 @@ where
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    // agent_params: &AgentParams<V>
     pub fn reset<P, R>(&mut self, param: &P, rng: &mut R)
     where
         V: MyFloat,
@@ -187,10 +185,6 @@ where
     {
         self.infos_accessed.clear();
         param.reset(self, rng);
-        // self.decision.reset(param, rng);
-        // self.access_prob = agent_params.access_prob.sample(rng);
-        // self.ops_gen2.reset(&agent_params.initial_opinions, rng);
-        // self.trust.reset(&agent_params.trust_params, rng);
     }
 
     pub fn is_willing_selfish(&self) -> bool {
@@ -203,19 +197,11 @@ where
         p
     }
 
-    #[inline]
-    pub fn access_prob(&self) -> V {
-        self.access_prob
-    }
-
     pub fn read_info(
         &mut self,
         info: &Info<V>,
-        // receipt_prob: V,
-        // trust_params: &TrustParams<V>,
         trusts: Trusts<V>,
         ap: AccessProb<V>,
-        // rng: &mut impl Rng,
     ) -> BehaviorByInfo
     where
         StandardNormal: Distribution<V>,
@@ -223,10 +209,9 @@ where
         Open01: Distribution<V>,
     {
         let first_access = self.infos_accessed.insert(info.idx);
-        // let trusts = self.trust.to_sharer(info, receipt_prob, trust_params, rng);
 
         // compute values of prospects
-        let mut upd = self.ops_gen2.receive(info.p, trusts, ap);
+        let mut upd = self.ops.receive(info.p, trusts, ap);
         self.decision.try_decide_selfish(&upd);
         let sharing = self.decision.try_decide_sharing(&mut upd, info.idx);
 
@@ -237,9 +222,7 @@ where
     }
 
     pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>, ap: AccessProb<V>) {
-        // let trusts = self.trust.to_inform();
-
-        let mut upd = self.ops_gen2.receive(info.p, trusts, ap);
+        let mut upd = self.ops.receive(info.p, trusts, ap);
         self.decision.try_decide_selfish(&upd);
         self.decision.predict(&mut upd);
     }

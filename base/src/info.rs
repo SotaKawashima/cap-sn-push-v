@@ -37,7 +37,7 @@ impl<V: MyFloat> From<&InfoContent<V>> for InfoLabel {
 }
 
 #[derive(Debug)]
-pub struct Info<'a, V: MyFloat> {
+pub struct Info<'a, V> {
     pub idx: usize,
     num_shared: usize,
     num_viewed: usize,

@@ -12,38 +12,65 @@ use crate::{
     info::{Info, InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
     stat::{AgentStat, InfoData, InfoStat, PopData, PopStat, Stat},
+    util::Reset,
 };
 
-pub struct Memory<V> {
-    pub agents: Vec<Agent<V>>,
+pub struct Memory<V, Ax> {
+    pub agents: Vec<AgentWrapper<V, Ax>>,
 }
 
-impl<V: MyFloat> Memory<V> {
-    pub fn new(n: usize) -> Self {
-        let agents = (0..n).map(|_| Agent::default()).collect::<Vec<_>>();
+impl<V: MyFloat, Ax> Memory<V, Ax> {
+    pub fn new<E, X>(e: &E) -> Self
+    where
+        E: Executor<V, Ax, X>,
+        Ax: Default,
+    {
+        let agents = (0..(e.num_agents()))
+            .map(|_| AgentWrapper::default())
+            .collect::<Vec<_>>();
         Self { agents }
     }
 
-    fn agent(&mut self, idx: usize) -> &mut Agent<V> {
+    fn agent(&mut self, idx: usize) -> &mut AgentWrapper<V, Ax> {
         &mut self.agents[idx]
     }
 }
 
-pub trait Executor<V, X>
-where
-    V: MyFloat,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    fn graph(&self) -> &GraphB;
-    fn reset<R: Rng>(&self, core: &mut Memory<V>, rng: &mut R);
-    fn instance_ext(&self) -> X;
-    fn execute<R>(&self, memory: &mut Memory<V>, num_iter: u32, mut rng: R) -> Vec<Stat>
+#[derive(Default)]
+pub struct AgentWrapper<V, X> {
+    pub core: Agent<V>,
+    pub ext: X,
+}
+
+impl<V, X> AgentWrapper<V, X> {
+    pub fn reset<P, R: Rng>(&mut self, param: &P, rng: &mut R)
     where
+        P: Reset<Agent<V>> + Reset<X>,
+    {
+        param.reset(&mut self.core, rng);
+        param.reset(&mut self.ext, rng);
+    }
+}
+
+pub trait AgentExtTrait<V>: Sized {
+    fn visit_prob(wrapper: &AgentWrapper<V, Self>) -> V;
+}
+
+pub trait Executor<V, M, X> {
+    fn num_agents(&self) -> usize;
+    fn graph(&self) -> &GraphB;
+    fn reset<R: Rng>(&self, memory: &mut Memory<V, M>, rng: &mut R);
+    fn instance_ext(&self) -> X;
+    fn execute<R>(&self, memory: &mut Memory<V, M>, num_iter: u32, mut rng: R) -> Vec<Stat>
+    where
+        V: MyFloat,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
         R: Rng,
         X: InstanceExt<V, R, Self>,
+        M: AgentExtTrait<V>,
         Self: Sized,
     {
         let span = span!(Level::INFO, "iter", i = num_iter);
@@ -55,7 +82,7 @@ where
     }
 }
 
-pub struct InstanceWrapper<'a, E, V: MyFloat, R, X> {
+pub struct InstanceWrapper<'a, E, V, R, X> {
     pub e: &'a E,
     pub infos: Vec<Info<'a, V>>,
     pub info_data_table: BTreeMap<InfoLabel, InfoData>,
@@ -129,9 +156,9 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         info_idx
     }
 
-    fn my_loop(mut self, memory: &mut Memory<V>, num_iter: u32) -> Vec<Stat>
+    fn my_loop<Ax>(mut self, memory: &mut Memory<V, Ax>, num_iter: u32) -> Vec<Stat>
     where
-        E: Executor<V, X>,
+        E: Executor<V, Ax, X>,
         V: MyFloat,
         Open01: Distribution<V>,
         Standard: Distribution<V>,
@@ -139,9 +166,9 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         Exp1: Distribution<V>,
         R: Rng,
         X: InstanceExt<V, R, E>,
+        Ax: AgentExtTrait<V>,
     {
         let mut t = 0;
-        // let mut rps = Vec::new();
         while !self.rps.is_empty() || !self.selfishes.is_empty() || self.ext.is_continued() {
             self.step(memory, num_iter, t);
             t += 1;
@@ -149,9 +176,9 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         self.to_stats()
     }
 
-    fn step(&mut self, memory: &mut Memory<V>, num_iter: u32, t: u32)
+    fn step<Ax>(&mut self, memory: &mut Memory<V, Ax>, num_iter: u32, t: u32)
     where
-        E: Executor<V, X>,
+        E: Executor<V, Ax, X>,
         V: MyFloat,
         Open01: Distribution<V>,
         Standard: Distribution<V>,
@@ -159,6 +186,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         Exp1: Distribution<V>,
         R: Rng,
         X: InstanceExt<V, R, E>,
+        Ax: AgentExtTrait<V>,
     {
         let ips = self.info_producers(t);
         for &(agent_idx, info_idx) in &ips {
@@ -168,8 +196,8 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             let info = &self.infos[info_idx];
             debug!(target: "recv", l = ?info.label(), "#" = info.idx);
             let agent = memory.agent(agent_idx);
-            agent.set_info_opinions(&info, trusts, ap);
-            if agent.is_willing_selfish() {
+            agent.core.set_info_opinions(&info, trusts, ap);
+            if agent.core.is_willing_selfish() {
                 self.selfishes.push(agent_idx);
             }
         }
@@ -180,7 +208,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             let _guard = span.enter();
 
             self.received_info(info_idx);
-            if self.rng.gen::<V>() >= self.ext.q(&memory.agent(agent_idx)) {
+            if self.rng.gen::<V>() >= Ax::visit_prob(memory.agent(agent_idx)) {
                 continue;
             }
 
@@ -188,7 +216,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             // , self, agent_idx, info_idx
             let (info, d) = self.info(info_idx);
             let agent = memory.agent(agent_idx);
-            let b = agent.read_info(info, trusts, ap);
+            let b = agent.core.read_info(info, trusts, ap);
             info.viewed();
             d.viewed();
             if b.sharing {
@@ -199,7 +227,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             if b.first_access {
                 d.first_viewed();
             }
-            if agent.is_willing_selfish() {
+            if agent.core.is_willing_selfish() {
                 self.selfishes.push(agent_idx);
             }
         }
@@ -222,12 +250,12 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             let agent = memory.agent(*agent_idx);
             let span = span!(Level::INFO, "Ag", "#" = agent_idx);
             let _guard = span.enter();
-            if agent.progress_selfish_status() {
+            if agent.core.progress_selfish_status() {
                 self.agent_stat.push_selfish(num_iter, t, *agent_idx);
                 pop_data.selfish();
                 self.total_num_selfish += 1;
             }
-            if agent.is_willing_selfish() {
+            if agent.core.is_willing_selfish() {
                 temp.push(agent_idx);
             }
         }
@@ -235,9 +263,9 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         self.push_info_stats(num_iter, t);
     }
 
-    fn info_producers(&mut self, t: u32) -> Vec<(usize, usize)>
+    fn info_producers<M>(&mut self, t: u32) -> Vec<(usize, usize)>
     where
-        E: Executor<V, X>,
+        E: Executor<V, M, X>,
         V: MyFloat,
         Open01: Distribution<V>,
         Standard: Distribution<V>,
@@ -254,22 +282,12 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
     }
 }
 
-pub trait InstanceExt<V, R, E>: Sized
-where
-    V: MyFloat,
-    E: Executor<V, Self>,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    R: Rng,
-{
+pub trait InstanceExt<V, R, E>: Sized {
     fn is_continued(&self) -> bool;
     fn info_contents<'a>(
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
         t: u32,
     ) -> Vec<(usize, &'a InfoContent<V>)>;
-    fn q(&self, agent: &Agent<V>) -> V;
     fn get_informer<'a>(ins: &mut InstanceWrapper<'a, E, V, R, Self>)
         -> (Trusts<V>, AccessProb<V>);
     fn get_sharer<'a>(

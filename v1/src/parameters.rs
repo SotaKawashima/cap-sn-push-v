@@ -52,8 +52,7 @@ where
 {
     fn reset<R: rand::Rng>(&self, value: &mut Agent<V>, rng: &mut R) {
         self.reset(&mut value.decision, rng);
-        value.access_prob = self.access_prob.sample(rng);
-        self.initial_opinions.reset(&mut value.ops_gen2, rng);
+        self.initial_opinions.reset(&mut value.ops, rng);
     }
 }
 

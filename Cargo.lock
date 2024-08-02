@@ -2241,6 +2241,15 @@ dependencies = [
 [[package]]
 name = "v2"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base",
+ "graph-lib",
+ "input",
+ "num_cpus",
+ "rand",
+ "rand_distr",
+]
 
 [[package]]
 name = "valuable"
