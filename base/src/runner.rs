@@ -26,7 +26,7 @@ pub async fn run<V, Ex, M, X>(
     mut writers: FileWriters,
     runtime: &RuntimeParams,
     exec: Ex,
-    permits: usize,
+    max_permits: Option<usize>,
 ) -> anyhow::Result<()>
 where
     V: MyFloat + 'static,
@@ -41,6 +41,7 @@ where
 {
     println!("initialising...");
 
+    let permits = max_permits.unwrap_or(num_cpus::get());
     let (tx, mut rx) = mpsc::channel::<Stat>(permits);
     let handle = tokio::spawn(async move {
         while let Some(stat) = rx.recv().await {
@@ -55,7 +56,7 @@ where
         .collect::<Result<Vec<_>, _>>()?;
 
     let exec = Arc::new(exec);
-    let mut manager = Manager::new(permits, |_| Memory::new(exec.as_ref()));
+    let mut manager = Manager::new(permits, |id| Memory::new(exec.as_ref(), id));
 
     let mut jhs = Vec::new();
     print!("started.");

@@ -86,7 +86,7 @@ where
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
     let exec = ExecV1::<V>::new(agent_params_data, scenario_data);
-    run::<V, _, AgentExt<V>, InstanceV1<V>>(writers, &runtime_data, exec, num_cpus::get()).await
+    run::<V, _, AgentExt<V>, InstanceV1<V>>(writers, &runtime_data, exec, None).await
 }
 
 struct ExecV1<V>
@@ -169,8 +169,6 @@ where
             let span = span!(Level::INFO, "init", "#" = idx);
             let _guard = span.enter();
             agent.reset(&self.agent_params, rng);
-            // let q = memory.ext.visit_prob_map.entry(idx).or_default();
-            // *q = self.agent_params.access_prob.sample(rng);
         }
     }
 
@@ -303,7 +301,6 @@ where
         // register observer agents
         // senders of observed info have priority over existing senders.
         if let Some(observer) = &ins.e.scenario.observer {
-            let mut temp = Vec::new();
             ins.ext.observable.retain(|&agent_idx| {
                 if ins.total_num_selfish <= observer.threshold {
                     return true;
@@ -314,17 +311,14 @@ where
                 if observer.pp <= ins.rng.gen() {
                     return true;
                 }
-                temp.push(agent_idx);
-                false
-            });
-            if temp.len() > 1 {
-                temp.shuffle(&mut ins.rng);
-            }
-            for agent_idx in temp {
                 contents.push((
                     agent_idx,
                     &ins.e.scenario.info_contents[observer.observed_info_obj_idx],
                 ));
+                false
+            });
+            if contents.len() > 1 {
+                contents.shuffle(&mut ins.rng);
             }
         }
 
@@ -421,6 +415,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
     use polars::{
         frame::DataFrame,
         io::{ipc::IpcReader, SerReader},
@@ -523,7 +518,9 @@ mod tests {
         let dfb = dfb.sort(&csb, Default::default())?;
 
         for &c in csa.iter().rev() {
-            assert_eq!(dfa[c], dfb[c]);
+            let sa = dfa[c].iter().collect_vec();
+            let sb = dfb[c].iter().collect_vec();
+            assert_eq!(sa, sb);
         }
         Ok(())
     }

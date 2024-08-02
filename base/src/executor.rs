@@ -17,10 +17,11 @@ use crate::{
 
 pub struct Memory<V, Ax> {
     pub agents: Vec<AgentWrapper<V, Ax>>,
+    pub id: usize,
 }
 
 impl<V: MyFloat, Ax> Memory<V, Ax> {
-    pub fn new<E, X>(e: &E) -> Self
+    pub fn new<E, X>(e: &E, id: usize) -> Self
     where
         E: Executor<V, Ax, X>,
         Ax: Default,
@@ -28,7 +29,7 @@ impl<V: MyFloat, Ax> Memory<V, Ax> {
         let agents = (0..(e.num_agents()))
             .map(|_| AgentWrapper::default())
             .collect::<Vec<_>>();
-        Self { agents }
+        Self { agents, id }
     }
 
     fn agent(&mut self, idx: usize) -> &mut AgentWrapper<V, Ax> {
@@ -47,7 +48,7 @@ impl<V, X> AgentWrapper<V, X> {
     where
         P: Reset<Agent<V>> + Reset<X>,
     {
-        param.reset(&mut self.core, rng);
+        self.core.reset(param, rng);
         param.reset(&mut self.ext, rng);
     }
 }
@@ -121,14 +122,6 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         }
     }
 
-    fn to_stats(self) -> Vec<Stat> {
-        vec![
-            self.info_stat.into(),
-            self.agent_stat.into(),
-            self.pop_stat.into(),
-        ]
-    }
-
     fn push_info_stats(&mut self, num_iter: u32, t: u32) {
         for (info_label, d) in &mut self.info_data_table {
             self.info_stat.push(num_iter, t, d, info_label);
@@ -173,7 +166,11 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             self.step(memory, num_iter, t);
             t += 1;
         }
-        self.to_stats()
+        vec![
+            self.info_stat.into(),
+            self.agent_stat.into(),
+            self.pop_stat.into(),
+        ]
     }
 
     fn step<Ax>(&mut self, memory: &mut Memory<V, Ax>, num_iter: u32, t: u32)
@@ -213,7 +210,6 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             }
 
             let (trusts, ap) = X::get_sharer(self, info_idx);
-            // , self, agent_idx, info_idx
             let (info, d) = self.info(info_idx);
             let agent = memory.agent(agent_idx);
             let b = agent.core.read_info(info, trusts, ap);
@@ -225,6 +221,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
                 s.push((agent_idx, info_idx));
             }
             if b.first_access {
+                // println!("i={num_iter} t={t} agent_idx={agent_idx} info_idx={info_idx}");
                 d.first_viewed();
             }
             if agent.core.is_willing_selfish() {
@@ -256,9 +253,10 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
                 self.total_num_selfish += 1;
             }
             if agent.core.is_willing_selfish() {
-                temp.push(agent_idx);
+                temp.push(*agent_idx);
             }
         }
+        self.selfishes = temp;
         self.pop_stat.push(num_iter, t, pop_data);
         self.push_info_stats(num_iter, t);
     }

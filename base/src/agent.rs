@@ -169,17 +169,9 @@ impl DelayActionStatus {
     }
 }
 
-impl<V: MyFloat> Agent<V>
-where
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-{
+impl<V> Agent<V> {
     pub fn reset<P, R>(&mut self, param: &P, rng: &mut R)
     where
-        V: MyFloat,
-        StandardNormal: Distribution<V>,
-        Exp1: Distribution<V>,
-        Open01: Distribution<V>,
         R: Rng,
         P: Reset<Self>,
     {
@@ -204,6 +196,7 @@ where
         ap: AccessProb<V>,
     ) -> BehaviorByInfo
     where
+        V: MyFloat,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
@@ -221,7 +214,13 @@ where
         }
     }
 
-    pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>, ap: AccessProb<V>) {
+    pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>, ap: AccessProb<V>)
+    where
+        V: MyFloat,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+        Open01: Distribution<V>,
+    {
         let mut upd = self.ops.receive(info.p, trusts, ap);
         self.decision.try_decide_selfish(&upd);
         self.decision.predict(&mut upd);

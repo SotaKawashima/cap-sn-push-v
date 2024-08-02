@@ -135,7 +135,7 @@ struct Event {
     informs: Vec<Inform>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Inform {
     pub agent_idx: usize,
     pub info_obj_idx: usize,
@@ -275,6 +275,23 @@ mod tests {
             &scenario.info_contents[observer.observed_info_obj_idx],
             InfoContent::Observation { op } if op.b()[1] == 1.0
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_compare() -> anyhow::Result<()> {
+        let scenario0: Scenario<f32> = toml::from_str::<ScenarioParam<f32>>(&read_to_string(
+            "./test/config/scenario-e0.toml",
+        )?)?
+        .try_into()?;
+
+        let scenario1: Scenario<f32> = toml::from_str::<ScenarioParam<f32>>(&read_to_string(
+            "./test/config/scenario-e1.toml",
+        )?)?
+        .try_into()?;
+
+        assert_eq!(scenario0.table, scenario1.table);
+
         Ok(())
     }
 }

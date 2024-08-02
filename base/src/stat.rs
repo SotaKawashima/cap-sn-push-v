@@ -36,13 +36,14 @@ impl InfoData {
     }
 }
 
+#[derive(Debug)]
 pub enum Stat {
     Info(InfoStat),
     Agent(AgentStat),
     Pop(PopStat),
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct InfoStat {
     num_iter: Vec<u32>,
     t: Vec<u32>,
@@ -101,7 +102,7 @@ impl InfoStat {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AgentStat {
     num_iter: Vec<u32>,
     t: Vec<u32>,
@@ -159,7 +160,7 @@ impl PopData {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PopStat {
     num_iter: Vec<u32>,
     t: Vec<u32>,
