@@ -1,0 +1,20 @@
+graph = { directed = true, location = { LocalFile = "./test/graph/grapht.txt" }, transposed = true }
+
+infos = [
+    { Misinfo = { op = [[0.00, 0.80], 0.20, [0.5, 0.5]] } },
+    { Correction = { op = [[0.99, 0.00], 0.01, [0.95, 0.05]], misinfo = [[0.00, 0.80], 0.20, [0.5, 0.5]] } },
+]
+
+[[events]]
+time = 0
+informs = [{ agent_idx = 0, info_obj_idx = 0 }]
+
+[[events]]
+time = 1
+informs = [{ agent_idx = 6, info_obj_idx = 1 }]
+
+[observer]
+observe_prob = 0.1
+post_prob = 0.1
+threashold_rate = 0.05
+observed_info = [[0.0, 1.0], 0.0, [0.05, 0.95]]

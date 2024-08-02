@@ -1,0 +1,658 @@
+mod parameters;
+mod scenario;
+
+use std::path::PathBuf;
+
+use base::{
+    agent::Agent,
+    executor::{Executor, InstanceExt, InstanceWrapper, Memory},
+    info::{InfoContent, InfoLabel},
+    opinion::{AccessProb, MyFloat, Trusts},
+    runner::{run, RuntimeParams},
+    stat::FileWriters,
+};
+use input::format::DataFormat;
+
+use crate::scenario::{Inform, Scenario, ScenarioParam};
+
+use parameters::AgentParams;
+use polars_arrow::datatypes::Metadata;
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+
+use std::collections::{BTreeMap, VecDeque};
+
+use graph_lib::prelude::GraphB;
+use rand::seq::SliceRandom;
+use rand::Rng;
+use tracing::{span, Level};
+
+#[derive(clap::Parser)]
+pub struct Cli {
+    /// string to identify given configuration data
+    identifier: String,
+    /// the path of output files
+    output_dir: PathBuf,
+    /// the path of a runtime config file
+    #[arg(short, long)]
+    runtime: String,
+    /// the path of a agent parameters config file
+    #[arg(short, long)]
+    agent_params: String,
+    /// the path of a scenario config file
+    #[arg(short, long)]
+    scenario: String,
+    /// Enable overwriting of a output file
+    #[arg(short, long, default_value_t = false)]
+    overwriting: bool,
+    /// Compress a output file
+    #[arg(short, long, default_value_t = true)]
+    compressing: bool,
+}
+
+pub async fn start<V>(args: Cli) -> anyhow::Result<()>
+where
+    V: MyFloat + 'static,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    V::Sampler: Sync,
+    for<'de> V: serde::Deserialize<'de>,
+{
+    let Cli {
+        identifier,
+        output_dir,
+        runtime,
+        agent_params,
+        scenario,
+        overwriting,
+        compressing,
+    } = args;
+    let runtime_data = DataFormat::read(&runtime)?.parse::<RuntimeParams>()?;
+    let agent_params_data = DataFormat::read(&agent_params)?.parse::<AgentParams<V>>()?;
+    let scenario_data: Scenario<V> = DataFormat::read(&scenario)?
+        .parse::<ScenarioParam<V>>()?
+        .try_into()?;
+    let metadata = Metadata::from_iter([
+        ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+        ("runtime".to_string(), runtime),
+        ("agent_params".to_string(), agent_params),
+        ("scenario".to_string(), scenario),
+        (
+            "iteration_count".to_string(),
+            runtime_data.iteration_count.to_string(),
+        ),
+    ]);
+    let writers =
+        FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
+    let num_nodes = scenario_data.num_nodes;
+    let exec = ExecV1::<V>::new(agent_params_data, scenario_data);
+    run::<V, _, InstanceV1<V>>(writers, &runtime_data, exec, num_nodes, num_cpus::get()).await
+}
+
+struct ExecV1<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    agent_params: AgentParams<V>,
+    scenario: Scenario<V>,
+    num_agents: usize,
+}
+
+impl<V> ExecV1<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    fn new(agent_params: AgentParams<V>, scenario: Scenario<V>) -> Self {
+        Self {
+            agent_params,
+            num_agents: scenario.num_nodes,
+            scenario,
+        }
+    }
+}
+
+struct InstanceV1<V: MyFloat> {
+    event_table: BTreeMap<u32, VecDeque<Inform>>,
+    observable: Vec<usize>,
+    info_trust_map: BTreeMap<usize, V>,
+    corr_misinfo_trust_map: BTreeMap<usize, V>,
+}
+
+impl<'a, V: MyFloat> Executor<V, InstanceV1<V>> for ExecV1<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+{
+    fn graph(&self) -> &GraphB {
+        &self.scenario.graph
+    }
+
+    fn reset<R: Rng>(&self, memory: &mut Memory<V>, rng: &mut R) {
+        for (idx, agent) in memory.agents.iter_mut().enumerate() {
+            let span = span!(Level::INFO, "init", "#" = idx);
+            let _guard = span.enter();
+            agent.reset(&self.agent_params, rng);
+        }
+    }
+
+    fn instance_ext(&self) -> InstanceV1<V> {
+        InstanceV1 {
+            info_trust_map: BTreeMap::<usize, V>::new(),
+            corr_misinfo_trust_map: BTreeMap::<usize, V>::new(),
+            observable: Vec::from_iter(0..self.num_agents),
+            event_table: self.scenario.table.clone(),
+        }
+    }
+}
+
+/*
+#[derive(Default)]
+struct Trust<V: Float> {
+    friend_access_prob: V,
+    social_access_prob: V,
+    friend_arrival_prob: V,
+    info_trust_map: BTreeMap<usize, V>,
+    corr_misinfo_trust_map: BTreeMap<usize, V>,
+    misinfo_friend: V,
+    misinfo_social: V,
+}
+
+impl<V: Float> Trust<V> {
+    fn reset<R: Rng>(&mut self, trust_params: &TrustParams<V>, rng: &mut R)
+    where
+        V: MyFloat,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+    {
+        self.friend_access_prob = trust_params.friend_access_prob.sample(rng);
+        self.social_access_prob = trust_params.social_access_prob.sample(rng);
+        self.friend_arrival_prob = trust_params.friend_arrival_prob.sample(rng);
+        self.misinfo_friend = trust_params.friend_misinfo_trust.sample(rng);
+        self.misinfo_social = trust_params.social_misinfo_trust.sample(rng);
+        self.info_trust_map.clear();
+        self.corr_misinfo_trust_map.clear();
+    }
+
+    fn to_inform(&self) -> Trusts<V>
+    where
+        V: MyFloat,
+    {
+        Trusts {
+            p: V::one(),
+            corr_misinfo: V::zero(),
+            friend: V::zero(),
+            social: V::zero(),
+            pi_friend: V::one(),
+            pi_social: V::one(),
+            pred_friend: self.friend_access_prob * self.friend_arrival_prob,
+        }
+    }
+
+    fn to_sharer<R: Rng>(
+        &mut self,
+        info: &Info<V>,
+        receipt_prob: V,
+        params: &TrustParams<V>,
+        rng: &mut R,
+    ) -> Trusts<V>
+    where
+        V: MyFloat,
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+    {
+        let trust_sampler = params.info_trust_params.get_sampler(info.label());
+        let info_trust = *self
+            .info_trust_map
+            .entry(info.idx)
+            .or_insert_with(|| trust_sampler.sample(rng));
+        let corr_misinfo_trust =
+            *self
+                .corr_misinfo_trust_map
+                .entry(info.idx)
+                .or_insert_with(|| {
+                    params
+                        .info_trust_params
+                        .get_sampler(&InfoLabel::Misinfo)
+                        .sample(rng)
+                });
+
+        Trusts {
+            p: info_trust,
+            corr_misinfo: corr_misinfo_trust,
+            friend: self.friend_access_prob * receipt_prob,
+            social: self.social_access_prob * receipt_prob,
+            pi_friend: self.misinfo_friend,
+            pi_social: self.misinfo_social,
+            pred_friend: self.friend_access_prob * self.friend_arrival_prob,
+        }
+    }
+}
+*/
+
+impl<V, R> InstanceExt<V, R, ExecV1<V>> for InstanceV1<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    R: Rng,
+{
+    fn is_continued(&self) -> bool {
+        !self.event_table.is_empty()
+    }
+
+    fn info_contents<'a>(
+        ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
+        t: u32,
+    ) -> Vec<(usize, &'a InfoContent<V>)> {
+        let mut contents = Vec::new();
+        // register observer agents
+        // senders of observed info have priority over existing senders.
+        if let Some(observer) = &ins.e.scenario.observer {
+            let mut temp = Vec::new();
+            ins.ext.observable.retain(|&agent_idx| {
+                if ins.total_num_selfish <= observer.threshold {
+                    return true;
+                }
+                if observer.po <= ins.rng.gen() {
+                    return true;
+                }
+                if observer.pp <= ins.rng.gen() {
+                    return true;
+                }
+                temp.push(agent_idx);
+                false
+            });
+            if temp.len() > 1 {
+                temp.shuffle(&mut ins.rng);
+            }
+            for agent_idx in temp {
+                contents.push((
+                    agent_idx,
+                    &ins.e.scenario.info_contents[observer.observed_info_obj_idx],
+                ));
+            }
+        }
+
+        if let Some(informms) = ins.ext.event_table.remove(&t) {
+            for i in informms {
+                contents.push((i.agent_idx, &ins.e.scenario.info_contents[i.info_obj_idx]));
+            }
+        }
+        contents
+    }
+
+    fn get_sharer<'a>(
+        ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
+        info_idx: usize,
+    ) -> (Trusts<V>, AccessProb<V>) {
+        let info = &ins.infos[info_idx];
+        let params = &ins.e.agent_params.trust_params;
+        let rng = &mut ins.rng;
+        let friend_access_prob = params.friend_access_prob.sample(rng);
+        let social_access_prob = params.social_access_prob.sample(rng);
+        let friend_arrival_prob = params.friend_arrival_prob.sample(rng);
+        let misinfo_friend = params.friend_misinfo_trust.sample(rng);
+        let misinfo_social = params.social_misinfo_trust.sample(rng);
+        let trust_sampler = params.info_trust_params.get_sampler(info.label());
+        let info_trust = *ins
+            .ext
+            .info_trust_map
+            .entry(info.idx)
+            .or_insert_with(|| trust_sampler.sample(rng));
+        let corr_misinfo_trust = *ins
+            .ext
+            .corr_misinfo_trust_map
+            .entry(info.idx)
+            .or_insert_with(|| {
+                params
+                    .info_trust_params
+                    .get_sampler(&InfoLabel::Misinfo)
+                    .sample(rng)
+            });
+
+        let receipt_prob = V::one()
+            - (V::one() - V::from_usize(info.num_shared()).unwrap() / ins.e.scenario.fnum_nodes)
+                .powf(ins.e.scenario.mean_degree);
+        (
+            Trusts {
+                p: info_trust,
+                fp: info_trust,
+                kp: info_trust,
+                fm: corr_misinfo_trust,
+                km: corr_misinfo_trust,
+            },
+            AccessProb {
+                fp: friend_access_prob * receipt_prob,
+                kp: social_access_prob * receipt_prob,
+                fm: misinfo_friend,
+                km: misinfo_social,
+                pred_fp: friend_access_prob * friend_arrival_prob,
+            },
+        )
+    }
+
+    fn q(&self, agent: &Agent<V>) -> V {
+        agent.access_prob()
+    }
+    fn get_informer<'a>(
+        ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
+    ) -> (Trusts<V>, AccessProb<V>) {
+        (
+            Trusts {
+                p: V::one(),
+                fp: V::one(),
+                kp: V::one(),
+                fm: V::zero(),
+                km: V::zero(),
+            },
+            AccessProb {
+                fp: V::zero(),
+                kp: V::zero(),
+                pred_fp: ins
+                    .e
+                    .agent_params
+                    .trust_params
+                    .friend_access_prob
+                    .sample(&mut ins.rng)
+                    * ins
+                        .e
+                        .agent_params
+                        .trust_params
+                        .friend_arrival_prob
+                        .sample(&mut ins.rng),
+                fm: V::one(),
+                km: V::one(),
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use polars::{
+        frame::DataFrame,
+        io::{ipc::IpcReader, SerReader},
+        lazy::{
+            dsl::col,
+            frame::{LazyFrame, ScanArgsIpc},
+        },
+    };
+    use polars_arrow::datatypes::Metadata;
+    use rand::{rngs::SmallRng, Rng, SeedableRng};
+    use std::{fs, sync::Arc};
+    use tokio::runtime::Runtime;
+
+    use crate::start;
+
+    async fn exec(
+        runtime_path: &str,
+        agent_params_path: &str,
+        scenario_path: &str,
+        identifier: &str,
+    ) -> anyhow::Result<()> {
+        start::<f32>(crate::Cli {
+            identifier: identifier.to_string(),
+            output_dir: "./test".into(),
+            runtime: runtime_path.to_string(),
+            agent_params: agent_params_path.to_string(),
+            scenario: scenario_path.to_string(),
+            overwriting: true,
+            compressing: true,
+        })
+        .await?;
+        Ok(())
+    }
+
+    fn compare_two_ipcs(
+        na: &str,
+        rpa: &str,
+        apa: &str,
+        spa: &str,
+        nb: &str,
+        rpb: &str,
+        apb: &str,
+        spb: &str,
+    ) -> anyhow::Result<()> {
+        let labels = ["info", "agent", "pop"];
+        for label in labels {
+            let pa = format!("./test/{na}_{label}.arrow");
+            let pb = format!("./test/{nb}_{label}.arrow");
+            let mut reader_a = IpcReader::new(fs::File::open(pa.clone())?);
+            let mut reader_b = IpcReader::new(fs::File::open(pb.clone())?);
+            let metadata_a = &reader_a.schema()?.metadata;
+            let metadata_b = &reader_b.schema()?.metadata;
+            check_metadata(rpa, apa, spa, metadata_a)?;
+            check_metadata(rpb, apb, spb, metadata_b)?;
+            drop(reader_a);
+            drop(reader_b);
+
+            let lfa = LazyFrame::scan_ipc(
+                pa,
+                ScanArgsIpc {
+                    memory_map: false,
+                    ..Default::default()
+                },
+            )?;
+            let lfb = LazyFrame::scan_ipc(
+                pb,
+                ScanArgsIpc {
+                    memory_map: false,
+                    ..Default::default()
+                },
+            )?;
+            compare_arrows(lfa.collect()?, lfb.collect()?)?;
+        }
+        Ok(())
+    }
+
+    fn check_metadata(
+        runtime_path: &str,
+        agent_params_path: &str,
+        scenario_path: &str,
+        metadata: &Metadata,
+    ) -> anyhow::Result<()> {
+        assert_eq!(metadata["runtime"], runtime_path);
+        assert_eq!(metadata["agent_params"], agent_params_path);
+        assert_eq!(metadata["scenario"], scenario_path);
+        Ok(())
+    }
+
+    fn compare_arrows(dfa: DataFrame, dfb: DataFrame) -> anyhow::Result<()> {
+        let (ra, ca) = dfa.shape();
+        let (rb, cb) = dfb.shape();
+        assert_eq!(ra, rb);
+        assert_eq!(ca, cb);
+
+        let csa = dfa.get_column_names();
+        let csb = dfb.get_column_names();
+        assert_eq!(csa, csb);
+
+        let dfa = dfa.sort(&csa, Default::default())?;
+        let dfb = dfb.sort(&csb, Default::default())?;
+
+        for &c in csa.iter().rev() {
+            assert_eq!(dfa[c], dfb[c]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_transposed() -> anyhow::Result<()> {
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path = "./test/config/scenario.toml";
+        let scenario_path_t = "./test/config/scenario-t.toml";
+
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path_t,
+                "run_test-t",
+            )
+            .await
+            .unwrap();
+            exec(runtime_path, agent_params_path, scenario_path, "run_test")
+                .await
+                .unwrap();
+        });
+
+        compare_two_ipcs(
+            "run_test",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path,
+            "run_test-t",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path_t,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_events() -> anyhow::Result<()> {
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path0 = "./test/config/scenario-e0.toml";
+        let scenario_path1 = "./test/config/scenario-e1.toml";
+
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path0,
+                "run_test-e0",
+            )
+            .await
+            .unwrap();
+        });
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path1,
+                "run_test-e1",
+            )
+            .await
+            .unwrap();
+        });
+
+        compare_two_ipcs(
+            "run_test-e0",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path0,
+            "run_test-e1",
+            &runtime_path,
+            &agent_params_path,
+            &scenario_path1,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_infos() -> anyhow::Result<()> {
+        let runtime_path = "./test/config/runtime.toml";
+        let agent_params_path = "./test/config/agent_params.toml";
+        let scenario_path0 = "./test/config/scenario-i.toml";
+
+        let rt = Runtime::new()?;
+        rt.block_on(async {
+            exec(
+                runtime_path,
+                agent_params_path,
+                scenario_path0,
+                "run_test-sample",
+            )
+            .await
+            .unwrap();
+        });
+
+        let lf = LazyFrame::scan_ipc(
+            "./test/run_test-sample_info.arrow",
+            ScanArgsIpc {
+                memory_map: false,
+                ..Default::default()
+            },
+        )?
+        .filter(col("info_label").eq(3))
+        .collect()?;
+        assert!(lf.shape().0 > 0);
+        Ok(())
+    }
+
+    struct TestEnv(usize);
+    impl TestEnv {
+        fn execute<R: Rng>(&mut self, _input: usize, mut rng: R) {
+            for i in 0..10_000 {
+                for j in 0..(10_000 + rng.gen_range(0..1000)) {
+                    let _a = i + j;
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_manager() {
+        println!("init");
+        let mut resources = Vec::new();
+        let n = 8;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        for i in 0..n {
+            resources.push(Arc::new(tokio::sync::Mutex::new(TestEnv(i))));
+            tx.try_send(i).unwrap();
+        }
+
+        let m = 8;
+        let mut rng = SmallRng::seed_from_u64(0);
+        let rngs = (0..m)
+            .map(|_| SmallRng::from_rng(&mut rng))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        let mut hs = Vec::new();
+        for (i, rng) in rngs.into_iter().enumerate() {
+            let tx = tx.clone();
+            let idx = rx.recv().await.unwrap();
+            let e = resources[idx].clone();
+            let h = tokio::spawn(async move {
+                {
+                    let mut e = e.lock().await;
+                    println!("s:{}:{}", i, e.0);
+                    e.execute(i, rng);
+                    println!("e:{}:{}", i, e.0);
+                }
+                drop(e);
+                tx.try_send(idx).unwrap();
+            });
+            hs.push(h);
+        }
+        println!("running");
+        for h in hs {
+            h.await.unwrap();
+        }
+        drop(rx);
+        println!("done");
+    }
+}

@@ -1,0 +1,25 @@
+[package]
+name = "base"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+subjective-logic = { workspace = true }
+graph-lib = { workspace = true }
+rand = { workspace = true }
+rand_distr = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+num-traits = { workspace = true }
+itertools = { workspace = true }
+tokio = { workspace = true }
+polars-arrow = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+input = { path = "../input" }
+approx = "0.5"
+futures = "0.3"
+
+[dev-dependencies]
+polars = { version = "0.40", features = ["lazy", "ipc", "decompress", "dtype-u8" ] }
