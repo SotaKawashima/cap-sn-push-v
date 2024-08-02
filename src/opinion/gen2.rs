@@ -213,13 +213,20 @@ pub struct DeducedOpinions<V: MyFloat> {
 }
 
 pub struct Trusts<V: MyFloat> {
-    pub info: V,
-    pub corr_misinfo: V,
-    pub friend: V,
-    pub social: V,
-    pub pi_friend: V,
-    pub pi_social: V,
-    pub pred_friend: V,
+    pub p: V,
+    pub fp: V,
+    pub kp: V,
+    // pub m: V,
+    pub fm: V,
+    pub km: V,
+}
+
+pub struct AccessProb<V: MyFloat> {
+    pub fp: V,
+    pub kp: V,
+    pub pred_fp: V,
+    pub fm: V,
+    pub km: V,
 }
 
 fn avg<D: Domain<Idx: Copy> + Keys<D::Idx>, V: MyFloat>(
@@ -263,70 +270,90 @@ impl<V: MyFloat> StateOpinions<V> {
         &self,
         p: &InfoContent<V>,
         trusts: &Trusts<V>,
+        ap: &AccessProb<V>,
         ded: &DeducedOpinions<V>,
     ) -> DiffOpinions<V> {
         match p {
             InfoContent::Misinfo { op } => {
-                let op = op.discount(trusts.info);
-                let psi = FuseOp::Wgh.fuse(&self.psi, &op);
-                let fpsi = FuseOp::Wgh.fuse(&self.fpsi, &transform(op.as_ref(), trusts.friend));
-                let kpsi = FuseOp::Wgh.fuse(&self.kpsi, &transform(op.as_ref(), trusts.social));
+                let psi = FuseOp::Wgh.fuse(&self.psi, &op.discount(trusts.p));
+                let fpsi = FuseOp::Wgh.fuse(
+                    &self.fpsi,
+                    &transform(op.discount(trusts.fp).as_ref(), ap.fp),
+                );
+                let kpsi = FuseOp::Wgh.fuse(
+                    &self.kpsi,
+                    &transform(op.discount(trusts.kp).as_ref(), ap.kp),
+                );
                 DiffOpinions::Causal { psi, fpsi, kpsi }
             }
             InfoContent::Correction { op, misinfo } => {
-                let op = op.discount(trusts.info);
-                let m = misinfo.discount(trusts.corr_misinfo);
-                let psi = FuseOp::Wgh.fuse(&self.psi, &op);
-                let mut fpsi = FuseOp::Wgh.fuse(&self.fpsi, &transform(op.as_ref(), trusts.friend));
-                FuseOp::Wgh.fuse_assign(&mut fpsi, &transform(m.as_ref(), trusts.pi_friend));
-                let mut kpsi = FuseOp::Wgh.fuse(&self.kpsi, &transform(op.as_ref(), trusts.social));
-                FuseOp::Wgh.fuse_assign(&mut kpsi, &transform(m.as_ref(), trusts.pi_social));
+                let psi = FuseOp::Wgh.fuse(&self.psi, &op.discount(trusts.p));
+                let mut fpsi = FuseOp::Wgh.fuse(
+                    &self.fpsi,
+                    &transform(op.discount(trusts.fp).as_ref(), ap.fp),
+                );
+                FuseOp::Wgh.fuse_assign(
+                    &mut fpsi,
+                    &transform(misinfo.discount(trusts.fm).as_ref(), ap.fm),
+                );
+                let mut kpsi = FuseOp::Wgh.fuse(
+                    &self.kpsi,
+                    &transform(op.discount(trusts.kp).as_ref(), ap.kp),
+                );
+                FuseOp::Wgh.fuse_assign(
+                    &mut kpsi,
+                    &transform(misinfo.discount(trusts.km).as_ref(), trusts.km),
+                );
                 DiffOpinions::Causal { psi, fpsi, kpsi }
             }
             InfoContent::Observation { op } => {
-                let op = op.discount(trusts.info);
-                let o = FuseOp::Wgh.fuse(&self.o, &op);
-                let fo = FuseOp::Wgh.fuse(&self.fo, &transform(op.as_ref(), trusts.friend));
-                let ko = FuseOp::Wgh.fuse(&self.ko, &transform(op.as_ref(), trusts.social));
+                let o = FuseOp::Wgh.fuse(&self.o, &op.discount(trusts.p));
+                let fo =
+                    FuseOp::Wgh.fuse(&self.fo, &transform(op.discount(trusts.fp).as_ref(), ap.fp));
+                let ko =
+                    FuseOp::Wgh.fuse(&self.ko, &transform(op.discount(trusts.kp).as_ref(), ap.kp));
                 DiffOpinions::Observed { o, fo, ko }
             }
             InfoContent::Inhibition { op1, op2, op3 } => {
-                let op1_dsc = op1.discount(trusts.info);
-                let phi = FuseOp::Wgh.fuse(&self.phi, &op1_dsc);
-                let fphi =
-                    FuseOp::Wgh.fuse(&self.fphi, &transform(op1_dsc.as_ref(), trusts.friend));
-                let kphi =
-                    FuseOp::Wgh.fuse(&self.kphi, &transform(op1_dsc.as_ref(), trusts.social));
-                let op2_dsc = op2
-                    .iter()
-                    .map(|o| o.discount(trusts.info))
-                    .collect::<Vec<_>>();
-                let op3_dsc = op3
-                    .iter()
-                    .map(|o| o.discount(trusts.info))
-                    .collect::<Vec<_>>();
+                let phi = FuseOp::Wgh.fuse(&self.phi, &op1.discount(trusts.p));
+                let fphi = FuseOp::Wgh.fuse(
+                    &self.fphi,
+                    &transform(op1.discount(trusts.fp).as_ref(), ap.fp),
+                );
+                let kphi = FuseOp::Wgh.fuse(
+                    &self.kphi,
+                    &transform(op1.discount(trusts.kp).as_ref(), ap.kp),
+                );
 
                 let h_psi_if_phi1 = MArrD1::from_iter(
                     self.h_psi_if_phi1
                         .iter()
-                        .zip(&op2_dsc)
-                        .map(|(c, o)| FuseOp::Wgh.fuse(c, o)),
+                        .zip(op2.iter().map(|o| o.discount(trusts.p)))
+                        .map(|(c, o)| FuseOp::Wgh.fuse(c, &o)),
                 );
                 let h_b_if_phi1 = MArrD1::from_iter(
                     self.h_b_if_phi1
                         .iter()
-                        .zip(&op3_dsc)
-                        .map(|(c, o)| FuseOp::Wgh.fuse(c, o)),
+                        .zip(op3.iter().map(|o| o.discount(trusts.p)))
+                        .map(|(c, o)| FuseOp::Wgh.fuse(c, &o)),
                 );
                 let ah = &ded.h.base_rate;
-                let fh_fpsi_if_fphi1 =
-                    MArrD1::from_iter(self.fh_fpsi_if_fphi1.iter().zip(&op2_dsc).map(|(c, o)| {
-                        FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.friend))
-                    }));
-                let kh_kpsi_if_kphi1 =
-                    MArrD1::from_iter(self.kh_kpsi_if_kphi1.iter().zip(&op2_dsc).map(|(c, o)| {
-                        FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), trusts.social))
-                    }));
+                let fh_fpsi_if_fphi1 = MArrD1::from_iter(
+                    self.fh_fpsi_if_fphi1
+                        .iter()
+                        .zip(op2.iter().map(|o| o.discount(trusts.fp)))
+                        .map(|(c, o)| {
+                            FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), ap.fp))
+                        }),
+                );
+                let kh_kpsi_if_kphi1 = MArrD1::from_iter(
+                    self.kh_kpsi_if_kphi1
+                        .iter()
+                        .zip(op2.iter().map(|o| o.discount(trusts.kp)))
+                        .map(|(c, o)| {
+                            FuseOp::Wgh.fuse(c, &transform_simplex(o.projection(ah), ap.kp))
+                        }),
+                );
                 DiffOpinions::Inhibition {
                     phi,
                     fphi,
@@ -344,44 +371,42 @@ impl<V: MyFloat> StateOpinions<V> {
         &self,
         p: &InfoContent<V>,
         trusts: &Trusts<V>,
+        ap: &AccessProb<V>,
         ded: &DeducedOpinions<V>,
     ) -> PredDiffOpinions<V> {
         match p {
             InfoContent::Misinfo { op } => {
                 let fpsi = FuseOp::Wgh.fuse(
                     &self.fpsi,
-                    &transform(op.discount(trusts.info).as_ref(), trusts.pred_friend),
+                    &transform(op.discount(trusts.fp).as_ref(), ap.pred_fp),
                 );
                 PredDiffOpinions::Causal { fpsi }
             }
             InfoContent::Observation { op } => {
                 let fo = FuseOp::Wgh.fuse(
                     &self.fo,
-                    &transform(op.discount(trusts.info).as_ref(), trusts.pred_friend),
+                    &transform(op.discount(trusts.fp).as_ref(), ap.pred_fp),
                 );
                 PredDiffOpinions::Observed { fo }
             }
             InfoContent::Correction { op, .. } => {
                 let fpsi = FuseOp::Wgh.fuse(
                     &self.fpsi,
-                    &transform(op.discount(trusts.info).as_ref(), trusts.pred_friend),
+                    &transform(op.discount(trusts.fp).as_ref(), ap.pred_fp),
                 );
                 PredDiffOpinions::Causal { fpsi }
             }
             InfoContent::Inhibition { op1, op2, .. } => {
                 let fphi = FuseOp::Wgh.fuse(
                     &self.fphi,
-                    &transform(op1.discount(trusts.info).as_ref(), trusts.pred_friend),
+                    &transform(op1.discount(trusts.fp).as_ref(), ap.pred_fp),
                 );
                 let ah = &ded.h.base_rate;
                 let fh_fpsi_if_fphi1 = MArrD1::from_iter(
                     self.fh_fpsi_if_fphi1.iter().zip(op2.iter()).map(|(c, o)| {
                         FuseOp::Wgh.fuse(
                             c,
-                            &transform_simplex(
-                                o.discount(trusts.info).projection(ah),
-                                trusts.friend,
-                            ),
+                            &transform_simplex(o.discount(trusts.fp).projection(ah), ap.pred_fp),
                         )
                     }),
                 );
@@ -791,8 +816,9 @@ impl<V: MyFloat> MyOpinions<V> {
         &'a mut self,
         p: &'a InfoContent<V>,
         trusts: Trusts<V>,
+        ap: AccessProb<V>,
     ) -> MyOpinionsUpd<'a, V> {
-        let mut diff = self.state.receive(p, &trusts, &self.ded);
+        let mut diff = self.state.receive(p, &trusts, &ap, &self.ded);
         debug!("{:?}", &diff);
 
         diff.swap(&mut self.state);
@@ -805,6 +831,7 @@ impl<V: MyFloat> MyOpinions<V> {
             inner: self,
             p,
             trusts,
+            ap,
         }
     }
 
@@ -812,8 +839,9 @@ impl<V: MyFloat> MyOpinions<V> {
         &mut self,
         p: &InfoContent<V>,
         trusts: &Trusts<V>,
+        ap: &AccessProb<V>,
     ) -> (PredDiffOpinions<V>, DeducedOpinions<V>) {
-        let mut pred_diff = self.state.predict(p, trusts, &self.ded);
+        let mut pred_diff = self.state.predict(p, trusts, ap, &self.ded);
         debug!("{:?}", pred_diff);
 
         pred_diff.swap(&mut self.state);
@@ -826,6 +854,7 @@ pub struct MyOpinionsUpd<'a, V: MyFloat> {
     inner: &'a mut MyOpinions<V>,
     p: &'a InfoContent<V>,
     trusts: Trusts<V>,
+    ap: AccessProb<V>,
 }
 
 impl<'a, V: MyFloat> MyOpinionsUpd<'a, V> {
@@ -840,7 +869,7 @@ impl<'a, V: MyFloat> MyOpinionsUpd<'a, V> {
     where
         F: FnMut(&DeducedOpinions<V>, &DeducedOpinions<V>) -> bool,
     {
-        let (mut pred_diff, pred_ded) = self.inner.predict(self.p, &self.trusts);
+        let (mut pred_diff, pred_ded) = self.inner.predict(self.p, &self.trusts, &self.ap);
         if f(&self.inner.ded, &pred_ded) {
             self.inner.ded = pred_ded;
             true

@@ -77,9 +77,8 @@ impl<'a, V: MyFloat> Info<'a, V> {
         Self {
             idx,
             label: obj2.into(),
-            // content,
-            num_shared: Default::default(),
-            num_viewed: Default::default(),
+            num_shared: 0,
+            num_viewed: 0,
             p: obj2,
         }
     }

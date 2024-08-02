@@ -2,6 +2,7 @@ mod agent;
 pub mod config;
 mod decision;
 mod dist;
+mod executor;
 mod info;
 mod opinion;
 mod scenario;
@@ -9,26 +10,26 @@ mod stat;
 mod value;
 
 use std::{
-    collections::BTreeMap,
     io::{stdout, Write},
     path::PathBuf,
     sync::Arc,
 };
 
+use executor::{
+    core::{Executor, InstanceExt, Memory},
+    ExecV1,
+};
 use futures::future::try_join_all;
-use graph_lib::prelude::Graph;
 use opinion::MyFloat;
 use polars_arrow::datatypes::Metadata;
-use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
-use agent::{Agent, AgentParams};
+use agent::AgentParams;
 use config::{ConfigData, Runtime};
-use info::{Info, InfoLabel};
-use scenario::{Inform, Scenario, ScenarioParam};
-use stat::{AgentStat, FileWriters, InfoData, InfoStat, PopData, PopStat, Stat};
+use scenario::{Scenario, ScenarioParam};
+use stat::{FileWriters, Stat};
 use tokio::sync::{mpsc, Mutex};
-use tracing::*;
 
 pub struct Runner<V>
 where
@@ -126,8 +127,11 @@ where
 
         let agent_params = Arc::new(self.agent_params.data);
         let scenario = Arc::new(self.scenario.data);
+        let num_nodes = scenario.num_nodes;
+        let exec = Arc::new(ExecV1::new(agent_params, scenario));
         let mut manager = Manager::new(self.num_cpus, |_| {
-            Env::new(agent_params.clone(), scenario.clone())
+            // Env::new(agent_params.clone(), scenario.clone())
+            Memory::new(num_nodes)
         });
 
         let mut jhs = Vec::new();
@@ -135,7 +139,7 @@ where
         for (num_iter, rng) in rngs.into_iter().enumerate() {
             let permit = manager.rent().await;
             let tx = tx.clone();
-            jhs.push(tokio::spawn(permit.run(num_iter, rng, tx)));
+            jhs.push(tokio::spawn(permit.run(exec.clone(), num_iter, rng, tx)));
         }
 
         try_join_all(jhs).await?;
@@ -174,6 +178,7 @@ impl<E> Manager<E> {
     }
 }
 
+/*
 struct Env<V>
 where
     V: MyFloat,
@@ -209,6 +214,71 @@ where
         }
     }
 
+    fn f0<R: Rng>(agent_params: &AgentParams<V>, rng: &mut R) -> (Trusts<V>, AccessProb<V>) {
+        (
+            Trusts {
+                p: V::one(),
+                fp: V::one(),
+                kp: V::one(),
+                fm: V::zero(),
+                km: V::zero(),
+            },
+            AccessProb {
+                fp: V::zero(),
+                kp: V::zero(),
+                pred_fp: agent_params.trust_params.friend_access_prob.sample(rng)
+                    * agent_params.trust_params.friend_arrival_prob.sample(rng),
+                fm: V::one(),
+                km: V::one(),
+            },
+        )
+    }
+
+    fn f1<R: Rng>(
+        scenario: &Scenario<V>,
+        params: &TrustParams<V>,
+        info: &Info<V>,
+        rng: &mut R,
+        info_trust_map: &mut BTreeMap<usize, V>,
+        corr_misinfo_trust_map: &mut BTreeMap<usize, V>,
+    ) -> (Trusts<V>, AccessProb<V>) {
+        let friend_access_prob = params.friend_access_prob.sample(rng);
+        let social_access_prob = params.social_access_prob.sample(rng);
+        let friend_arrival_prob = params.friend_arrival_prob.sample(rng);
+        let misinfo_friend = params.friend_misinfo_trust.sample(rng);
+        let misinfo_social = params.social_misinfo_trust.sample(rng);
+        let trust_sampler = params.info_trust_params.get_sampler(info.label());
+        let info_trust = *info_trust_map
+            .entry(info.idx)
+            .or_insert_with(|| trust_sampler.sample(rng));
+        let corr_misinfo_trust = *corr_misinfo_trust_map.entry(info.idx).or_insert_with(|| {
+            params
+                .info_trust_params
+                .get_sampler(&InfoLabel::Misinfo)
+                .sample(rng)
+        });
+
+        let receipt_prob = V::one()
+            - (V::one() - V::from_usize(info.num_shared()).unwrap() / scenario.fnum_nodes)
+                .powf(scenario.mean_degree);
+        (
+            Trusts {
+                p: info_trust,
+                fp: info_trust,
+                kp: info_trust,
+                fm: corr_misinfo_trust,
+                km: corr_misinfo_trust,
+            },
+            AccessProb {
+                fp: friend_access_prob * receipt_prob,
+                kp: social_access_prob * receipt_prob,
+                fm: misinfo_friend,
+                km: misinfo_social,
+                pred_fp: friend_access_prob * friend_arrival_prob,
+            },
+        )
+    }
+
     fn execute<R: Rng>(&mut self, num_iter: u32, mut rng: R) -> Vec<Stat> {
         let span = span!(Level::INFO, "iter", i = num_iter);
         let _guard = span.enter();
@@ -218,116 +288,98 @@ where
             agent.reset(&self.agent_params, &mut rng);
         }
 
-        let mut infos = Vec::<Info<V>>::new();
-        let mut receivers = Vec::new();
-        let mut info_data_map = BTreeMap::<InfoLabel, InfoData>::new();
         let info_objects = &self.scenario.info_objects;
         let mut event_table = self.scenario.table.clone();
-        let mut agents_willing_selfish = Vec::<usize>::new();
-        let mut senders = Vec::new();
 
+        let mut infos = Vec::<Info<V>>::new();
+        let mut info_data_table = BTreeMap::<InfoLabel, InfoData>::new();
+        let mut agents_willing_selfish = Vec::<usize>::new();
         let mut info_stat = InfoStat::default();
         let mut agent_stat = AgentStat::default();
         let mut pop_stat = PopStat::default();
         let mut t = 0;
 
-        while !receivers.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty()
-        {
+        // let mut receivers = Vec::new();
+        // let mut senders = Vec::new();
+
+        let mut rps = Vec::new();
+        let mut info_trust_map = BTreeMap::<usize, V>::new();
+        let mut corr_misinfo_trust_map = BTreeMap::<usize, V>::new();
+        let mut total_num_selfish = 0;
+        let mut observable = Vec::from_iter(0..self.agents.len());
+
+        while !rps.is_empty() || !event_table.is_empty() || !agents_willing_selfish.is_empty() {
             let span = span!(Level::INFO, "step", t);
             let _guard = span.enter();
-            let mut pop_data = PopData::default();
+
+            let mut ips = Vec::new();
+
+            macro_rules! new_info {
+                ($agent_idx:expr,$info_obj_idx:expr) => {
+                    let info_idx = infos.len();
+                    let info = Info::new(info_idx, &info_objects[$info_obj_idx]);
+                    info_data_table.entry(*info.label()).or_default();
+                    infos.push(info);
+                    ips.push(($agent_idx, info_idx));
+                };
+            }
+
+            // register observer agents
+            // senders of observed info have priority over existing senders.
+            if let Some(observer) = &self.scenario.observer {
+                let mut temp = Vec::new();
+                observable.retain(|&agent_idx| {
+                    if total_num_selfish <= observer.threshold {
+                        return true;
+                    }
+                    if observer.po <= rng.gen() {
+                        return true;
+                    }
+                    if observer.pp <= rng.gen() {
+                        return true;
+                    }
+                    temp.push(agent_idx);
+                    false
+                });
+                if temp.len() > 1 {
+                    temp.shuffle(&mut rng);
+                }
+                for agent_idx in temp {
+                    new_info!(agent_idx, observer.observed_info_obj_idx);
+                }
+            }
 
             if let Some(informms) = event_table.remove(&t) {
-                for Inform {
-                    agent_idx,
-                    info_obj_idx,
-                } in informms
-                {
-                    let info_idx = infos.len();
-                    let info = Info::new(info_idx, &info_objects[info_obj_idx]);
-                    info_data_map.entry(*info.label()).or_default();
-
-                    let span = span!(Level::INFO, "IA", "#" = agent_idx);
-                    let _guard = span.enter();
-                    debug!(target: "recv", l = ?info.label(), "obj#" = info_obj_idx, "#" = info_idx);
-
-                    let agent = &mut self.agents[agent_idx];
-                    agent.set_info_opinions(&info);
-                    infos.push(info);
-                    if agent.is_willing_selfish() {
-                        agents_willing_selfish.push(agent_idx);
-                    }
-
-                    senders.push(Receiver {
-                        agent_idx,
-                        info_idx,
-                    });
+                for i in informms {
+                    new_info!(i.agent_idx, i.info_obj_idx);
                 }
             }
 
-            receivers.shuffle(&mut rng);
-
-            for r @ Receiver {
-                agent_idx,
-                info_idx,
-            } in receivers.drain(..)
-            {
-                let agent = &mut self.agents[agent_idx];
-                let info = &mut infos[info_idx];
-                let info_label = info.label();
-                let info_data = info_data_map.get_mut(&info_label).unwrap();
-                info_data.received();
-
-                let span = span!(Level::INFO, "SA", "#" = agent_idx);
-                let _guard = span.enter();
-
-                let receipt_prob = V::one()
-                    - (V::one()
-                        - V::from_usize(info.num_shared()).unwrap() / self.scenario.fnum_nodes)
-                        .powf(self.scenario.mean_degree);
-
-                debug!(target: "recv", l = ?info_label, "#" = info_idx, r = ?receipt_prob);
-
-                if rng.gen::<V>() >= agent.access_prob() {
-                    continue;
-                }
-
-                let b = agent.read_info(
-                    info,
-                    receipt_prob,
-                    &self.agent_params.trust_params,
-                    &mut rng,
-                );
-                info.viewed();
-                info_data.viewed();
-                if b.sharing {
-                    info.shared();
-                    info_data.shared();
-                    senders.push(r);
-                }
-                if b.first_access {
-                    info_data.first_viewed();
-                }
-
-                if agent.is_willing_selfish() {
-                    agents_willing_selfish.push(agent_idx);
-                }
-            }
-
-            for Receiver {
-                agent_idx,
-                info_idx,
-            } in senders.drain(..)
-            {
-                for bid in self.scenario.graph.successors(agent_idx) {
-                    receivers.push(Receiver {
-                        agent_idx: *bid,
-                        info_idx,
-                    });
-                }
-            }
+            let next_rps = step(
+                &mut self.agents,
+                &mut infos,
+                &mut info_data_table,
+                ips,
+                rps,
+                &mut agents_willing_selfish,
+                |rng, _, _| Self::f0(&self.agent_params, rng),
+                |rng, _, info| {
+                    Self::f1(
+                        &self.scenario,
+                        &self.agent_params.trust_params,
+                        info,
+                        rng,
+                        &mut info_trust_map,
+                        &mut corr_misinfo_trust_map,
+                    )
+                },
+                |a| a.access_prob(),
+                &mut rng,
+                &self.scenario.graph,
+            );
 
             // update selfish states of agents
+            let mut pop_data = PopData::default();
             agents_willing_selfish.retain(|&agent_idx| {
                 let agent = &mut self.agents[agent_idx];
                 let span = span!(Level::INFO, "Ag", "#" = agent_idx);
@@ -335,40 +387,105 @@ where
                 if agent.progress_selfish_status() {
                     agent_stat.push_selfish(num_iter, t, agent_idx);
                     pop_data.selfish();
+                    total_num_selfish += 1;
                 }
                 agent.is_willing_selfish()
             });
+            pop_stat.push(num_iter, t, pop_data);
 
-            // register observer agents
-            if let Some(observer) = &self.scenario.observer {
-                if pop_data.num_selfish > 0 {
-                    let observer_prob =
-                        V::from_u32(pop_data.num_selfish).unwrap() / self.scenario.fnum_nodes;
-                    for agent_idx in
-                        rand::seq::index::sample(&mut rng, self.scenario.num_nodes, observer.k)
-                    {
-                        if observer_prob > rng.gen() {
-                            let informs = event_table.entry(t + 1).or_default();
-                            // senders of observed info have priority over existing senders.
-                            informs.push_front(Inform {
-                                agent_idx,
-                                info_obj_idx: observer.observed_info_obj_idx,
-                            });
-                        }
-                    }
-                }
-            }
-
-            for (info_label, d) in &mut info_data_map {
+            for (info_label, d) in &mut info_data_table {
                 info_stat.push(num_iter, t, d, info_label);
                 *d = InfoData::default();
             }
-            pop_stat.push(num_iter, t, pop_data);
             t += 1;
+            rps = next_rps;
         }
         vec![info_stat.into(), agent_stat.into(), pop_stat.into()]
     }
 }
+
+fn step<V, F0, F1, H, R>(
+    agents: &mut [Agent<V>],
+    infos: &mut [Info<V>],
+    info_data_table: &mut BTreeMap<InfoLabel, InfoData>,
+    ips: Vec<(usize, usize)>,
+    rps: Vec<(usize, usize)>,
+    selfishes: &mut Vec<usize>,
+    mut f0: F0,
+    mut f1: F1,
+    q: H,
+    rng: &mut R,
+    graph: &GraphB,
+) -> Vec<(usize, usize)>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+    Standard: Distribution<V>,
+    StandardNormal: Distribution<V>,
+    Exp1: Distribution<V>,
+    F0: FnMut(&mut R, &Agent<V>, &Info<V>) -> (Trusts<V>, AccessProb<V>),
+    F1: FnMut(&mut R, &Agent<V>, &Info<V>) -> (Trusts<V>, AccessProb<V>),
+    H: Fn(&Agent<V>) -> V,
+    R: Rng,
+{
+    let mut s = Vec::new();
+    for &(agent_idx, info_idx) in &ips {
+        let span = span!(Level::INFO, "IA", "#" = agent_idx);
+        let _guard = span.enter();
+        let info = &infos[info_idx];
+        debug!(target: "recv", l = ?info.label(), "#" = info.idx);
+
+        let agent = &mut agents[agent_idx];
+        let (trusts, ap) = f0(rng, &agent, &info);
+        agent.set_info_opinions(&info, trusts, ap);
+        if agent.is_willing_selfish() {
+            selfishes.push(agent_idx);
+        }
+    }
+
+    for (agent_idx, info_idx) in rps {
+        let span = span!(Level::INFO, "SA", "#" = agent_idx);
+        let _guard = span.enter();
+
+        let info = &mut infos[info_idx];
+        let d = info_data_table.get_mut(info.label()).unwrap();
+        d.received();
+        debug!(target: "recv", l = ?info.label(), "#" = info.idx);
+
+        let agent = &mut agents[agent_idx];
+
+        if rng.gen::<V>() >= q(agent) {
+            continue;
+        }
+
+        let (trusts, ap) = f1(rng, &agent, &info);
+        let b = agent.read_info(info, trusts, ap);
+        info.viewed();
+        d.viewed();
+        if b.sharing {
+            info.shared();
+            d.shared();
+            s.push((agent_idx, info_idx));
+        }
+        if b.first_access {
+            d.first_viewed();
+        }
+        if agent.is_willing_selfish() {
+            selfishes.push(agent_idx);
+        }
+    }
+
+    let mut r = ips
+        .into_iter()
+        .chain(s.into_iter())
+        .flat_map(|(agent_idx, info_idx)| {
+            graph.successors(agent_idx).map(move |bid| (*bid, info_idx))
+        })
+        .collect_vec();
+    r.shuffle(rng);
+    r
+}
+*/
 
 struct EnvPermit<E> {
     idx: usize,
@@ -376,20 +493,26 @@ struct EnvPermit<E> {
     env: Arc<Mutex<E>>,
 }
 
-impl<V> EnvPermit<Env<V>>
+impl<V> EnvPermit<Memory<V>>
 where
     V: MyFloat + 'static,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
 {
-    async fn run<R: Rng + Send + 'static>(
+    async fn run<Ex, X, R: Rng + Send + 'static>(
         self,
+        exec: Arc<Ex>,
         num_iter: usize,
         rng: R,
         tx: mpsc::Sender<Stat>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        Open01: Distribution<V>,
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+        Ex: Executor<V, X> + Send + Sync + 'static,
+        X: InstanceExt<V, R, Ex>,
+        X: Send,
+    {
         let env = self.env.clone();
         let handle = tokio::spawn(async move {
             if num_iter % 100 == 0 {
@@ -400,7 +523,8 @@ where
                 stdout().flush().unwrap();
             }
             print!(".");
-            env.lock().await.execute(num_iter as u32, rng)
+            let mut memory = env.lock().await;
+            exec.execute::<R>(&mut memory, num_iter as u32, rng)
         });
         let ss = handle.await?;
         for s in ss {
@@ -416,11 +540,11 @@ impl<E> Drop for EnvPermit<E> {
     }
 }
 
-#[derive(Debug)]
-struct Receiver {
-    agent_idx: usize,
-    info_idx: usize,
-}
+// #[derive(Debug)]
+// struct Receiver {
+//     agent_idx: usize,
+//     info_idx: usize,
+// }
 
 #[cfg(test)]
 mod tests {

@@ -71,7 +71,7 @@ where
     pub info_objects: Vec<InfoContent<V>>,
     /// time -> Inform
     pub table: BTreeMap<u32, VecDeque<Inform>>,
-    pub observer: Option<Observer>,
+    pub observer: Option<Observer<V>>,
     pub fnum_nodes: V,
     pub mean_degree: V,
     pub num_nodes: usize,
@@ -93,16 +93,21 @@ pub struct Inform {
 #[derive(Debug, serde::Deserialize)]
 struct ObserverParam<V: MyFloat> {
     observer_pop_rate: V,
+    post_prob: V,
+    threashold_rate: V,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     observed_info: OpinionD1<O, V>,
 }
 
 #[derive(Debug)]
-pub struct Observer {
-    // pub observer_pop_rate: V,
+pub struct Observer<V> {
     pub observed_info_obj_idx: usize,
-    /// number of times to try to send observed info in a step (no duplication)
-    pub k: usize,
+    /// probability to observe info in a step (no duplication)
+    pub po: V,
+    // probability to post observation info if obsereved events.
+    pub pp: V,
+    // max number of selfish actions not to happen obserevable events.
+    pub threshold: usize,
 }
 
 impl<V> TryFrom<ScenarioParam<V>> for Scenario<V>
@@ -144,13 +149,18 @@ where
             |ObserverParam {
                  observer_pop_rate,
                  observed_info,
+                 post_prob,
+                 threashold_rate,
              }| {
-                let k = (fnum_nodes * observer_pop_rate).round().to_usize().unwrap();
+                // let k = (fnum_nodes * observer_pop_rate).round().to_usize().unwrap();
+                let threshold = (fnum_nodes * threashold_rate).round().to_usize().unwrap();
                 info_objects.push(InfoContent::Observation { op: observed_info });
                 Observer {
                     // observer_pop_rate,
                     observed_info_obj_idx: info_objects.len() - 1,
-                    k,
+                    po: observer_pop_rate,
+                    pp: post_prob,
+                    threshold,
                 }
             },
         );
@@ -207,7 +217,7 @@ mod tests {
         );
 
         let observer = scenario.observer.unwrap();
-        assert_eq!(observer.k, 0);
+        assert_eq!(observer.po, 0.0);
         assert_eq!(observer.observed_info_obj_idx, 3);
         assert!(matches!(
             &scenario.info_objects[observer.observed_info_obj_idx],

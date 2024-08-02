@@ -11,9 +11,9 @@ use tracing::*;
 use crate::{
     decision::{CptParams, LossParams, Prospect, CPT},
     dist::{IValue, IValueParam},
-    info::{Info, InfoLabel, InfoTrustParams},
+    info::{Info, InfoTrustParams},
     opinion::{
-        gen2::{self, DeducedOpinions, InitialOpinions, MyOpinionsUpd, Trusts},
+        gen2::{self, AccessProb, DeducedOpinions, InitialOpinions, MyOpinionsUpd, Trusts},
         MyFloat,
     },
     value::{EValue, EValueParam},
@@ -50,16 +50,16 @@ where
     Exp1: Distribution<V>,
 {
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    friend_access_prob: EValue<V>,
+    pub friend_access_prob: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    social_access_prob: EValue<V>,
+    pub social_access_prob: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    friend_arrival_prob: EValue<V>,
-    info_trust_params: InfoTrustParams<V>,
+    pub friend_arrival_prob: EValue<V>,
+    pub info_trust_params: InfoTrustParams<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    friend_misinfo_trust: EValue<V>,
+    pub friend_misinfo_trust: EValue<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
-    social_misinfo_trust: EValue<V>,
+    pub social_misinfo_trust: EValue<V>,
 }
 
 #[derive(Debug)]
@@ -73,10 +73,11 @@ pub struct Agent<V: MyFloat> {
     ops_gen2: gen2::MyOpinions<V>,
     infos_accessed: BTreeSet<usize>,
     decision: Decision<V>,
-    trust: Trust<V>,
+    // trust: Trust<V>,
     access_prob: V,
 }
 
+/*
 #[derive(Default)]
 struct Trust<V: Float> {
     friend_access_prob: V,
@@ -111,7 +112,7 @@ impl<V: Float> Trust<V> {
         V: MyFloat,
     {
         Trusts {
-            info: V::one(),
+            p: V::one(),
             corr_misinfo: V::zero(),
             friend: V::zero(),
             social: V::zero(),
@@ -152,7 +153,7 @@ impl<V: Float> Trust<V> {
                 });
 
         Trusts {
-            info: info_trust,
+            p: info_trust,
             corr_misinfo: corr_misinfo_trust,
             friend: self.friend_access_prob * receipt_prob,
             social: self.social_access_prob * receipt_prob,
@@ -162,6 +163,7 @@ impl<V: Float> Trust<V> {
         }
     }
 }
+*/
 
 #[derive(Default)]
 struct Decision<V: Float> {
@@ -321,7 +323,7 @@ where
         Open01: Distribution<V>,
     {
         self.decision.reset(agent_params, rng);
-        self.trust.reset(&agent_params.trust_params, rng);
+        // self.trust.reset(&agent_params.trust_params, rng);
 
         self.infos_accessed.clear();
         self.access_prob = agent_params.access_prob.sample(rng);
@@ -347,9 +349,11 @@ where
     pub fn read_info(
         &mut self,
         info: &Info<V>,
-        receipt_prob: V,
-        trust_params: &TrustParams<V>,
-        rng: &mut impl Rng,
+        // receipt_prob: V,
+        // trust_params: &TrustParams<V>,
+        trusts: Trusts<V>,
+        ap: AccessProb<V>,
+        // rng: &mut impl Rng,
     ) -> BehaviorByInfo
     where
         StandardNormal: Distribution<V>,
@@ -357,10 +361,10 @@ where
         Open01: Distribution<V>,
     {
         let first_access = self.infos_accessed.insert(info.idx);
-        let trusts = self.trust.to_sharer(info, receipt_prob, trust_params, rng);
+        // let trusts = self.trust.to_sharer(info, receipt_prob, trust_params, rng);
 
         // compute values of prospects
-        let mut upd = self.ops_gen2.receive(info.p, trusts);
+        let mut upd = self.ops_gen2.receive(info.p, trusts, ap);
         self.decision.try_decide_selfish(&upd);
         let sharing = self.decision.try_decide_sharing(&mut upd, info.idx);
 
@@ -370,10 +374,10 @@ where
         }
     }
 
-    pub fn set_info_opinions(&mut self, info: &Info<V>) {
-        let trusts = self.trust.to_inform();
+    pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>, ap: AccessProb<V>) {
+        // let trusts = self.trust.to_inform();
 
-        let mut upd = self.ops_gen2.receive(info.p, trusts);
+        let mut upd = self.ops_gen2.receive(info.p, trusts, ap);
         self.decision.try_decide_selfish(&upd);
         self.decision.predict(&mut upd);
     }
