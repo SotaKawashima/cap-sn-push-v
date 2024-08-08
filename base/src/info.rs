@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use crate::opinion::{MyFloat, Phi, Psi, B, H, O};
 use subjective_logic::{
@@ -37,23 +37,27 @@ impl<V: MyFloat> From<&InfoContent<V>> for InfoLabel {
 }
 
 #[derive(Debug)]
-pub struct Info<'a, V> {
+pub struct Info<'a, V: Clone> {
     pub idx: usize,
     num_shared: usize,
     num_viewed: usize,
     label: InfoLabel,
-    pub p: &'a InfoContent<V>,
+    p: Cow<'a, InfoContent<V>>,
 }
 
 impl<'a, V: MyFloat> Info<'a, V> {
-    pub fn new(idx: usize, obj2: &'a InfoContent<V>) -> Self {
+    pub fn new(idx: usize, p: Cow<'a, InfoContent<V>>) -> Self {
         Self {
             idx,
-            label: obj2.into(),
+            label: p.as_ref().into(),
             num_shared: 0,
             num_viewed: 0,
-            p: obj2,
+            p,
         }
+    }
+
+    pub fn content(&self) -> &InfoContent<V> {
+        self.p.as_ref()
     }
 
     pub fn label(&self) -> &InfoLabel {

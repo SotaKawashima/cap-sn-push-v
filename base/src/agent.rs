@@ -204,7 +204,7 @@ impl<V> Agent<V> {
         let first_access = self.infos_accessed.insert(info.idx);
 
         // compute values of prospects
-        let mut upd = self.ops.receive(info.p, trusts, ap);
+        let mut upd = self.ops.receive(info.content(), trusts, ap);
         self.decision.try_decide_selfish(&upd);
         let sharing = self.decision.try_decide_sharing(&mut upd, info.idx);
 
@@ -221,7 +221,7 @@ impl<V> Agent<V> {
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let mut upd = self.ops.receive(info.p, trusts, ap);
+        let mut upd = self.ops.receive(info.content(), trusts, ap);
         self.decision.try_decide_selfish(&upd);
         self.decision.predict(&mut upd);
     }

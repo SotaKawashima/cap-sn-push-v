@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, mem};
+use std::{borrow::Cow, collections::BTreeMap, mem};
 
 use graph_lib::prelude::{Graph, GraphB};
 use itertools::Itertools;
@@ -100,7 +100,7 @@ pub trait Executor<V, M, X> {
     }
 }
 
-pub struct InstanceWrapper<'a, E, V, R, X> {
+pub struct InstanceWrapper<'a, E, V: Clone, R, X> {
     pub exec: &'a E,
     pub infos: Vec<Info<'a, V>>,
     pub info_data_table: BTreeMap<InfoLabel, InfoData>,
@@ -158,7 +158,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         let d = self.info_data_table.get_mut(info.label()).unwrap();
         (info, d)
     }
-    pub fn new_info(&mut self, obj: &'a InfoContent<V>) -> InfoIdx {
+    pub fn new_info(&mut self, obj: Cow<'a, InfoContent<V>>) -> InfoIdx {
         let info_idx = self.infos.len();
         let info = Info::new(info_idx, obj);
         self.info_data_table.entry(*info.label()).or_default();
@@ -297,13 +297,13 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
     }
 }
 
-pub trait InstanceExt<V, R, E>: Sized {
+pub trait InstanceExt<V: Clone, R, E>: Sized {
     fn from_exec(exec: &E) -> Self;
     fn is_continued(&self) -> bool;
     fn get_producers_with<'a>(
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
         t: u32,
-    ) -> Vec<(AgentIdx, &'a InfoContent<V>)>;
+    ) -> Vec<(AgentIdx, Cow<'a, InfoContent<V>>)>;
     fn get_informer<'a>(ins: &mut InstanceWrapper<'a, E, V, R, Self>)
         -> (Trusts<V>, AccessProb<V>);
     fn get_sharer<'a>(

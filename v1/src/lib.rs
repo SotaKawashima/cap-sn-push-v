@@ -1,7 +1,7 @@
 mod parameters;
 mod scenario;
 
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 use base::{
     executor::{
@@ -298,7 +298,7 @@ where
     fn get_producers_with<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
         t: u32,
-    ) -> Vec<(AgentIdx, &'a InfoContent<V>)> {
+    ) -> Vec<(AgentIdx, Cow<'a, InfoContent<V>>)> {
         let mut contents = Vec::new();
         // register observer agents
         // senders of observed info have priority over existing senders.
@@ -315,7 +315,7 @@ where
                 }
                 contents.push((
                     agent_idx.into(),
-                    &ins.exec.scenario.info_contents[observer.observed_info_obj_idx],
+                    Cow::Borrowed(&ins.exec.scenario.info_contents[observer.observed_info_obj_idx]),
                 ));
                 false
             });
@@ -328,7 +328,7 @@ where
             for i in informms {
                 contents.push((
                     i.agent_idx.into(),
-                    &ins.exec.scenario.info_contents[i.info_obj_idx],
+                    Cow::Borrowed(&ins.exec.scenario.info_contents[i.info_obj_idx]),
                 ));
             }
         }
