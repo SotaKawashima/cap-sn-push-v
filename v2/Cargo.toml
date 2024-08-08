@@ -11,3 +11,4 @@ anyhow = { workspace = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
 graph-lib = { workspace = true }
+subjective-logic = { workspace = true }
