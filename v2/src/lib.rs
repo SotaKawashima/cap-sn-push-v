@@ -56,6 +56,7 @@ impl<V> AgentExtTrait<V> for AgentExt {
 struct Instance {
     // info_contents: Vec<InfoContent<V>>,
     misinfo_producers: Vec<usize>,
+    observable: Vec<usize>,
 }
 
 impl<V, R> InstanceExt<V, R, Exec<V>> for Instance
@@ -79,7 +80,28 @@ where
         ins: &mut InstanceWrapper<'a, Exec<V>, V, R, Self>,
         _: u32,
     ) -> Vec<(AgentIdx, Cow<'a, InfoContent<V>>)> {
-        let mut v = Vec::new();
+        let mut producers = Vec::new();
+        // if let Some(observer) = &ins.exec.scenario.observer {
+        //     ins.ext.observable.retain(|&agent_idx| {
+        //         if ins.total_num_selfish <= observer.threshold {
+        //             return true;
+        //         }
+        //         if observer.po <= ins.rng.gen() {
+        //             return true;
+        //         }
+        //         if observer.pp <= ins.rng.gen() {
+        //             return true;
+        //         }
+        //         producers.push((
+        //             agent_idx.into(),
+        //             Cow::Borrowed(&ins.exec.scenario.info_contents[observer.observed_info_obj_idx]),
+        //         ));
+        //         false
+        //     });
+        //     if producers.len() > 1 {
+        //         producers.shuffle(&mut ins.rng);
+        //     }
+        // }
         ins.ext.misinfo_producers.retain(|&agent_idx| {
             if ins.exec.produce_prob >= ins.rng.gen() {
                 return true;
@@ -87,10 +109,10 @@ where
             let c = InfoContent::Misinfo {
                 op: OpinionD1::vacuous_with(marr_d1![V::one(), V::zero()]),
             };
-            v.push((agent_idx.into(), Cow::Owned(c)));
+            producers.push((agent_idx.into(), Cow::Owned(c)));
             false
         });
-        v
+        producers
     }
 
     fn get_informer<'a>(

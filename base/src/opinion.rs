@@ -326,7 +326,7 @@ impl<V: MyFloat> StateOpinions<V> {
                 DiffOpinions::Causal { psi, fpsi, kpsi }
             }
             InfoContent::Observation { op } => {
-                let o = FuseOp::Wgh.fuse(&self.o, &op.discount(trusts.p));
+                let o = FuseOp::ACm.fuse(&self.o, &op.discount(trusts.p));
                 let fo =
                     FuseOp::Wgh.fuse(&self.fo, &transform(op.discount(trusts.fp).as_ref(), ap.fp));
                 let ko =
