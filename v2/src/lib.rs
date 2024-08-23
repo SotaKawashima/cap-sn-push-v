@@ -2,7 +2,8 @@ use std::borrow::Cow;
 
 use base::{
     executor::{
-        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory,
+        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InfoIdx, InstanceExt, InstanceWrapper,
+        Memory,
     },
     info::InfoContent,
     opinion::{AccessProb, MyFloat, Trusts},
@@ -115,15 +116,18 @@ where
         producers
     }
 
-    fn get_informer<'a>(
+    fn get_informer_params<'a>(
         ins: &mut InstanceWrapper<'a, Exec<V>, V, R, Self>,
+        agent_idx: AgentIdx,
+        info_idx: InfoIdx,
     ) -> (Trusts<V>, AccessProb<V>) {
         todo!()
     }
 
-    fn get_sharer<'a>(
+    fn get_sharer_params<'a>(
         ins: &mut InstanceWrapper<'a, Exec<V>, V, R, Self>,
-        info_idx: usize,
+        agent_idx: AgentIdx,
+        info_idx: InfoIdx,
     ) -> (Trusts<V>, AccessProb<V>) {
         todo!()
     }

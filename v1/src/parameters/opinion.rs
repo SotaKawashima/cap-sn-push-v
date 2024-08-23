@@ -7,13 +7,13 @@ use rand_distr::Dirichlet;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
 use std::marker::PhantomData;
+use subjective_logic::multi_array::labeled::MArrD2;
 use subjective_logic::{
     approx_ext,
     domain::{Domain, Keys},
     ops::{Indexes, Zeros},
 };
 use subjective_logic::{
-    domain::DomainConv,
     iter::FromFn,
     mul::labeled::{OpinionD1, SimplexD1},
     multi_array::labeled::MArrD1,
@@ -109,17 +109,20 @@ where
     thetad_h: MArrD1<H, SimplexDist<Thetad, V>>,
     /// parameters of conditional opinions $\Psi \implies H$ and $B \implies H$ when $\phi_0$ is true
     h_psi_b_if_phi0: ConditionParams<Psi, B, H, V>,
-    /// parameters of conditional opinions $\Psi^F \implies H^F$ when $\phi^F_0$ is true
-    #[serde_as(as = "TryFromInto<DependentParam<FH, V, Vec<SimplexParam<V>>>>")]
-    fh_fpsi_if_fphi0: DependentParam<FH, V, Vec<SimplexDist<FH, V>>>,
-    /// parameters of conditional opinions $\Psi^K \implies H^K$ when $\phi^K_0$ is true
-    #[serde_as(as = "TryFromInto<DependentParam<KH, V, Vec<SimplexParam<V>>>>")]
-    kh_kpsi_if_kphi0: DependentParam<KH, V, Vec<SimplexDist<KH, V>>>,
-
+    // /// parameters of conditional opinions $\Psi^F \implies H^F$ when $\phi^F_0$ is true
+    // #[serde_as(as = "TryFromInto<DependentParam<FH, V, Vec<SimplexParam<V>>>>")]
+    // fh_fpsi_if_fphi0: DependentParam<FH, V, Vec<SimplexDist<FH, V>>>,
+    // /// parameters of conditional opinions $\Psi^K \implies H^K$ when $\phi^K_0$ is true
+    // #[serde_as(as = "TryFromInto<DependentParam<KH, V, Vec<SimplexParam<V>>>>")]
+    // kh_kpsi_if_kphi0: DependentParam<KH, V, Vec<SimplexDist<KH, V>>>,
     #[serde_as(as = "TryFromInto<Vec<EValueParam<V>>>")]
-    uncertainty_fh_fo_if_fphi0: MArrD1<FO, EValue<V>>,
+    uncertainty_fh_fpsi_if_fphi0: MArrD1<FPsi, EValue<V>>,
     #[serde_as(as = "TryFromInto<Vec<EValueParam<V>>>")]
-    uncertainty_fh_fo_if_fphi1: MArrD1<FO, EValue<V>>,
+    uncertainty_kh_kpsi_if_kphi0: MArrD1<KPsi, EValue<V>>,
+    #[serde_as(as = "TryFromInto<Vec<Vec<EValueParam<V>>>>")]
+    uncertainty_fh_fo_fphi: MArrD2<FO, FPhi, EValue<V>>,
+    #[serde_as(as = "TryFromInto<Vec<Vec<EValueParam<V>>>>")]
+    uncertainty_kh_ko_kphi: MArrD2<KO, KPhi, EValue<V>>,
 }
 
 #[serde_as]
@@ -216,18 +219,18 @@ where
                 MArrD1::<Psi, _>::new(x.pop().unwrap()),
             )
         };
-        let fh_fpsi_if_fphi0 = {
-            let base =
-                MArrD1::<FPhi, SimplexD1<FH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
-            let x = self.fh_fpsi_if_fphi0.samples1(rng, base.iter());
-            MArrD1::<FPsi, _>::new(x)
-        };
-        let kh_kpsi_if_kphi0 = {
-            let base =
-                MArrD1::<KPhi, SimplexD1<KH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
-            let x = self.kh_kpsi_if_kphi0.samples1(rng, base.iter());
-            MArrD1::<KPsi, _>::new(x)
-        };
+        // let fh_fpsi_if_fphi0 = {
+        //     let base =
+        //         MArrD1::<FPhi, SimplexD1<FH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
+        //     let x = self.fh_fpsi_if_fphi0.samples1(rng, base.iter());
+        //     MArrD1::<FPsi, _>::new(x)
+        // };
+        // let kh_kpsi_if_kphi0 = {
+        //     let base =
+        //         MArrD1::<KPhi, SimplexD1<KH, _>>::from_fn(|i| h_psi_if_phi0[i].clone().conv());
+        //     let x = self.kh_kpsi_if_kphi0.samples1(rng, base.iter());
+        //     MArrD1::<KPsi, _>::new(x)
+        // };
 
         value.reset(
             MArrD1::from_fn(|i| self.o_b[i].sample(rng)),
@@ -237,10 +240,10 @@ where
             MArrD1::from_fn(|i| self.thetad_h[i].sample(rng)),
             h_psi_if_phi0,
             h_b_if_phi0,
-            fh_fpsi_if_fphi0,
-            kh_kpsi_if_kphi0,
-            MArrD1::from_fn(|i| self.uncertainty_fh_fo_if_fphi0[i].sample(rng)),
-            MArrD1::from_fn(|i| self.uncertainty_fh_fo_if_fphi1[i].sample(rng)),
+            MArrD1::from_fn(|i| self.uncertainty_fh_fpsi_if_fphi0[i].sample(rng)),
+            MArrD1::from_fn(|i| self.uncertainty_kh_kpsi_if_kphi0[i].sample(rng)),
+            MArrD2::from_fn(|i| self.uncertainty_fh_fo_fphi[i].sample(rng)),
+            MArrD2::from_fn(|i| self.uncertainty_kh_ko_kphi[i].sample(rng)),
         )
     }
 }
@@ -633,6 +636,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 impl<D, V> DependentParam<D, V, Vec<SimplexDist<D, V>>>
 where
     D: Domain<Idx = usize>,

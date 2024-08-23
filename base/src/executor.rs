@@ -146,15 +146,15 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         }
     }
 
-    fn received_info(&mut self, info_idx: usize) {
-        let info = &self.infos[info_idx];
+    fn received_info(&mut self, info_idx: InfoIdx) {
+        let info = &self.infos[info_idx.0];
         let d = self.info_data_table.get_mut(info.label()).unwrap();
         d.received();
         debug!(target: "recv", l = ?info.label(), "#" = info.idx);
     }
 
-    fn get_info_mut(&mut self, info_idx: usize) -> (&mut Info<'a, V>, &mut InfoData) {
-        let info = &mut self.infos[info_idx];
+    fn get_info_mut(&mut self, info_idx: InfoIdx) -> (&mut Info<'a, V>, &mut InfoData) {
+        let info = &mut self.infos[info_idx.0];
         let d = self.info_data_table.get_mut(info.label()).unwrap();
         (info, d)
     }
@@ -206,7 +206,7 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
         for &(agent_idx, info_idx) in &ips {
             let span = span!(Level::INFO, "IA", "#" = agent_idx.0);
             let _guard = span.enter();
-            let (trusts, ap) = X::get_informer(self);
+            let (trusts, ap) = X::get_informer_params(self, agent_idx, info_idx);
             let info = &self.infos[info_idx.0];
             debug!(target: "recv", l = ?info.label(), "#" = info.idx);
             let agent = memory.get_agent_mut(agent_idx.0);
@@ -221,13 +221,13 @@ impl<'a, E, V: MyFloat, R, X> InstanceWrapper<'a, E, V, R, X> {
             let span = span!(Level::INFO, "SA", "#" = agent_idx.0);
             let _guard = span.enter();
 
-            self.received_info(info_idx.0);
+            self.received_info(info_idx);
             if self.rng.gen::<V>() >= Ax::visit_prob(memory.get_agent_mut(agent_idx.0)) {
                 continue;
             }
 
-            let (trusts, ap) = X::get_sharer(self, info_idx.0);
-            let (info, d) = self.get_info_mut(info_idx.0);
+            let (trusts, ap) = X::get_sharer_params(self, agent_idx, info_idx);
+            let (info, d) = self.get_info_mut(info_idx);
             let agent = memory.get_agent_mut(agent_idx.0);
             let b = agent.core.read_info(info, trusts, ap);
             info.viewed();
@@ -304,10 +304,14 @@ pub trait InstanceExt<V: Clone, R, E>: Sized {
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
         t: u32,
     ) -> Vec<(AgentIdx, Cow<'a, InfoContent<V>>)>;
-    fn get_informer<'a>(ins: &mut InstanceWrapper<'a, E, V, R, Self>)
-        -> (Trusts<V>, AccessProb<V>);
-    fn get_sharer<'a>(
+    fn get_informer_params<'a>(
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
-        info_idx: usize,
+        agent_idx: AgentIdx,
+        info_idx: InfoIdx,
+    ) -> (Trusts<V>, AccessProb<V>);
+    fn get_sharer_params<'a>(
+        ins: &mut InstanceWrapper<'a, E, V, R, Self>,
+        agent_idx: AgentIdx,
+        info_idx: InfoIdx,
     ) -> (Trusts<V>, AccessProb<V>);
 }

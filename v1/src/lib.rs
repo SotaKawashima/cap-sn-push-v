@@ -5,7 +5,8 @@ use std::{borrow::Cow, path::PathBuf};
 
 use base::{
     executor::{
-        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InstanceExt, InstanceWrapper, Memory,
+        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InfoIdx, InstanceExt, InstanceWrapper,
+        Memory,
     },
     info::{InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
@@ -335,11 +336,12 @@ where
         contents
     }
 
-    fn get_sharer<'a>(
+    fn get_sharer_params<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
-        info_idx: usize,
+        _: AgentIdx,
+        info_idx: InfoIdx,
     ) -> (Trusts<V>, AccessProb<V>) {
-        let info = &ins.infos[info_idx];
+        let info = &ins.infos[info_idx.0];
         let params = &ins.exec.agent_params.trust_params;
         let rng = &mut ins.rng;
         let friend_access_prob = params.friend_access_prob.sample(rng);
@@ -385,8 +387,10 @@ where
         )
     }
 
-    fn get_informer<'a>(
+    fn get_informer_params<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
+        _: AgentIdx,
+        _: InfoIdx,
     ) -> (Trusts<V>, AccessProb<V>) {
         (
             Trusts {
