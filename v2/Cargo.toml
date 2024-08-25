@@ -12,3 +12,10 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 graph-lib = { workspace = true }
 subjective-logic = { workspace = true }
+itertools = { workspace = true }
+polars-arrow = { workspace = true }
+serde = { workspace = true }
+serde_with = { workspace = true }
+toml = { workspace = true }
+clap = { workspace = true }
+csv = "1.3"

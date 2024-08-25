@@ -1,9 +1,9 @@
 use num_traits::Float;
-use rand::Rng;
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{Distribution, Exp1, Open01, StandardNormal};
 use std::{
     array,
     collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
 };
 use tracing::*;
 
@@ -11,7 +11,6 @@ use crate::{
     decision::{Prospect, CPT},
     info::Info,
     opinion::{AccessProb, DeducedOpinions, MyFloat, MyOpinions, MyOpinionsUpd, Trusts},
-    util::Reset,
 };
 
 #[derive(Debug)]
@@ -22,22 +21,25 @@ pub struct BehaviorByInfo {
 
 #[derive(Default)]
 pub struct Agent<V> {
-    pub ops: MyOpinions<V>,
-    pub infos_accessed: BTreeSet<usize>,
-    pub decision: Decision<V>,
+    ops: MyOpinions<V>,
+    infos_accessed: BTreeSet<usize>,
+    decision: Decision<V>,
 }
 
 #[derive(Default)]
 pub struct Decision<V> {
-    pub cpt: CPT<V>,
-    pub prospect: Prospect<V>,
+    cpt: CPT<V>,
+    prospect: Prospect<V>,
     selfish_status: DelayActionStatus,
     sharing_statuses: BTreeMap<usize, ActionStatus>,
-    pub delay_selfish: u32,
+    delay_selfish: u32,
 }
 
-impl<V: MyFloat> Decision<V> {
-    fn values_selfish(&self, ded: &DeducedOpinions<V>) -> [V; 2] {
+impl<V> Decision<V> {
+    fn values_selfish(&self, ded: &DeducedOpinions<V>) -> [V; 2]
+    where
+        V: MyFloat,
+    {
         let p_theta = ded.p_theta();
         info!(target: "    TH", P = ?p_theta);
         let values: [V; 2] =
@@ -46,7 +48,10 @@ impl<V: MyFloat> Decision<V> {
         values
     }
 
-    fn try_decide_selfish(&mut self, upd: &MyOpinionsUpd<V>) {
+    fn try_decide_selfish(&mut self, upd: &MyOpinionsUpd<V>)
+    where
+        V: MyFloat,
+    {
         if !self.selfish_status.is_done() {
             upd.decide1(|ded| {
                 self.selfish_status
@@ -56,11 +61,17 @@ impl<V: MyFloat> Decision<V> {
         }
     }
 
-    fn predict(&self, upd: &mut MyOpinionsUpd<V>) {
+    fn predict(&self, upd: &mut MyOpinionsUpd<V>)
+    where
+        V: MyFloat,
+    {
         upd.decide2(|_, _| true);
     }
 
-    fn try_decide_sharing(&mut self, upd: &mut MyOpinionsUpd<V>, info_idx: usize) -> bool {
+    fn try_decide_sharing(&mut self, upd: &mut MyOpinionsUpd<V>, info_idx: usize) -> bool
+    where
+        V: MyFloat,
+    {
         let sharing_status = self.sharing_statuses.entry(info_idx).or_default();
         if sharing_status.is_done() {
             false
@@ -84,16 +95,22 @@ impl<V: MyFloat> Decision<V> {
         }
     }
 
-    pub fn reset<R: Rng, P: Reset<Self>>(&mut self, param: &P, rng: &mut R)
+    pub fn reset<F>(&mut self, delay_selfish: u32, mut f: F)
     where
-        Open01: Distribution<V>,
-        Standard: Distribution<V>,
-        StandardNormal: Distribution<V>,
-        Exp1: Distribution<V>,
+        // V: Debug + Float,
+        F: FnMut(&mut Prospect<V>, &mut CPT<V>) -> (),
+        //     Open01: Distribution<V>,
+        //     Standard: Distribution<V>,
+        //     StandardNormal: Distribution<V>,
+        //     Exp1: Distribution<V>,
     {
         self.selfish_status.reset();
         self.sharing_statuses.clear();
-        param.reset(self, rng);
+        self.delay_selfish = delay_selfish;
+        f(&mut self.prospect, &mut self.cpt);
+        // self.prospect.reset(x0, x1, y);
+        // self.cpt.reset()
+        // param.reset(self, rng);
     }
 }
 
@@ -170,13 +187,22 @@ impl DelayActionStatus {
 }
 
 impl<V> Agent<V> {
-    pub fn reset<P, R>(&mut self, param: &P, rng: &mut R)
-    where
-        R: Rng,
-        P: Reset<Self>,
-    {
+    fn clear(&mut self) {
         self.infos_accessed.clear();
-        param.reset(self, rng);
+    }
+
+    pub fn reset<F>(&mut self, mut f: F)
+    where
+        // V: Float + Debug, // P: Reset<Self>,
+        F: FnMut(&mut MyOpinions<V>, &mut Decision<V>),
+        // F2: FnMut(&mut Decision<V>),
+    {
+        self.clear();
+        f(&mut self.ops, &mut self.decision);
+        // self.ops.reset();
+        // self.decision.reset(delay_selfish, x0, x1, y)
+        // param.reset(self, rng);
+        // f(self);
     }
 
     pub fn is_willing_selfish(&self) -> bool {

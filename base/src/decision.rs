@@ -9,7 +9,7 @@ use subjective_logic::{
 };
 use tracing::debug;
 
-use crate::opinion::{Theta, FB};
+use crate::opinion::{Theta, Thetad, A};
 
 #[derive(Clone, Default, Debug)]
 pub struct CPT<V> {
@@ -20,10 +20,7 @@ pub struct CPT<V> {
     delta: V,
 }
 
-impl<V> CPT<V>
-where
-    V: Float + UlpsEq + AddAssign + Sum,
-{
+impl<V> CPT<V> {
     pub fn reset(&mut self, alpha: V, beta: V, lambda: V, gamma: V, delta: V) {
         self.alpha = alpha;
         self.beta = beta;
@@ -47,7 +44,10 @@ where
     //     );
     // }
 
-    fn w(p: V, e: V) -> V {
+    fn w(p: V, e: V) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         if ulps_eq!(p, V::one()) {
             V::one()
         } else {
@@ -57,22 +57,34 @@ where
     }
 
     /// Computes a probability weighting function for gains
-    fn positive_weight(&self, p: V) -> V {
+    fn positive_weight(&self, p: V) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         Self::w(p, self.gamma)
     }
 
     /// Computes a probability weighting function for losses
-    fn negative_weight(&self, p: V) -> V {
+    fn negative_weight(&self, p: V) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         Self::w(p, self.delta)
     }
 
     /// Computes a value funciton for positive value
-    fn positive_value(&self, x: V) -> V {
+    fn positive_value(&self, x: V) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         x.powf(self.alpha)
     }
 
     /// Computes a value funciton for negative value
-    fn negative_value(&self, x: V) -> V {
+    fn negative_value(&self, x: V) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         -self.lambda * x.abs().powf(self.beta)
     }
 
@@ -81,7 +93,10 @@ where
         &self,
         positive_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
-    ) -> V {
+    ) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         positive_level_sets
             .iter()
             .scan((V::zero(), V::zero()), |(w, acc), (o, ids)| {
@@ -98,7 +113,10 @@ where
         &self,
         negative_level_sets: &[(V, Vec<Idx>)],
         prob: &P,
-    ) -> V {
+    ) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         negative_level_sets
             .iter()
             .scan((V::zero(), V::zero()), |(w, acc), (o, ids)| {
@@ -115,16 +133,28 @@ where
         &self,
         level_sets: &LevelSet<Idx, V>,
         prob: &P,
-    ) -> V {
+    ) -> V
+    where
+        V: Float + UlpsEq + AddAssign + Sum,
+    {
         self.positive_valuate(&level_sets.positive, prob)
             + self.negative_valuate(&level_sets.negative, prob)
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct LevelSet<Idx, V> {
     positive: Vec<(V, Vec<Idx>)>,
     negative: Vec<(V, Vec<Idx>)>,
+}
+
+impl<Idx, V> Default for LevelSet<Idx, V> {
+    fn default() -> Self {
+        Self {
+            positive: Vec::new(),
+            negative: Vec::new(),
+        }
+    }
 }
 
 impl<Idx, V: Float> LevelSet<Idx, V> {
@@ -172,8 +202,8 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
 
 #[derive(Default)]
 pub struct Prospect<V> {
-    pub selfish: [LevelSet<usize, V>; 2],
-    pub sharing: [LevelSet<(usize, usize), V>; 2],
+    pub selfish: [LevelSet<Theta, V>; 2],
+    pub sharing: [LevelSet<(A, Thetad), V>; 2],
 }
 
 impl<V> Prospect<V> {
@@ -183,7 +213,7 @@ impl<V> Prospect<V> {
     {
         let selfish_outcome_maps: [MArrD1<Theta, V>; 2] =
             [marr_d1![V::zero(), x1], marr_d1![x0, x0]];
-        let sharing_outcome_maps: [MArrD2<FB, Theta, V>; 2] = [
+        let sharing_outcome_maps: [MArrD2<A, Thetad, V>; 2] = [
             marr_d2![[V::zero(), x1], [x0, x0]],
             marr_d2![[y, x1 + y], [x0 + y, x0 + y]],
         ];

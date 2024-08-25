@@ -1,18 +1,16 @@
 mod parameters;
 mod scenario;
 
-use std::{borrow::Cow, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use base::{
     executor::{
         AgentExtTrait, AgentIdx, AgentWrapper, Executor, InfoIdx, InstanceExt, InstanceWrapper,
-        Memory,
     },
     info::{InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
     runner::{run, RuntimeParams},
     stat::FileWriters,
-    util::Reset,
 };
 use input::format::DataFormat;
 
@@ -25,9 +23,7 @@ use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use std::collections::{BTreeMap, VecDeque};
 
 use graph_lib::prelude::GraphB;
-use rand::seq::SliceRandom;
-use rand::Rng;
-use tracing::{span, Level};
+use rand::{seq::SliceRandom, Rng};
 
 #[derive(clap::Parser)]
 pub struct Cli {
@@ -125,13 +121,7 @@ struct AgentExt<V> {
     visit_prob: V,
 }
 
-impl<V: MyFloat> AgentExtTrait<V> for AgentExt<V> {
-    fn visit_prob(wrapper: &AgentWrapper<V, Self>) -> V {
-        wrapper.ext.visit_prob
-    }
-}
-
-impl<V> Reset<AgentExt<V>> for AgentParams<V>
+impl<V> AgentExtTrait<V> for AgentExt<V>
 where
     V: MyFloat,
     Open01: Distribution<V>,
@@ -139,16 +129,128 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
 {
-    fn reset<R: Rng>(&self, value: &mut AgentExt<V>, rng: &mut R) {
-        value.visit_prob = self.access_prob.sample(rng);
+    type Exec = ExecV1<V>;
+    fn visit_prob<R: Rng>(&mut self, _: &ExecV1<V>, _: &mut R) -> V {
+        self.visit_prob
+    }
+    fn reset<R: Rng>(wrapper: &mut AgentWrapper<V, Self>, exec: &ExecV1<V>, rng: &mut R) {
+        wrapper.core.reset(|ops, decision| {
+            exec.agent_params.initial_opinions.reset_to(ops, rng);
+            let delay_selfish = exec.agent_params.delay_selfish.sample(rng);
+            decision.reset(delay_selfish, |prospect, cpt| {
+                exec.agent_params.loss_params.reset_to(prospect, rng);
+                exec.agent_params.cpt_params.reset_to(cpt, rng);
+            });
+        });
+        wrapper.ext.visit_prob = exec.agent_params.access_prob.sample(rng);
+    }
+
+    type Ix = InstanceV1<V>;
+
+    fn informer_trusts<'a, R>(
+        &mut self,
+        _: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
+        _: InfoIdx,
+    ) -> Trusts<V> {
+        Trusts {
+            p: V::one(),
+            fp: V::one(),
+            kp: V::one(),
+            fm: V::zero(),
+            km: V::zero(),
+        }
+    }
+
+    fn informer_access_probs<'a, R: Rng>(
+        &mut self,
+        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
+        _: InfoIdx,
+    ) -> AccessProb<V> {
+        AccessProb {
+            fp: V::zero(),
+            kp: V::zero(),
+            pred_fp: ins
+                .exec
+                .agent_params
+                .trust_params
+                .friend_access_prob
+                .sample(&mut ins.rng)
+                * ins
+                    .exec
+                    .agent_params
+                    .trust_params
+                    .friend_arrival_prob
+                    .sample(&mut ins.rng),
+            fm: V::one(),
+            km: V::one(),
+        }
+    }
+
+    fn sharer_trusts<'a, R: Rng>(
+        &mut self,
+        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
+        info_idx: InfoIdx,
+    ) -> Trusts<V> {
+        let params = &ins.exec.agent_params.trust_params;
+        let trust_sampler = params
+            .info_trust_params
+            .get_sampler(ins.get_info_label(info_idx));
+        let info_trust = *ins
+            .ext
+            .info_trust_map
+            .entry(info_idx)
+            .or_insert_with(|| trust_sampler.sample(&mut ins.rng));
+        let corr_misinfo_trust = *ins
+            .ext
+            .corr_misinfo_trust_map
+            .entry(info_idx)
+            .or_insert_with(|| {
+                params
+                    .info_trust_params
+                    .get_sampler(&InfoLabel::Misinfo)
+                    .sample(&mut ins.rng)
+            });
+
+        Trusts {
+            p: info_trust,
+            fp: info_trust,
+            kp: info_trust,
+            fm: corr_misinfo_trust,
+            km: corr_misinfo_trust,
+        }
+    }
+
+    fn sharer_access_probs<'a, R: Rng>(
+        &mut self,
+        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
+        info_idx: InfoIdx,
+    ) -> AccessProb<V> {
+        let params = &ins.exec.agent_params.trust_params;
+        let friend_access_prob = params.friend_access_prob.sample(&mut ins.rng);
+        let social_access_prob = params.social_access_prob.sample(&mut ins.rng);
+        let friend_arrival_prob = params.friend_arrival_prob.sample(&mut ins.rng);
+        let misinfo_friend = params.friend_misinfo_trust.sample(&mut ins.rng);
+        let misinfo_social = params.social_misinfo_trust.sample(&mut ins.rng);
+        let receipt_prob = V::one()
+            - (V::one()
+                - V::from_usize(ins.num_shared(info_idx)).unwrap() / ins.exec.scenario.fnum_nodes)
+                .powf(ins.exec.scenario.mean_degree);
+
+        AccessProb {
+            fp: friend_access_prob * receipt_prob,
+            kp: social_access_prob * receipt_prob,
+            fm: misinfo_friend,
+            km: misinfo_social,
+            pred_fp: friend_access_prob * friend_arrival_prob,
+        }
     }
 }
 
 struct InstanceV1<V> {
     event_table: BTreeMap<u32, VecDeque<Inform>>,
     observable: Vec<usize>,
-    info_trust_map: BTreeMap<usize, V>,
-    corr_misinfo_trust_map: BTreeMap<usize, V>,
+    info_trust_map: HashMap<InfoIdx, V>,
+    corr_misinfo_trust_map: HashMap<InfoIdx, V>,
 }
 
 impl<'a, V> Executor<V, AgentExt<V>, InstanceV1<V>> for ExecV1<V>
@@ -166,14 +268,13 @@ where
     fn graph(&self) -> &GraphB {
         &self.scenario.graph
     }
-
-    fn reset<R: Rng>(&self, memory: &mut Memory<V, AgentExt<V>>, rng: &mut R) {
-        for (idx, agent) in memory.agents.iter_mut().enumerate() {
-            let span = span!(Level::INFO, "init", "#" = idx);
-            let _guard = span.enter();
-            agent.reset(&self.agent_params, rng);
-        }
-    }
+    // fn reset<R: Rng>(&self, memory: &mut Memory<V, AgentExt<V>>, rng: &mut R) {
+    //     for (idx, agent) in memory.agents.iter_mut().enumerate() {
+    //         let span = span!(Level::INFO, "init", "#" = idx);
+    //         let _guard = span.enter();
+    //         agent.reset(&self.agent_params, rng);
+    //     }
+    // }
 }
 
 /*
@@ -283,43 +384,42 @@ where
     Exp1: Distribution<V>,
     R: Rng,
 {
-    fn from_exec(exec: &ExecV1<V>) -> Self {
+    fn from_exec(exec: &ExecV1<V>, _: &mut R) -> Self {
         Self {
-            info_trust_map: BTreeMap::<usize, V>::new(),
-            corr_misinfo_trust_map: BTreeMap::<usize, V>::new(),
+            info_trust_map: HashMap::new(),
+            corr_misinfo_trust_map: HashMap::new(),
             observable: Vec::from_iter(0..exec.scenario.num_nodes),
             event_table: exec.scenario.table.clone(),
         }
     }
 
-    fn is_continued(&self) -> bool {
+    fn is_continued(&self, _: &ExecV1<V>) -> bool {
         !self.event_table.is_empty()
     }
 
-    fn get_producers_with<'a>(
+    fn get_informers_with<'a>(
         ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
         t: u32,
-    ) -> Vec<(AgentIdx, Cow<'a, InfoContent<V>>)> {
+    ) -> Vec<(AgentIdx, InfoContent<'a, V>)> {
         let mut contents = Vec::new();
         // register observer agents
         // senders of observed info have priority over existing senders.
         if let Some(observer) = &ins.exec.scenario.observer {
-            ins.ext.observable.retain(|&agent_idx| {
-                if ins.total_num_selfish <= observer.threshold {
-                    return true;
-                }
-                if observer.po <= ins.rng.gen() {
-                    return true;
-                }
-                if observer.pp <= ins.rng.gen() {
-                    return true;
-                }
-                contents.push((
-                    agent_idx.into(),
-                    Cow::Borrowed(&ins.exec.scenario.info_contents[observer.observed_info_obj_idx]),
-                ));
-                false
-            });
+            if ins.total_num_selfish() > observer.threshold {
+                ins.ext.observable.retain(|&agent_idx| {
+                    if observer.po <= ins.rng.gen() {
+                        return true;
+                    }
+                    if observer.pp <= ins.rng.gen() {
+                        return true;
+                    }
+                    contents.push((
+                        agent_idx.into(),
+                        (&ins.exec.scenario.info_objects[observer.observed_info_obj_idx]).into(),
+                    ));
+                    false
+                });
+            }
             if contents.len() > 1 {
                 contents.shuffle(&mut ins.rng);
             }
@@ -329,96 +429,11 @@ where
             for i in informms {
                 contents.push((
                     i.agent_idx.into(),
-                    Cow::Borrowed(&ins.exec.scenario.info_contents[i.info_obj_idx]),
+                    (&ins.exec.scenario.info_objects[i.info_obj_idx]).into(),
                 ));
             }
         }
         contents
-    }
-
-    fn get_sharer_params<'a>(
-        ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
-        _: AgentIdx,
-        info_idx: InfoIdx,
-    ) -> (Trusts<V>, AccessProb<V>) {
-        let info = &ins.infos[info_idx.0];
-        let params = &ins.exec.agent_params.trust_params;
-        let rng = &mut ins.rng;
-        let friend_access_prob = params.friend_access_prob.sample(rng);
-        let social_access_prob = params.social_access_prob.sample(rng);
-        let friend_arrival_prob = params.friend_arrival_prob.sample(rng);
-        let misinfo_friend = params.friend_misinfo_trust.sample(rng);
-        let misinfo_social = params.social_misinfo_trust.sample(rng);
-        let trust_sampler = params.info_trust_params.get_sampler(info.label());
-        let info_trust = *ins
-            .ext
-            .info_trust_map
-            .entry(info.idx)
-            .or_insert_with(|| trust_sampler.sample(rng));
-        let corr_misinfo_trust = *ins
-            .ext
-            .corr_misinfo_trust_map
-            .entry(info.idx)
-            .or_insert_with(|| {
-                params
-                    .info_trust_params
-                    .get_sampler(&InfoLabel::Misinfo)
-                    .sample(rng)
-            });
-
-        let receipt_prob = V::one()
-            - (V::one() - V::from_usize(info.num_shared()).unwrap() / ins.exec.scenario.fnum_nodes)
-                .powf(ins.exec.scenario.mean_degree);
-        (
-            Trusts {
-                p: info_trust,
-                fp: info_trust,
-                kp: info_trust,
-                fm: corr_misinfo_trust,
-                km: corr_misinfo_trust,
-            },
-            AccessProb {
-                fp: friend_access_prob * receipt_prob,
-                kp: social_access_prob * receipt_prob,
-                fm: misinfo_friend,
-                km: misinfo_social,
-                pred_fp: friend_access_prob * friend_arrival_prob,
-            },
-        )
-    }
-
-    fn get_informer_params<'a>(
-        ins: &mut InstanceWrapper<'a, ExecV1<V>, V, R, Self>,
-        _: AgentIdx,
-        _: InfoIdx,
-    ) -> (Trusts<V>, AccessProb<V>) {
-        (
-            Trusts {
-                p: V::one(),
-                fp: V::one(),
-                kp: V::one(),
-                fm: V::zero(),
-                km: V::zero(),
-            },
-            AccessProb {
-                fp: V::zero(),
-                kp: V::zero(),
-                pred_fp: ins
-                    .exec
-                    .agent_params
-                    .trust_params
-                    .friend_access_prob
-                    .sample(&mut ins.rng)
-                    * ins
-                        .exec
-                        .agent_params
-                        .trust_params
-                        .friend_arrival_prob
-                        .sample(&mut ins.rng),
-                fm: V::one(),
-                km: V::one(),
-            },
-        )
     }
 }
 

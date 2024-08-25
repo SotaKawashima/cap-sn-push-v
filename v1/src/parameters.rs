@@ -12,11 +12,7 @@ use rand::Rng;
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
 
-use base::{
-    agent::{Agent, Decision},
-    opinion::MyFloat,
-    util::Reset,
-};
+use base::opinion::MyFloat;
 use input::{
     dist::{IValue, IValueParam},
     value::{EValue, EValueParam},
@@ -35,41 +31,41 @@ where
     pub initial_opinions: InitialOpinions<V>,
     #[serde_as(as = "TryFromInto<IValueParam<V>>")]
     pub delay_selfish: IValue<V>,
-    loss_params: LossParams<V>,
-    cpt_params: CptParams<V>,
+    pub loss_params: LossParams<V>,
+    pub cpt_params: CptParams<V>,
     pub trust_params: TrustParams<V>,
     #[serde_as(as = "TryFromInto<EValueParam<V>>")]
     pub access_prob: EValue<V>,
 }
 
-impl<V> Reset<Agent<V>> for AgentParams<V>
-where
-    V: MyFloat,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    fn reset<R: rand::Rng>(&self, value: &mut Agent<V>, rng: &mut R) {
-        self.reset(&mut value.decision, rng);
-        self.initial_opinions.reset(&mut value.ops, rng);
-    }
-}
+// impl<V> Reset<Agent<V>> for AgentParams<V>
+// where
+//     V: MyFloat,
+//     Open01: Distribution<V>,
+//     Standard: Distribution<V>,
+//     StandardNormal: Distribution<V>,
+//     Exp1: Distribution<V>,
+// {
+//     fn reset<R: rand::Rng>(&self, value: &mut Agent<V>, rng: &mut R) {
+//         self.reset(&mut value.decision, rng);
+//         self.initial_opinions.reset(&mut value.ops, rng);
+//     }
+// }
 
-impl<V> Reset<Decision<V>> for AgentParams<V>
-where
-    V: MyFloat,
-    Open01: Distribution<V>,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-{
-    fn reset<R: rand::Rng>(&self, value: &mut Decision<V>, rng: &mut R) {
-        self.loss_params.reset(&mut value.prospect, rng);
-        self.cpt_params.reset(&mut value.cpt, rng);
-        value.delay_selfish = self.delay_selfish.sample(rng);
-    }
-}
+// impl<V> Reset<Decision<V>> for AgentParams<V>
+// where
+//     V: MyFloat,
+//     Open01: Distribution<V>,
+//     Standard: Distribution<V>,
+//     StandardNormal: Distribution<V>,
+//     Exp1: Distribution<V>,
+// {
+//     fn reset<R: rand::Rng>(&self, value: &mut Decision<V>, rng: &mut R) {
+//         self.loss_params.reset(&mut value.prospect, rng);
+//         self.cpt_params.reset(&mut value.cpt, rng);
+//         value.delay_selfish = self.delay_selfish.sample(rng);
+//     }
+// }
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
@@ -97,7 +93,7 @@ where
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-struct LossParams<V>
+pub struct LossParams<V>
 where
     V: Float,
     Open01: Distribution<V>,
@@ -111,24 +107,24 @@ where
     pub y_of_x0: EValue<V>,
 }
 
-impl<V> Reset<Prospect<V>> for LossParams<V>
+impl<V> LossParams<V>
 where
     V: Float + Debug,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    fn reset<R: Rng>(&self, value: &mut Prospect<V>, rng: &mut R) {
+    pub fn reset_to<R: Rng>(&self, prospect: &mut Prospect<V>, rng: &mut R) {
         let x0 = self.x0.sample(rng);
         let x1 = x0 * self.x1_of_x0.sample(rng);
         let y = x0 * self.y_of_x0.sample(rng);
-        value.reset(x0, x1, y);
+        prospect.reset(x0, x1, y);
     }
 }
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-struct CptParams<V>
+pub struct CptParams<V>
 where
     V: Float,
     Open01: Distribution<V>,
@@ -146,14 +142,14 @@ where
     pub delta: EValue<V>,
 }
 
-impl<V> Reset<CPT<V>> for CptParams<V>
+impl<V> CptParams<V>
 where
     V: MyFloat,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
 {
-    fn reset<R: Rng>(&self, value: &mut CPT<V>, rng: &mut R) {
-        value.reset(
+    pub fn reset_to<R: Rng>(&self, cpt: &mut CPT<V>, rng: &mut R) {
+        cpt.reset(
             self.alpha.sample(rng),
             self.beta.sample(rng),
             self.lambda.sample(rng),

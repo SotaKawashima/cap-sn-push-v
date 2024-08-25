@@ -1,14 +1,9 @@
 use std::{
+    borrow::Cow,
     collections::{btree_map, BTreeMap, VecDeque},
-    fs::File,
-    io,
 };
 
-use graph_lib::{
-    io::{DataFormat, ParseBuilder},
-    prelude::{DiGraphB, Graph, GraphB, UndiGraphB},
-};
-use itertools::Itertools;
+use graph_lib::prelude::{Graph, GraphB};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde::Deserialize;
 use serde_with::{serde_as, TryFromInto};
@@ -17,45 +12,11 @@ use subjective_logic::{
     multi_array::labeled::MArrD1,
 };
 
-use base::opinion::{MyFloat, Phi, B, H, O};
 use base::{info::InfoContent, opinion::Psi};
-
-#[derive(Debug, serde::Deserialize)]
-struct GraphInfo {
-    directed: bool,
-    location: DataLocation,
-    #[serde(default = "default_transposed")]
-    transposed: bool,
-}
-
-#[derive(Debug, serde::Deserialize)]
-enum DataLocation {
-    LocalFile(String),
-}
-
-fn default_transposed() -> bool {
-    false
-}
-
-impl TryFrom<GraphInfo> for GraphB {
-    type Error = io::Error;
-
-    fn try_from(value: GraphInfo) -> Result<Self, Self::Error> {
-        match value.location {
-            DataLocation::LocalFile(path) => {
-                let mut builder = ParseBuilder::new(File::open(path)?, DataFormat::EdgeList);
-                if value.directed {
-                    if value.transposed {
-                        builder = builder.transpose();
-                    }
-                    Ok(GraphB::Di(builder.parse::<DiGraphB>()?))
-                } else {
-                    Ok(GraphB::Ud(builder.parse::<UndiGraphB>()?))
-                }
-            }
-        }
-    }
-}
+use base::{
+    opinion::{MyFloat, Phi, B, H, O},
+    util::GraphInfo,
+};
 
 #[serde_as]
 #[derive(Debug, serde::Deserialize, Clone)]
@@ -88,13 +49,24 @@ where
     },
 }
 
-impl<V: MyFloat> From<InfoObject<V>> for InfoContent<V> {
-    fn from(value: InfoObject<V>) -> Self {
+impl<'a, V: MyFloat> From<&'a InfoObject<V>> for InfoContent<'a, V> {
+    fn from(value: &'a InfoObject<V>) -> Self {
         match value {
-            InfoObject::Misinfo { op } => Self::Misinfo { op },
-            InfoObject::Correction { op, misinfo } => Self::Correction { op, misinfo },
-            InfoObject::Observation { op } => Self::Observation { op },
-            InfoObject::Inhibition { op1, op2, op3 } => Self::Inhibition { op1, op2, op3 },
+            InfoObject::Misinfo { op } => Self::Misinfo {
+                op: Cow::Borrowed(op),
+            },
+            InfoObject::Correction { op, misinfo } => Self::Correction {
+                op: Cow::Borrowed(op),
+                misinfo: Cow::Borrowed(misinfo),
+            },
+            InfoObject::Observation { op } => Self::Observation {
+                op: Cow::Borrowed(op),
+            },
+            InfoObject::Inhibition { op1, op2, op3 } => Self::Inhibition {
+                op1: Cow::Borrowed(op1),
+                op2: Cow::Borrowed(op2),
+                op3: Cow::Borrowed(op3),
+            },
         }
     }
 }
@@ -120,7 +92,7 @@ where
     Exp1: Distribution<V>,
 {
     pub graph: GraphB,
-    pub info_contents: Vec<InfoContent<V>>,
+    pub info_objects: Vec<InfoObject<V>>,
     /// time -> Inform
     pub table: BTreeMap<u32, VecDeque<Inform>>,
     pub observer: Option<Observer<V>>,
@@ -175,7 +147,7 @@ where
     fn try_from(value: ScenarioParam<V>) -> anyhow::Result<Scenario<V>> {
         let ScenarioParam {
             graph,
-            infos,
+            mut infos,
             events,
             observer,
         } = value;
@@ -197,7 +169,7 @@ where
         let fnum_nodes = V::from_usize(num_nodes).unwrap();
         let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_nodes;
 
-        let mut info_contents = infos.into_iter().map(|obj| obj.into()).collect_vec();
+        // let mut info_contents = infos.into_iter().map(|obj| obj.into()).collect_vec();
         let observer = observer.map(
             |ObserverParam {
                  observe_prob,
@@ -207,9 +179,10 @@ where
              }| {
                 // let k = (fnum_nodes * observer_pop_rate).round().to_usize().unwrap();
                 let threshold = (fnum_nodes * threashold_rate).round().to_usize().unwrap();
-                info_contents.push(InfoContent::Observation { op: observed_info });
+                infos.push(InfoObject::Observation { op: observed_info });
+                // info_contents.push(InfoContent::Observation { op: observed_info });
                 Observer {
-                    observed_info_obj_idx: info_contents.len() - 1,
+                    observed_info_obj_idx: infos.len() - 1,
                     po: observe_prob,
                     pp: post_prob,
                     threshold,
@@ -218,7 +191,7 @@ where
         );
         Ok(Self {
             graph,
-            info_contents,
+            info_objects: infos,
             table,
             num_nodes,
             fnum_nodes,
@@ -233,8 +206,9 @@ mod tests {
     use graph_lib::prelude::Graph;
     use std::fs::read_to_string;
 
+    use crate::scenario::InfoObject;
+
     use super::{Inform, Scenario, ScenarioParam};
-    use base::info::InfoContent;
 
     #[test]
     fn test_toml() -> anyhow::Result<()> {
@@ -246,16 +220,16 @@ mod tests {
         assert_eq!(scenario.graph.directed(), false);
 
         assert!(matches!(
-            scenario.info_contents[0],
-            InfoContent::Misinfo { .. }
+            scenario.info_objects[0],
+            InfoObject::Misinfo { .. }
         ));
         assert!(matches!(
-            scenario.info_contents[1],
-            InfoContent::Correction { .. }
+            scenario.info_objects[1],
+            InfoObject::Correction { .. }
         ));
         assert!(matches!(
-            scenario.info_contents[2],
-            InfoContent::Inhibition { .. }
+            scenario.info_objects[2],
+            InfoObject::Inhibition { .. }
         ));
 
         assert!(
@@ -272,8 +246,8 @@ mod tests {
         assert_eq!(observer.po, 0.1);
         assert_eq!(observer.observed_info_obj_idx, 3);
         assert!(matches!(
-            &scenario.info_contents[observer.observed_info_obj_idx],
-            InfoContent::Observation { op } if op.b()[1] == 1.0
+            &scenario.info_objects[observer.observed_info_obj_idx],
+            InfoObject::Observation { op } if op.b()[1.into()] == 1.0
         ));
         Ok(())
     }

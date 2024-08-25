@@ -7,6 +7,7 @@ use rand_distr::Dirichlet;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use serde_with::{serde_as, TryFromInto};
 use std::marker::PhantomData;
+use subjective_logic::iter::FromFn;
 use subjective_logic::multi_array::labeled::MArrD2;
 use subjective_logic::{
     approx_ext,
@@ -14,18 +15,14 @@ use subjective_logic::{
     ops::{Indexes, Zeros},
 };
 use subjective_logic::{
-    iter::FromFn,
     mul::labeled::{OpinionD1, SimplexD1},
     multi_array::labeled::MArrD1,
 };
 use tracing::debug;
 
-use base::{
-    opinion::{
-        FPhi, FPsi, FixedOpinions, KPhi, KPsi, MyFloat, MyOpinions, Phi, Psi, Theta, Thetad, A, B,
-        FH, FO, H, KH, KO, O,
-    },
-    util::Reset,
+use base::opinion::{
+    FPhi, FPsi, KPhi, KPsi, MyFloat, MyOpinions, Phi, Psi, Theta, Thetad, A, B, FH, FO, H, KH, KO,
+    O,
 };
 use input::value::{EValue, EValueParam};
 
@@ -141,7 +138,7 @@ where
     deduction_base_rates: InitialBaseRates<V>,
 }
 
-impl<V> Reset<MyOpinions<V>> for InitialOpinions<V>
+impl<V> InitialOpinions<V>
 where
     V: MyFloat,
     Standard: Distribution<V>,
@@ -149,7 +146,7 @@ where
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
 {
-    fn reset<R: Rng>(&self, value: &mut MyOpinions<V>, rng: &mut R) {
+    pub fn reset_to<R: Rng>(&self, ops: &mut MyOpinions<V>, rng: &mut R) {
         let InitialState {
             psi,
             phi,
@@ -165,7 +162,7 @@ where
             fh_fpsi_if_fphi1,
             kh_kpsi_if_kphi1,
         } = self.state.clone();
-        value.state.reset(
+        ops.state.reset(
             psi,
             phi,
             o,
@@ -189,7 +186,7 @@ where
             theta,
             thetad,
         } = self.deduction_base_rates.clone();
-        value.ded.reset(
+        ops.ded.reset(
             OpinionD1::vacuous_with(h),
             OpinionD1::vacuous_with(fh),
             OpinionD1::vacuous_with(kh),
@@ -198,22 +195,10 @@ where
             OpinionD1::vacuous_with(theta),
             OpinionD1::vacuous_with(thetad),
         );
-        self.fixed.reset(&mut value.fixed, rng);
-        debug!("{:?}", self.fixed);
-    }
-}
 
-impl<V> Reset<FixedOpinions<V>> for InitialFixed<V>
-where
-    V: MyFloat,
-    Standard: Distribution<V>,
-    StandardNormal: Distribution<V>,
-    Exp1: Distribution<V>,
-    Open01: Distribution<V>,
-{
-    fn reset<R: Rng>(&self, value: &mut FixedOpinions<V>, rng: &mut R) {
+        // ops.fixed.reset(&mut ops.fixed, rng);
         let (h_b_if_phi0, h_psi_if_phi0) = {
-            let mut x = self.h_psi_b_if_phi0.sample(rng);
+            let mut x = self.fixed.h_psi_b_if_phi0.sample(rng);
             (
                 MArrD1::<B, _>::new(x.pop().unwrap()),
                 MArrD1::<Psi, _>::new(x.pop().unwrap()),
@@ -232,21 +217,34 @@ where
         //     MArrD1::<KPsi, _>::new(x)
         // };
 
-        value.reset(
-            MArrD1::from_fn(|i| self.o_b[i].sample(rng)),
-            MArrD1::from_fn(|i| self.b_kh[i].sample(rng)),
-            MArrD1::from_fn(|i| self.a_fh[i].sample(rng)),
-            MArrD1::from_fn(|i| self.theta_h[i].sample(rng)),
-            MArrD1::from_fn(|i| self.thetad_h[i].sample(rng)),
+        ops.fixed.reset(
+            MArrD1::from_fn(|i| self.fixed.o_b[i].sample(rng)),
+            MArrD1::from_fn(|i| self.fixed.b_kh[i].sample(rng)),
+            MArrD1::from_fn(|i| self.fixed.a_fh[i].sample(rng)),
+            MArrD1::from_fn(|i| self.fixed.theta_h[i].sample(rng)),
+            MArrD1::from_fn(|i| self.fixed.thetad_h[i].sample(rng)),
             h_psi_if_phi0,
             h_b_if_phi0,
-            MArrD1::from_fn(|i| self.uncertainty_fh_fpsi_if_fphi0[i].sample(rng)),
-            MArrD1::from_fn(|i| self.uncertainty_kh_kpsi_if_kphi0[i].sample(rng)),
-            MArrD2::from_fn(|i| self.uncertainty_fh_fo_fphi[i].sample(rng)),
-            MArrD2::from_fn(|i| self.uncertainty_kh_ko_kphi[i].sample(rng)),
-        )
+            MArrD1::from_fn(|i| self.fixed.uncertainty_fh_fpsi_if_fphi0[i].sample(rng)),
+            MArrD1::from_fn(|i| self.fixed.uncertainty_kh_kpsi_if_kphi0[i].sample(rng)),
+            MArrD2::from_fn(|i| self.fixed.uncertainty_fh_fo_fphi[i].sample(rng)),
+            MArrD2::from_fn(|i| self.fixed.uncertainty_kh_ko_kphi[i].sample(rng)),
+        );
+        debug!("{:?}", self.fixed);
     }
 }
+
+// impl<V> Reset<FixedOpinions<V>> for InitialFixed<V>
+// where
+//     V: MyFloat,
+//     Standard: Distribution<V>,
+//     StandardNormal: Distribution<V>,
+//     Exp1: Distribution<V>,
+//     Open01: Distribution<V>,
+// {
+//     fn reset<R: Rng>(&self, value: &mut FixedOpinions<V>, rng: &mut R) {
+//     }
+// }
 // fn reset(&mut self, base_rates: &InitialBaseRates<V>) {
 //     *self = Self {
 //         a: OpinionD1::vacuous_with(a),
@@ -303,7 +301,7 @@ pub enum SimplexDistError {
 
 impl<D, V> TryFrom<SimplexParam<V>> for SimplexDist<D, V>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -331,10 +329,10 @@ where
                         }
                         u_zero = true;
                     } else {
-                        if b_zeros[idx] {
+                        if b_zeros[idx.into()] {
                             return Err(SimplexDistError::ZeroIndexDuplicated(idx));
                         }
-                        b_zeros[idx] = true;
+                        b_zeros[idx.into()] = true;
                     }
                 }
                 Ok(Self::Dirichlet {
@@ -349,7 +347,7 @@ where
 
 impl<D, V> Distribution<SimplexD1<D, V>> for SimplexDist<D, V>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -367,7 +365,8 @@ where
                 let u = if *u_zero { V::zero() } else { s.pop().unwrap() };
                 let mut b = MArrD1::zeros();
 
-                for i in MArrD1::<D, V>::indexes().rev() {
+                let is = MArrD1::<D, V>::indexes().collect_vec();
+                for i in is.into_iter().rev() {
                     if !b_zeros[i] {
                         b[i] = s.pop().unwrap();
                     }
@@ -385,7 +384,7 @@ pub struct ConditionParams<C0, C1, D, V>
 where
     C0: Domain,
     C1: Domain,
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -412,7 +411,7 @@ impl<C0, C1, D, V> Distribution<Vec<Vec<SimplexD1<D, V>>>> for ConditionParams<C
 where
     C0: Domain,
     C1: Domain,
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -436,7 +435,7 @@ where
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>, T: serde::Deserialize<'de>"))]
 pub enum DependentParam<D, V, T>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
 {
     Rel(RelativeParam<D, V>),
@@ -446,7 +445,7 @@ where
 impl<D, V> TryFrom<DependentParam<D, V, SimplexParam<V>>>
     for DependentParam<D, V, SimplexDist<D, V>>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -466,7 +465,7 @@ where
 impl<D, V> TryFrom<DependentParam<D, V, Vec<SimplexParam<V>>>>
     for DependentParam<D, V, Vec<SimplexDist<D, V>>>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
@@ -503,7 +502,7 @@ fn relative_sample<D, V, R>(
     rng: &mut R,
 ) -> SimplexD1<D, V>
 where
-    D: Domain<Idx = usize> + Keys<D::Idx>,
+    D: Domain<Idx: Debug + Copy> + Keys<D::Idx>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -544,7 +543,7 @@ where
 #[allow(dead_code)]
 impl<D, V> RelativeParam<D, V>
 where
-    D: Domain<Idx = usize> + Keys<D::Idx>,
+    D: Domain<Idx: Debug + Copy> + Keys<D::Idx>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -592,7 +591,7 @@ where
 
 impl<D, V> DependentParam<D, V, SimplexDist<D, V>>
 where
-    D: Domain<Idx = usize> + Keys<D::Idx>,
+    D: Domain<Idx: Debug + Copy> + Keys<D::Idx>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -609,7 +608,7 @@ where
 #[allow(dead_code)]
 impl<D, V, S> DependentParam<D, V, S>
 where
-    D: Domain<Idx = usize> + Keys<D::Idx>,
+    D: Domain<Idx: Debug + Copy> + Keys<D::Idx>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -639,7 +638,7 @@ where
 #[allow(dead_code)]
 impl<D, V> DependentParam<D, V, Vec<SimplexDist<D, V>>>
 where
-    D: Domain<Idx = usize>,
+    D: Domain<Idx: Debug + Copy>,
     V: MyFloat,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
@@ -667,6 +666,7 @@ mod tests {
 
     use super::InitialOpinions;
     use super::SimplexDist;
+    use base::opinion::H;
     use subjective_logic::marr_d1;
 
     #[test]
@@ -675,11 +675,11 @@ mod tests {
             "./test/config/test_initial_opinions.toml",
         )?)?;
         assert!(matches!(
-            &initial_opinions.fixed.theta_h[0],
+            &initial_opinions.fixed.theta_h[H(0)],
             SimplexDist::Fixed(s) if s.b() == &marr_d1![1.0, 0.0] && s.u() == &0.0,
         ));
         assert!(matches!(
-            &initial_opinions.fixed.theta_h[1],
+            &initial_opinions.fixed.theta_h[H(1)],
             SimplexDist::Fixed(s) if s.b() == &marr_d1![0.0, 0.7] && s.u() == &0.3,
         ));
         assert!(initial_opinions.deduction_base_rates.a == marr_d1![0.99, 0.01]);

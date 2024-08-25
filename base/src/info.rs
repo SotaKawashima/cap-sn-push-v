@@ -7,26 +7,26 @@ use subjective_logic::{
 };
 
 #[derive(Debug, Clone)]
-pub enum InfoContent<V> {
+pub enum InfoContent<'a, V: Clone> {
     Misinfo {
-        op: OpinionD1<Psi, V>,
+        op: Cow<'a, OpinionD1<Psi, V>>,
     },
     Correction {
-        op: OpinionD1<Psi, V>,
-        misinfo: OpinionD1<Psi, V>,
+        op: Cow<'a, OpinionD1<Psi, V>>,
+        misinfo: Cow<'a, OpinionD1<Psi, V>>,
     },
     Observation {
-        op: OpinionD1<O, V>,
+        op: Cow<'a, OpinionD1<O, V>>,
     },
     Inhibition {
-        op1: OpinionD1<Phi, V>,
-        op2: MArrD1<Psi, SimplexD1<H, V>>,
-        op3: MArrD1<B, SimplexD1<H, V>>,
+        op1: Cow<'a, OpinionD1<Phi, V>>,
+        op2: Cow<'a, MArrD1<Psi, SimplexD1<H, V>>>,
+        op3: Cow<'a, MArrD1<B, SimplexD1<H, V>>>,
     },
 }
 
-impl<V: MyFloat> From<&InfoContent<V>> for InfoLabel {
-    fn from(value: &InfoContent<V>) -> Self {
+impl<'a, V: MyFloat> From<&InfoContent<'a, V>> for InfoLabel {
+    fn from(value: &InfoContent<'a, V>) -> Self {
         match value {
             InfoContent::Misinfo { .. } => InfoLabel::Misinfo,
             InfoContent::Correction { .. } => InfoLabel::Corrective,
@@ -42,22 +42,22 @@ pub struct Info<'a, V: Clone> {
     num_shared: usize,
     num_viewed: usize,
     label: InfoLabel,
-    p: Cow<'a, InfoContent<V>>,
+    p: InfoContent<'a, V>,
 }
 
 impl<'a, V: MyFloat> Info<'a, V> {
-    pub fn new(idx: usize, p: Cow<'a, InfoContent<V>>) -> Self {
+    pub fn new(idx: usize, p: InfoContent<'a, V>) -> Self {
         Self {
             idx,
-            label: p.as_ref().into(),
+            label: (&p).into(),
             num_shared: 0,
             num_viewed: 0,
             p,
         }
     }
 
-    pub fn content(&self) -> &InfoContent<V> {
-        self.p.as_ref()
+    pub fn content(&self) -> &InfoContent<'a, V> {
+        &self.p
     }
 
     pub fn label(&self) -> &InfoLabel {

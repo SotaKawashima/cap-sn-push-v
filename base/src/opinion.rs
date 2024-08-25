@@ -5,13 +5,13 @@ use num_traits::{Float, FromPrimitive, NumAssign, ToPrimitive};
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use subjective_logic::{
     domain::{Domain, DomainConv, Keys},
-    impl_domain,
     iter::FromFn,
     mul::{
         labeled::{OpinionD1, OpinionD2, OpinionD3, OpinionRefD1, SimplexD1},
         InverseCondition, MergeJointConditions2,
     },
     multi_array::labeled::{MArrD1, MArrD2, MArrD3},
+    new_type_domain,
     ops::{Deduction, Discount, Fuse, FuseAssign, FuseOp, Product2, Product3, Projection},
 };
 use tracing::debug;
@@ -37,89 +37,22 @@ where
 impl MyFloat for f32 {}
 impl MyFloat for f64 {}
 
-#[derive(Debug)]
-pub struct Psi;
-impl_domain!(Psi = 2);
-
-#[derive(Debug)]
-pub struct Phi;
-impl_domain!(Phi = 2);
-
-#[derive(Debug)]
-pub struct M;
-impl_domain!(M = 2);
-
-#[derive(Debug)]
-pub struct O;
-impl_domain!(O = 2);
-
-#[derive(Debug)]
-pub struct A;
-impl_domain!(A = 2);
-
-#[derive(Debug)]
-pub struct B;
-impl_domain!(B = 2);
-
-#[derive(Debug)]
-pub struct H;
-impl_domain!(H = 2);
-
-#[derive(Debug)]
-pub struct Theta;
-impl_domain!(Theta from H);
-
-#[derive(Debug)]
-pub struct Thetad;
-impl_domain!(Thetad from H);
-
-#[derive(Debug)]
-pub struct FO;
-impl_domain!(FO from O);
-
-#[derive(Debug)]
-pub struct FM;
-impl_domain!(FM from M);
-
-#[derive(Debug)]
-pub struct FPhi;
-impl_domain!(FPhi from Phi);
-
-#[derive(Debug)]
-pub struct FPsi;
-impl_domain!(FPsi from Psi);
-
-#[derive(Debug)]
-pub struct FB;
-impl_domain!(FB from B);
-
-#[derive(Debug)]
-pub struct FH;
-impl_domain!(FH from H);
-
-#[derive(Debug)]
-pub struct KPsi;
-impl_domain!(KPsi from Psi);
-
-#[derive(Debug)]
-pub struct KPhi;
-impl_domain!(KPhi from Phi);
-
-#[derive(Debug)]
-pub struct KM;
-impl_domain!(KM from M);
-
-#[derive(Debug)]
-pub struct KO;
-impl_domain!(KO from O);
-
-#[derive(Debug)]
-pub struct KH;
-impl_domain!(KH from H);
-
-#[derive(Debug)]
-pub struct KB;
-impl_domain!(KB from B);
+new_type_domain!(pub Psi = 2);
+new_type_domain!(pub FPsi from Psi);
+new_type_domain!(pub KPsi from Psi);
+new_type_domain!(pub Phi = 2);
+new_type_domain!(pub FPhi from Phi);
+new_type_domain!(pub KPhi from Phi);
+new_type_domain!(pub O = 2);
+new_type_domain!(pub FO from O);
+new_type_domain!(pub KO from O);
+new_type_domain!(pub A = 2);
+new_type_domain!(pub B = 2);
+new_type_domain!(pub H = 2);
+new_type_domain!(pub FH from H);
+new_type_domain!(pub KH from H);
+new_type_domain!(pub Theta from H);
+new_type_domain!(pub Thetad from H);
 
 #[derive(Default, Debug)]
 pub struct StateOpinions<V> {
@@ -224,12 +157,12 @@ fn transform<
     V: MyFloat,
 >(
     w: OpinionRefD1<D1, V>,
-    e: V,
+    c: V,
 ) -> OpinionD1<D2, V> {
     let p: MArrD1<D2, _> = w.projection().conv();
     OpinionD1::new(
-        MArrD1::from_fn(|i| p[i] * e),
-        V::one() - e,
+        MArrD1::from_fn(|i| p[i] * c),
+        V::one() - c,
         w.base_rate.clone().conv(),
     )
 }
@@ -240,10 +173,10 @@ fn transform_simplex<
     V: MyFloat,
 >(
     p: MArrD1<D1, V>,
-    e: V,
+    c: V,
 ) -> SimplexD1<D2, V> {
     let q: MArrD1<D2, _> = p.conv();
-    SimplexD1::new_unchecked(MArrD1::from_fn(|i| q[i] * e), V::one() - e)
+    SimplexD1::new_unchecked(MArrD1::from_fn(|i| q[i] * c), V::one() - c)
 }
 
 impl<V: MyFloat> StateOpinions<V> {
@@ -505,24 +438,24 @@ fn deduce_fh<V: MyFloat>(
 ) -> OpinionD1<FH, V> {
     let fh_fpsi_if_fphi0 = MArrD1::<FPsi, _>::from_fn(|fpsi| {
         transform_simplex::<_, FH, _>(
-            fixed.h_psi_if_phi0[fpsi].projection(base_rate_h),
-            fixed.uncertainty_fh_fpsi_if_fphi0[fpsi],
+            fixed.h_psi_if_phi0[fpsi.into()].projection(base_rate_h),
+            V::one() - fixed.uncertainty_fh_fpsi_if_fphi0[fpsi.into()],
         )
     });
     let fh_fo_if_fphi0 = MArrD1::<FO, _>::from_fn(|fo| {
         transform_simplex::<_, FH, _>(
-            OpinionRefD1::from((&b_o[fo], base_rate_b))
+            OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
                 .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
                 .projection(),
-            fixed.uncertainty_fh_fo_fphi[(fo, 0)],
+            V::one() - fixed.uncertainty_fh_fo_fphi[(fo, FPhi(0))],
         )
     });
     let fh_fo_if_fphi1 = MArrD1::<FO, _>::from_fn(|fo| {
         transform_simplex::<_, FH, _>(
-            OpinionRefD1::from((&b_o[fo], base_rate_b))
+            OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
                 .deduce_with(&state.h_b_if_phi1, || base_rate_h.clone())
                 .projection(),
-            fixed.uncertainty_fh_fo_fphi[(fo, 1)],
+            V::one() - fixed.uncertainty_fh_fo_fphi[(fo, FPhi(1))],
         )
     });
     let fh_fpsi_fo_if_fphi0 = MArrD1::<FH, _>::merge_cond2(
@@ -557,26 +490,26 @@ fn deduce_kh<V: MyFloat>(
     base_rate_h: &MArrD1<H, V>,
     base_rate_kh: &MArrD1<KH, V>,
 ) -> OpinionD1<KH, V> {
-    let kh_kpsi_if_kphi0 = MArrD1::<FPsi, _>::from_fn(|kpsi| {
+    let kh_kpsi_if_kphi0 = MArrD1::<KPsi, _>::from_fn(|kpsi| {
         transform_simplex::<_, KH, _>(
-            fixed.h_psi_if_phi0[kpsi].projection(base_rate_h),
-            fixed.uncertainty_kh_kpsi_if_kphi0[kpsi],
+            fixed.h_psi_if_phi0[kpsi.into()].projection(base_rate_h),
+            V::one() - fixed.uncertainty_kh_kpsi_if_kphi0[kpsi],
         )
     });
     let kh_ko_if_kphi0 = MArrD1::<KO, _>::from_fn(|ko| {
         transform_simplex::<_, KH, _>(
-            OpinionRefD1::from((&b_o[ko], base_rate_b))
+            OpinionRefD1::from((&b_o[ko.into()], base_rate_b))
                 .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
                 .projection(),
-            fixed.uncertainty_kh_ko_kphi[(ko, 0)],
+            V::one() - fixed.uncertainty_kh_ko_kphi[(ko, KPhi(0))],
         )
     });
     let kh_ko_if_kphi1 = MArrD1::<KO, _>::from_fn(|ko| {
         transform_simplex::<_, KH, _>(
-            OpinionRefD1::from((&b_o[ko], base_rate_b))
+            OpinionRefD1::from((&b_o[ko.into()], base_rate_b))
                 .deduce_with(&state.h_b_if_phi1, || base_rate_h.clone())
                 .projection(),
-            fixed.uncertainty_kh_ko_kphi[(ko, 1)],
+            V::one() - fixed.uncertainty_kh_ko_kphi[(ko, KPhi(1))],
         )
     });
     let kh_kpsi_ko_if_kphi0 = MArrD1::<KH, _>::merge_cond2(
@@ -804,7 +737,7 @@ where
 
 pub struct MyOpinionsUpd<'a, V: MyFloat> {
     inner: &'a mut MyOpinions<V>,
-    p: &'a InfoContent<V>,
+    p: &'a InfoContent<'a, V>,
     trusts: Trusts<V>,
     ap: AccessProb<V>,
 }
@@ -956,14 +889,16 @@ mod tests {
             ah: &MArrD1<H, V>,
         ) -> MArrD1<FPsi, SimplexD1<FH, V>> {
             let mah = mbr(apsi, c).unwrap_or_else(|| ah.clone());
-            let cf = MArrD1::<FPsi, _>::from_fn(|i| {
+            let cf = MArrD1::<FPsi, _>::from_fn(|fpsi| {
+                let psi = fpsi.into();
                 SimplexD1::<FH, _>::new(
                     MArrD1::from_iter(
-                        c[i].projection(&mah)
+                        c[psi]
+                            .projection(&mah)
                             .iter()
-                            .map(|p| *p * (V::one() - *c[i].u())),
+                            .map(|p| *p * (V::one() - *c[psi].u())),
                     ),
-                    *c[i].u(),
+                    *c[psi].u(),
                 )
             });
             cf

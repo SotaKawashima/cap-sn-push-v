@@ -5,7 +5,7 @@ members = [
 , "v2"]
 
 [workspace.dependencies]
-subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.9.17" }
+subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.10.0" }
 graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.4.2" }
 clap = { version = "4.4", features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

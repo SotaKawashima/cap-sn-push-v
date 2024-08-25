@@ -22,10 +22,10 @@ pub struct RuntimeParams {
     pub iteration_count: u32,
 }
 
-pub async fn run<V, Ex, M, X>(
+pub async fn run<V, E, Ax, Ix>(
     mut writers: FileWriters,
     runtime: &RuntimeParams,
-    exec: Ex,
+    exec: E,
     max_permits: Option<usize>,
 ) -> anyhow::Result<()>
 where
@@ -35,9 +35,9 @@ where
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
-    Ex: Executor<V, M, X> + Send + Sync + 'static,
-    M: AgentExtTrait<V> + Default + Send + 'static,
-    X: InstanceExt<V, SmallRng, Ex> + Send + 'static,
+    E: Executor<V, Ax, Ix> + Send + Sync + 'static,
+    Ax: AgentExtTrait<V, Exec = E, Ix = Ix> + Default + Send + 'static,
+    Ix: InstanceExt<V, SmallRng, E> + Send + 'static,
 {
     println!("initialising...");
 
@@ -107,11 +107,11 @@ pub struct EnvPermit<E> {
     env: Arc<Mutex<E>>,
 }
 
-impl<V, M> EnvPermit<Memory<V, M>>
+impl<V, Ax> EnvPermit<Memory<V, Ax>>
 where
     V: MyFloat + 'static,
 {
-    async fn run<Ex, X, R: Rng + Send + 'static>(
+    async fn run<Ex, Ix, R: Rng + Send + 'static>(
         self,
         exec: Arc<Ex>,
         num_iter: usize,
@@ -123,9 +123,9 @@ where
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
-        Ex: Executor<V, M, X> + Send + Sync + 'static,
-        M: AgentExtTrait<V> + Default + Send + 'static,
-        X: InstanceExt<V, R, Ex> + Send,
+        Ex: Executor<V, Ax, Ix> + Send + Sync + 'static,
+        Ax: AgentExtTrait<V, Exec = Ex, Ix = Ix> + Default + Send + 'static,
+        Ix: InstanceExt<V, R, Ex> + Send,
     {
         let env = self.env.clone();
         let handle = tokio::spawn(async move {
