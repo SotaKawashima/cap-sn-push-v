@@ -1,4 +1,4 @@
-use std::{fmt::Debug, fs::File};
+use std::{fmt::Debug, fs::File, path::Path};
 
 use base::{
     decision::{Prospect, CPT},
@@ -10,13 +10,14 @@ use base::{
 };
 use graph_lib::prelude::{Graph, GraphB};
 use input::format::DataFormat;
-use itertools::Itertools;
+use itertools::{Itertools, ProcessResults};
 use rand::{seq::SliceRandom, Rng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_with::{serde_as, TryFromInto};
 use subjective_logic::{
     domain::Domain,
+    errors::check_unit_interval,
     marr_d1, marr_d2,
     mul::labeled::{OpinionD1, SimplexD1},
     multi_array::labeled::{MArrD1, MArrD2},
@@ -76,7 +77,8 @@ where
         let graph: GraphB = network.graph.try_into()?;
         let fnum_agents = V::from_usize(graph.node_count()).unwrap();
         let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
-        let community_psi1 = SupportLevels::conv_from(network.community)?;
+        let community_psi1 =
+            read_csv_with(network.community, |iter| SupportLevels::from_iter(iter))?;
 
         let InitialStates {
             initial_opinions,
@@ -98,8 +100,8 @@ where
             informing: DataFormat::read(&strategy.informing)?.parse()?,
             community_psi1,
             probabilies: DataFormat::read(&agent.probabilities)?.parse()?,
-            prospect: ProspectSamples::conv_from(agent.prospect)?,
-            cpt: CptSamples::conv_from(agent.cpt)?,
+            prospect: ProspectSamples(read_csv(&agent.prospect)?),
+            cpt: CptSamples(read_csv(&agent.cpt)?),
         })
     }
 }
@@ -172,25 +174,18 @@ struct ConditionRecord<V> {
     u1: V,
 }
 
-impl<V> ConditionRecord<V> {
-    fn conv_from<D1, D2>(path: String) -> anyhow::Result<Vec<MArrD1<D1, SimplexD1<D2, V>>>>
-    where
-        D1: Domain<Idx: Debug>,
-        D2: Domain<Idx: Debug>,
-        V: MyFloat + for<'a> Deserialize<'a>,
-    {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        rdr.deserialize()
-            .map(|res| {
-                res.map_err(|e| e.into()).and_then(|rec: Self| {
-                    Ok(marr_d1![
-                        SimplexD1::try_new(marr_d1![rec.b00, rec.b01], rec.u0)?,
-                        SimplexD1::try_new(marr_d1![rec.b10, rec.b11], rec.u1)?,
-                    ])
-                })
-            })
-            .try_collect()
+impl<V, D1, D2> TryFrom<ConditionRecord<V>> for MArrD1<D1, SimplexD1<D2, V>>
+where
+    V: MyFloat,
+    D1: Domain<Idx: Debug>,
+    D2: Domain<Idx: Debug>,
+{
+    type Error = anyhow::Error;
+    fn try_from(value: ConditionRecord<V>) -> Result<Self, Self::Error> {
+        Ok(marr_d1![
+            SimplexD1::try_new(marr_d1![value.b00, value.b01], value.u0)?,
+            SimplexD1::try_new(marr_d1![value.b10, value.b11], value.u1)?,
+        ])
     }
 }
 
@@ -199,13 +194,13 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<ConditionConfig> for Conditio
 
     fn try_from(value: ConditionConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            h_psi_if_phi0: ConditionRecord::conv_from(value.h_psi_if_phi0)?,
-            h_b_if_phi0: ConditionRecord::conv_from(value.h_b_if_phi0)?,
-            o_b: ConditionRecord::conv_from(value.o_b)?,
-            a_fh: ConditionRecord::conv_from(value.a_fh)?,
-            b_kh: ConditionRecord::conv_from(value.b_kh)?,
-            theta_h: ConditionRecord::conv_from(value.theta_h)?,
-            thetad_h: ConditionRecord::conv_from(value.thetad_h)?,
+            h_psi_if_phi0: read_csv_and_then(value.h_psi_if_phi0, ConditionRecord::try_into)?,
+            h_b_if_phi0: read_csv_and_then(value.h_b_if_phi0, ConditionRecord::try_into)?,
+            o_b: read_csv_and_then(value.o_b, ConditionRecord::try_into)?,
+            a_fh: read_csv_and_then(value.a_fh, ConditionRecord::try_into)?,
+            b_kh: read_csv_and_then(value.b_kh, ConditionRecord::try_into)?,
+            theta_h: read_csv_and_then(value.theta_h, ConditionRecord::try_into)?,
+            thetad_h: read_csv_and_then(value.thetad_h, ConditionRecord::try_into)?,
         })
     }
 }
@@ -223,20 +218,12 @@ struct UncertaintyD1Record<V> {
     u1: V,
 }
 
-impl<V> UncertaintyD1Record<V> {
-    fn conv_from<D1>(path: String) -> anyhow::Result<Vec<MArrD1<D1, V>>>
-    where
-        D1: Domain<Idx: Debug>,
-        V: MyFloat + for<'a> Deserialize<'a>,
-    {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        rdr.deserialize()
-            .map(|res| {
-                res.map_err(|e| e.into())
-                    .map(|rec: Self| marr_d1![rec.u0, rec.u1])
-            })
-            .try_collect()
+impl<V: MyFloat, D1: Domain> TryFrom<UncertaintyD1Record<V>> for MArrD1<D1, V> {
+    type Error = anyhow::Error;
+    fn try_from(value: UncertaintyD1Record<V>) -> Result<Self, Self::Error> {
+        check_unit_interval(value.u0, "u0")?;
+        check_unit_interval(value.u1, "u1")?;
+        Ok(marr_d1![value.u0, value.u1])
     }
 }
 
@@ -248,21 +235,14 @@ struct UncertaintyD2Record<V> {
     u11: V,
 }
 
-impl<V> UncertaintyD2Record<V> {
-    fn conv_from<D1, D2>(path: String) -> anyhow::Result<Vec<MArrD2<D1, D2, V>>>
-    where
-        D1: Domain<Idx: Debug>,
-        D2: Domain<Idx: Debug>,
-        V: MyFloat + for<'a> Deserialize<'a>,
-    {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        rdr.deserialize()
-            .map(|res| {
-                res.map_err(|e| e.into())
-                    .map(|rec: Self| marr_d2![[rec.u00, rec.u01], [rec.u10, rec.u11],])
-            })
-            .try_collect()
+impl<V: MyFloat, D1: Domain, D2: Domain> TryFrom<UncertaintyD2Record<V>> for MArrD2<D1, D2, V> {
+    type Error = anyhow::Error;
+    fn try_from(value: UncertaintyD2Record<V>) -> Result<Self, Self::Error> {
+        check_unit_interval(value.u00, "u00")?;
+        check_unit_interval(value.u01, "u01")?;
+        check_unit_interval(value.u10, "u10")?;
+        check_unit_interval(value.u11, "u11")?;
+        Ok(marr_d2![[value.u00, value.u01], [value.u10, value.u11],])
     }
 }
 
@@ -271,10 +251,16 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<UncertaintyConfig> for Uncert
 
     fn try_from(value: UncertaintyConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            fh_fpsi_if_fphi0: UncertaintyD1Record::conv_from(value.fh_fpsi_if_fphi0)?,
-            kh_kpsi_if_kphi0: UncertaintyD1Record::conv_from(value.kh_kpsi_if_kphi0)?,
-            fh_fo_fphi: UncertaintyD2Record::conv_from(value.fh_fo_fphi)?,
-            kh_ko_kphi: UncertaintyD2Record::conv_from(value.kh_ko_kphi)?,
+            fh_fpsi_if_fphi0: read_csv_and_then(
+                value.fh_fpsi_if_fphi0,
+                UncertaintyD1Record::try_into,
+            )?,
+            kh_kpsi_if_kphi0: read_csv_and_then(
+                value.kh_kpsi_if_kphi0,
+                UncertaintyD1Record::try_into,
+            )?,
+            fh_fo_fphi: read_csv_and_then(value.fh_fo_fphi, UncertaintyD2Record::try_into)?,
+            kh_ko_kphi: read_csv_and_then(value.kh_ko_kphi, UncertaintyD2Record::try_into)?,
         })
     }
 }
@@ -323,60 +309,88 @@ pub struct InformationConfig {
 #[derive(Debug, Deserialize)]
 pub struct SupportLevel<V> {
     level: V,
-    agent_idx: usize,
 }
 
-pub struct SupportLevels<V>(Vec<SupportLevel<V>>);
+pub struct SupportLevels<V> {
+    /// vector index === agent_idx
+    levels: Vec<V>,
+    /// sorted in descending order by level
+    indexes_by_level: Vec<usize>,
+}
 
-impl<V> SupportLevels<V> {
-    /// descending ordered by level
-    pub fn conv_from(path: String) -> anyhow::Result<Self>
+impl<V: MyFloat> SupportLevels<V> {
+    pub fn level(&self, idx: usize) -> V {
+        self.levels[idx]
+    }
+
+    fn from_iter<I>(iter: I) -> Self
     where
-        V: MyFloat + for<'a> Deserialize<'a>,
+        I: Iterator<Item = SupportLevel<V>>,
     {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        let mut v: Vec<SupportLevel<V>> = rdr.deserialize().try_collect()?;
-        v.sort_by(|a, b| b.level.partial_cmp(&a.level).unwrap());
-        Ok(Self(v))
+        let lvs = iter
+            .enumerate()
+            .sorted_by(|a, b| b.1.level.partial_cmp(&a.1.level).unwrap())
+            .collect_vec();
+        let mut levels = vec![V::zero(); lvs.len()];
+        let mut indexes_by_level = Vec::with_capacity(lvs.len());
+        for (i, lv) in lvs {
+            levels[i] = lv.level;
+            indexes_by_level.push(i);
+        }
+        Self {
+            levels,
+            indexes_by_level,
+        }
+    }
+
+    pub fn random<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
+        self.indexes_by_level
+            .choose_multiple(rng, n)
+            .cloned()
+            .collect()
     }
 
     pub fn top(&self, n: usize) -> Vec<usize> {
-        (0..n).map(|i| self.0[i].agent_idx).collect()
+        self.indexes_by_level.iter().take(n).cloned().collect()
     }
-    pub fn random<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
-        self.0
-            .choose_multiple(rng, n)
-            .map(|s| s.agent_idx)
-            .collect()
-    }
+
     pub fn middle(&self, n: usize) -> Vec<usize>
     where
         V: MyFloat,
     {
-        let l = self.0.len();
-        let c = self.0.len() / 2;
+        macro_rules! level_of {
+            ($e:expr) => {
+                self.levels[self.indexes_by_level[$e]]
+            };
+        }
+        let l = self.indexes_by_level.len();
+        let c = self.indexes_by_level.len() / 2;
         let median = if l % 2 == 1 {
-            self.0[c].level
+            level_of!(c)
         } else {
-            (self.0[c].level + self.0[c - 1].level) / V::from_u32(2).unwrap()
+            (level_of!(c) + level_of!(c - 1)) / V::from_u32(2).unwrap()
         };
 
         let from = c.checked_sub(n).unwrap_or(0);
         let to = (c + n).min(l);
         (from..to)
             .sorted_by(|&i, &j| {
-                let a = (self.0[i].level - median).abs();
-                let b = (self.0[j].level - median).abs();
+                let a = (level_of!(i) - median).abs();
+                let b = (level_of!(j) - median).abs();
                 a.partial_cmp(&b).unwrap()
             })
             .take(n)
-            .map(|i| self.0[i].agent_idx)
-            .collect_vec()
+            .map(|i| self.indexes_by_level[i])
+            .collect()
     }
+
     pub fn bottom(&self, n: usize) -> Vec<usize> {
-        let l = self.0.len() - 1;
-        (0..n).map(|i| self.0[l - i].agent_idx).collect()
+        self.indexes_by_level
+            .iter()
+            .rev()
+            .take(n)
+            .cloned()
+            .collect()
     }
 }
 
@@ -640,12 +654,12 @@ pub struct Informing {
 #[derive(Debug, serde::Deserialize)]
 pub struct InformingParams<V> {
     pub informer: InformerParams,
-    /// ordered by step & non-duplicated
+    /// order by step & non-duplicated
     pub misinfo: Vec<Informing>,
-    /// ordered by step & non-duplicated
+    /// order by step & non-duplicated
     pub correction: Vec<Informing>,
     pub obs_threshold_selfish: usize,
-    /// ordered by step & non-duplicated
+    /// order by step & non-duplicated
     pub inhibition: Vec<Informing>,
     pub prob_post_observation: V,
 }
@@ -669,14 +683,6 @@ pub struct ProspectRecord<V> {
 
 pub struct ProspectSamples<V>(pub Vec<ProspectRecord<V>>);
 
-impl<V: for<'a> Deserialize<'a>> ProspectSamples<V> {
-    pub fn conv_from(path: String) -> anyhow::Result<Self> {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        Ok(Self(rdr.deserialize().try_collect()?))
-    }
-}
-
 impl<V: MyFloat> ProspectSamples<V> {
     pub fn reset_to<R: Rng>(&self, prospect: &mut Prospect<V>, rng: &mut R) {
         let &ProspectRecord { x0, x1, y } = self.0.choose(rng).unwrap();
@@ -695,14 +701,6 @@ struct CptRecord<V> {
 
 pub struct CptSamples<V>(Vec<CptRecord<V>>);
 
-impl<V: for<'a> Deserialize<'a>> CptSamples<V> {
-    pub fn conv_from(path: String) -> anyhow::Result<Self> {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        Ok(Self(rdr.deserialize().try_collect()?))
-    }
-}
-
 impl<V: MyFloat> CptSamples<V> {
     pub fn reset_to<R: Rng>(&self, cpt: &mut CPT<V>, rng: &mut R) {
         let &CptRecord {
@@ -714,6 +712,36 @@ impl<V: MyFloat> CptSamples<V> {
         } = self.0.choose(rng).unwrap();
         cpt.reset(alpha, beta, lambda, gamma, delta);
     }
+}
+
+fn read_csv_and_then<T, P, F, U>(path: P, f: F) -> anyhow::Result<Vec<U>>
+where
+    T: DeserializeOwned,
+    P: AsRef<Path>,
+    F: Fn(T) -> Result<U, anyhow::Error>,
+{
+    let file = File::open(path)?;
+    let mut rdr = csv::Reader::from_reader(file);
+    Ok(rdr.deserialize::<T>().map(|res| f(res?)).try_collect()?)
+}
+
+fn read_csv_with<T, P, F, U>(path: P, processor: F) -> anyhow::Result<U>
+where
+    T: DeserializeOwned,
+    P: AsRef<Path>,
+    F: FnOnce(ProcessResults<csv::DeserializeRecordsIter<File, T>, csv::Error>) -> U,
+{
+    let file = File::open(path)?;
+    let mut rdr = csv::Reader::from_reader(file);
+    Ok(rdr.deserialize::<T>().process_results(processor)?)
+}
+
+fn read_csv<T, P>(path: P) -> anyhow::Result<Vec<T>>
+where
+    T: DeserializeOwned,
+    P: AsRef<Path>,
+{
+    read_csv_with(path, |iter| iter.collect_vec())
 }
 
 #[cfg(test)]
@@ -730,11 +758,19 @@ mod tests {
     use super::Config;
 
     #[test]
+    fn test_support_levels() {
+        todo!()
+    }
+
+    #[test]
     fn test_config() -> anyhow::Result<()> {
         let config: Config = toml::from_str(&read_to_string("./test/config.toml")?)?;
         let exec: Exec<f32> = config.try_into()?;
-        assert_eq!(exec.community_psi1.0.len(), 100);
-        assert!(exec.community_psi1.0[10].level > exec.community_psi1.0[90].level);
+        assert_eq!(exec.community_psi1.levels.len(), 100);
+        assert!(
+            exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]
+                > exec.community_psi1.levels[exec.community_psi1.indexes_by_level[90]]
+        );
         assert_eq!(exec.opinion.condition.o_b.len(), 7);
         assert_eq!(
             exec.opinion.condition.o_b[3],

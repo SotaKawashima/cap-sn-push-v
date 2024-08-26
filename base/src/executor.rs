@@ -8,9 +8,9 @@ use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use tracing::{debug, span, Level};
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, Decision},
     info::{Info, InfoContent, InfoLabel},
-    opinion::{AccessProb, MyFloat, Trusts},
+    opinion::{AccessProb, MyFloat, MyOpinions, Trusts},
     stat::{AgentStat, InfoData, InfoStat, PopData, PopStat, Stat},
 };
 
@@ -42,13 +42,18 @@ impl<V: MyFloat, Ax> Memory<V, Ax> {
         for (idx, agent) in self.agents.iter_mut().enumerate() {
             let span = span!(Level::INFO, "init", "#" = idx);
             let _guard = span.enter();
-            Ax::reset(agent, exec, rng);
+            agent.idx = idx;
+            agent.ext.reset(idx, exec, rng);
+            agent.core.reset(|ops, decision| {
+                Ax::reset_core(ops, decision, exec, rng);
+            });
         }
     }
 }
 
 #[derive(Default)]
 pub struct AgentWrapper<V, X> {
+    pub idx: usize,
     pub core: Agent<V>,
     pub ext: X,
 }
@@ -56,7 +61,13 @@ pub struct AgentWrapper<V, X> {
 pub trait AgentExtTrait<V: Clone>: Sized {
     type Exec;
     type Ix;
-    fn reset<R: Rng>(wrapper: &mut AgentWrapper<V, Self>, exec: &Self::Exec, rng: &mut R);
+    fn reset_core<R: Rng>(
+        ops: &mut MyOpinions<V>,
+        decision: &mut Decision<V>,
+        exec: &Self::Exec,
+        rng: &mut R,
+    );
+    fn reset<R: Rng>(&mut self, idx: usize, exec: &Self::Exec, rng: &mut R);
     fn visit_prob<R: Rng>(&mut self, exec: &Self::Exec, rng: &mut R) -> V;
     fn informer_trusts<'a, R: Rng>(
         &mut self,
@@ -101,7 +112,6 @@ impl From<usize> for InfoIdx {
 pub trait Executor<V, Ax, Ix> {
     fn num_agents(&self) -> usize;
     fn graph(&self) -> &GraphB;
-    // fn reset<R: Rng>(&self, agent: &mut AgentWrapper<V, M>, rng: &mut R);
     fn execute<R>(&self, memory: &mut Memory<V, Ax>, num_iter: u32, mut rng: R) -> Vec<Stat>
     where
         V: MyFloat,

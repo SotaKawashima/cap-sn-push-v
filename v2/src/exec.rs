@@ -1,11 +1,10 @@
 use std::{borrow::Cow, vec::Drain};
 
 use base::{
-    executor::{
-        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InfoIdx, InstanceExt, InstanceWrapper,
-    },
+    agent::Decision,
+    executor::{AgentExtTrait, AgentIdx, Executor, InfoIdx, InstanceExt, InstanceWrapper},
     info::{InfoContent, InfoLabel},
-    opinion::{AccessProb, MyFloat, Trusts},
+    opinion::{AccessProb, MyFloat, MyOpinions, Trusts},
 };
 use graph_lib::prelude::{Graph, GraphB};
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
@@ -53,30 +52,35 @@ pub struct AgentExt<V> {
     /// (friend, social)
     plural_ignores: Option<(V, V)>,
     visit_prob: Option<V>,
+    psi1_support_level: V,
 }
 
 impl<V> AgentExt<V> {
-    fn clear(&mut self) {
-        self.trusts = InfoMap::new();
-        self.arrival_prob = None;
-        self.viewing_probs = None;
-        self.plural_ignores = None;
-        self.visit_prob = None;
-    }
+    // fn reset(&mut self, psi1_support_level: V) {
+    // self.trusts = InfoMap::new();
+    // self.arrival_prob = None;
+    // self.viewing_probs = None;
+    // self.plural_ignores = None;
+    // self.visit_prob = None;
+    // self.psi1_support_level = psi1_support_level;
+    // }
 
     fn get_trust<R: Rng>(&mut self, label: InfoLabel, exec: &Exec<V>, rng: &mut R) -> V
     where
         V: MyFloat,
     {
-        *self.trusts.entry(label).or_insert_with(|| {
-            *match label {
-                InfoLabel::Misinfo => &exec.sharer_trust.misinfo,
-                InfoLabel::Corrective => &exec.sharer_trust.correction,
-                InfoLabel::Observed => &exec.sharer_trust.obserbation,
-                InfoLabel::Inhibitive => &exec.sharer_trust.inhibition,
+        *self.trusts.entry(label).or_insert_with(|| match label {
+            InfoLabel::Misinfo => {
+                let u = *exec.sharer_trust.misinfo.choose(rng).unwrap();
+                self.psi1_support_level + (V::one() - self.psi1_support_level) * u
             }
-            .choose(rng)
-            .unwrap()
+            InfoLabel::Corrective => {
+                V::one()
+                    - self.psi1_support_level
+                        * (V::one() - *exec.sharer_trust.correction.choose(rng).unwrap())
+            }
+            InfoLabel::Observed => *exec.sharer_trust.obserbation.choose(rng).unwrap(),
+            InfoLabel::Inhibitive => *exec.sharer_trust.inhibition.choose(rng).unwrap(),
         })
     }
 
@@ -198,15 +202,26 @@ where
             .get_or_insert_with(|| *exec.probabilies.viewing.choose(rng).unwrap())
     }
 
-    fn reset<R: Rng>(wrapper: &mut AgentWrapper<V, Self>, exec: &Exec<V>, rng: &mut R) {
-        wrapper.ext.clear();
-        wrapper.core.reset(|ops, decision| {
-            decision.reset(0, |prospect, cpt| {
-                exec.opinion.reset_to(ops, rng);
-                exec.prospect.reset_to(prospect, rng);
-                exec.cpt.reset_to(cpt, rng);
-            });
+    fn reset_core<R: Rng>(
+        ops: &mut MyOpinions<V>,
+        decision: &mut Decision<V>,
+        exec: &Self::Exec,
+        rng: &mut R,
+    ) {
+        decision.reset(0, |prospect, cpt| {
+            exec.opinion.reset_to(ops, rng);
+            exec.prospect.reset_to(prospect, rng);
+            exec.cpt.reset_to(cpt, rng);
         });
+    }
+
+    fn reset<R: Rng>(&mut self, idx: usize, exec: &Exec<V>, _: &mut R) {
+        self.trusts = InfoMap::new();
+        self.arrival_prob = None;
+        self.viewing_probs = None;
+        self.plural_ignores = None;
+        self.visit_prob = None;
+        self.psi1_support_level = exec.community_psi1.level(idx);
     }
 }
 

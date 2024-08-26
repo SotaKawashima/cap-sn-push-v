@@ -4,9 +4,7 @@ mod scenario;
 use std::{collections::HashMap, path::PathBuf};
 
 use base::{
-    executor::{
-        AgentExtTrait, AgentIdx, AgentWrapper, Executor, InfoIdx, InstanceExt, InstanceWrapper,
-    },
+    executor::{AgentExtTrait, AgentIdx, Executor, InfoIdx, InstanceExt, InstanceWrapper},
     info::{InfoContent, InfoLabel},
     opinion::{AccessProb, MyFloat, Trusts},
     runner::{run, RuntimeParams},
@@ -131,22 +129,29 @@ where
     Exp1: Distribution<V>,
 {
     type Exec = ExecV1<V>;
+    type Ix = InstanceV1<V>;
+
     fn visit_prob<R: Rng>(&mut self, _: &ExecV1<V>, _: &mut R) -> V {
         self.visit_prob
     }
-    fn reset<R: Rng>(wrapper: &mut AgentWrapper<V, Self>, exec: &ExecV1<V>, rng: &mut R) {
-        wrapper.core.reset(|ops, decision| {
-            exec.agent_params.initial_opinions.reset_to(ops, rng);
-            let delay_selfish = exec.agent_params.delay_selfish.sample(rng);
-            decision.reset(delay_selfish, |prospect, cpt| {
-                exec.agent_params.loss_params.reset_to(prospect, rng);
-                exec.agent_params.cpt_params.reset_to(cpt, rng);
-            });
+
+    fn reset_core<R: Rng>(
+        ops: &mut base::opinion::MyOpinions<V>,
+        decision: &mut base::agent::Decision<V>,
+        exec: &Self::Exec,
+        rng: &mut R,
+    ) {
+        exec.agent_params.initial_opinions.reset_to(ops, rng);
+        let delay_selfish = exec.agent_params.delay_selfish.sample(rng);
+        decision.reset(delay_selfish, |prospect, cpt| {
+            exec.agent_params.loss_params.reset_to(prospect, rng);
+            exec.agent_params.cpt_params.reset_to(cpt, rng);
         });
-        wrapper.ext.visit_prob = exec.agent_params.access_prob.sample(rng);
     }
 
-    type Ix = InstanceV1<V>;
+    fn reset<R: Rng>(&mut self, _: usize, exec: &ExecV1<V>, rng: &mut R) {
+        self.visit_prob = exec.agent_params.access_prob.sample(rng);
+    }
 
     fn informer_trusts<'a, R>(
         &mut self,
