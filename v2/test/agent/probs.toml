@@ -1,0 +1,6 @@
+viewing = [0.5]
+viewing_friend = [0.5]
+viewing_social = [0.5]
+arrival_friend = [0.5]
+plural_ignore_friend = [0.1, 0.3, 0.5, 0.7, 0.9]
+plural_ignore_social = [0.1, 0.3, 0.5, 0.7, 0.9]

@@ -3,11 +3,13 @@ use std::{fmt::Debug, fs::File};
 use base::{
     decision::{Prospect, CPT},
     opinion::{
-        DeducedOpinions, FPhi, FPsi, FixedOpinions, KPhi, KPsi, MyFloat, Phi, Psi, StateOpinions,
-        Theta, Thetad, A, B, FH, FO, H, KH, KO, O,
+        DeducedOpinions, FPhi, FPsi, FixedOpinions, KPhi, KPsi, MyFloat, MyOpinions, Phi, Psi,
+        StateOpinions, Theta, Thetad, A, B, FH, FO, H, KH, KO, O,
     },
     util::GraphInfo,
 };
+use graph_lib::prelude::{Graph, GraphB};
+use input::format::DataFormat;
 use itertools::Itertools;
 use rand::{seq::SliceRandom, Rng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
@@ -20,26 +22,98 @@ use subjective_logic::{
     multi_array::labeled::{MArrD1, MArrD2},
 };
 
+use crate::exec::Exec;
+
 #[derive(Debug, Deserialize)]
-#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct Config<V: MyFloat> {
-    pub graph: GraphInfo,
-    pub initial_opinions: InitialOpinions<V>,
-    pub initial_base_rate: InitialBaseRates<V>,
-    pub sharer_trust_path: String,
-    pub condition: ConditionConfig,
-    pub uncertainty: UncertaintyConfig,
-    pub information: InformationConfig,
-    pub informing_path: String,
-    pub community_psi1_path: String,
-    pub prob_post_observation: V,
-    pub probabilities_path: String,
-    pub prospect_path: String,
-    pub cpt_path: String,
+pub struct Config {
+    agent: AgentConfig,
+    strategy: StrategyConfig,
+    environment: EnvironmentConfig,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ConditionConfig {
+struct AgentConfig {
+    probabilities: String,
+    sharer_trust: String,
+    prospect: String,
+    cpt: String,
+    initial_states: String,
+    condition: ConditionConfig,
+    uncertainty: UncertaintyConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct StrategyConfig {
+    informing: String,
+    information: InformationConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct EnvironmentConfig {
+    network: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkConfig {
+    graph: GraphInfo,
+    community: String,
+}
+
+impl<V> TryFrom<Config> for Exec<V>
+where
+    V: MyFloat + for<'a> Deserialize<'a>,
+{
+    type Error = anyhow::Error;
+
+    fn try_from(
+        Config {
+            agent,
+            strategy,
+            environment,
+        }: Config,
+    ) -> Result<Self, Self::Error> {
+        let network: NetworkConfig = DataFormat::read(&environment.network)?.parse()?;
+        let graph: GraphB = network.graph.try_into()?;
+        let fnum_agents = V::from_usize(graph.node_count()).unwrap();
+        let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
+        let community_psi1 = SupportLevels::conv_from(network.community)?;
+
+        let InitialStates {
+            initial_opinions,
+            initial_base_rates,
+        } = DataFormat::read(&agent.initial_states)?.parse()?;
+
+        Ok(Self {
+            graph,
+            fnum_agents,
+            mean_degree,
+            sharer_trust: DataFormat::read(&agent.sharer_trust)?.parse()?,
+            opinion: OpinionSamples {
+                condition: agent.condition.try_into()?,
+                uncertainty: agent.uncertainty.try_into()?,
+                initial_opinions,
+                initial_base_rates,
+            },
+            information: strategy.information.try_into()?,
+            informing: DataFormat::read(&strategy.informing)?.parse()?,
+            community_psi1,
+            probabilies: DataFormat::read(&agent.probabilities)?.parse()?,
+            prospect: ProspectSamples::conv_from(agent.prospect)?,
+            cpt: CptSamples::conv_from(agent.cpt)?,
+        })
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+struct InitialStates<V: MyFloat> {
+    initial_opinions: InitialOpinions<V>,
+    initial_base_rates: InitialBaseRates<V>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConditionConfig {
     h_psi_if_phi0: String,
     h_b_if_phi0: String,
     o_b: String,
@@ -50,99 +124,46 @@ pub struct ConditionConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UncertaintyConfig {
+struct UncertaintyConfig {
     fh_fpsi_if_fphi0: String,
-    fh_kpsi_if_kphi0: String,
+    kh_kpsi_if_kphi0: String,
     fh_fo_fphi: String,
     kh_ko_kphi: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct InformationConfig {
-    /// also used for $M$ in correction
-    misinfo: String,
-    correction: String,
-    observation: String,
-    inhibition: String,
+pub struct OpinionSamples<V: MyFloat> {
+    initial_opinions: InitialOpinions<V>,
+    initial_base_rates: InitialBaseRates<V>,
+    condition: ConditionSamples<V>,
+    uncertainty: UncertaintySamples<V>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SupportLevel<V> {
-    level: V,
-    agent_idx: usize,
+impl<V: MyFloat> OpinionSamples<V> {
+    pub fn reset_to<R: Rng>(&self, ops: &mut MyOpinions<V>, rng: &mut R)
+    where
+        Standard: Distribution<V>,
+        StandardNormal: Distribution<V>,
+        Exp1: Distribution<V>,
+        Open01: Distribution<V>,
+    {
+        reset_fixed(&self.condition, &self.uncertainty, &mut ops.fixed, rng);
+        self.initial_opinions.clone().reset_to(&mut ops.state);
+        self.initial_base_rates.clone().reset_to(&mut ops.ded);
+    }
 }
 
-pub struct SupportLevels<V>(Vec<SupportLevel<V>>);
-
-impl<V> SupportLevels<V> {
-    pub fn conv_from(path: String) -> anyhow::Result<Self>
-    where
-        V: for<'a> Deserialize<'a>,
-    {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        Ok(Self(rdr.deserialize().try_collect()?))
-    }
-
-    pub fn top(&self, n: usize) -> Vec<usize> {
-        (0..n).map(|i| self.0[i].agent_idx).collect()
-    }
-    pub fn random<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
-        self.0
-            .choose_multiple(rng, n)
-            .map(|s| s.agent_idx)
-            .collect()
-    }
-    pub fn middle(&self, n: usize) -> Vec<usize>
-    where
-        V: MyFloat,
-    {
-        let l = self.0.len();
-        let c = self.0.len() / 2;
-        let median = if l % 2 == 1 {
-            self.0[c].level
-        } else {
-            (self.0[c].level + self.0[c - 1].level) / V::from_u32(2).unwrap()
-        };
-
-        let from = c.checked_sub(n).unwrap_or(0);
-        let to = (c + n).min(l);
-        (from..to)
-            .sorted_by(|&i, &j| {
-                let a = (self.0[i].level - median).abs();
-                let b = (self.0[j].level - median).abs();
-                a.partial_cmp(&b).unwrap()
-            })
-            .take(n)
-            .map(|i| self.0[i].agent_idx)
-            .collect_vec()
-    }
-    pub fn bottom(&self, n: usize) -> Vec<usize> {
-        let l = self.0.len() - 1;
-        (0..n).map(|i| self.0[l - i].agent_idx).collect()
-    }
+struct ConditionSamples<V> {
+    h_psi_if_phi0: Vec<MArrD1<Psi, SimplexD1<H, V>>>,
+    h_b_if_phi0: Vec<MArrD1<B, SimplexD1<H, V>>>,
+    o_b: Vec<MArrD1<B, SimplexD1<O, V>>>,
+    a_fh: Vec<MArrD1<FH, SimplexD1<A, V>>>,
+    b_kh: Vec<MArrD1<KH, SimplexD1<B, V>>>,
+    theta_h: Vec<MArrD1<H, SimplexD1<Theta, V>>>,
+    thetad_h: Vec<MArrD1<H, SimplexD1<Thetad, V>>>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct SharerTrustSamples<V> {
-    pub misinfo: Vec<V>,
-    pub correction: Vec<V>,
-    pub obserbation: Vec<V>,
-    pub inhibition: Vec<V>,
-}
-
-pub struct ConditionSamples<V> {
-    pub h_psi_if_phi0: Vec<MArrD1<Psi, SimplexD1<H, V>>>,
-    pub h_b_if_phi0: Vec<MArrD1<B, SimplexD1<H, V>>>,
-    pub o_b: Vec<MArrD1<B, SimplexD1<O, V>>>,
-    pub a_fh: Vec<MArrD1<FH, SimplexD1<A, V>>>,
-    pub b_kh: Vec<MArrD1<KH, SimplexD1<B, V>>>,
-    pub theta_h: Vec<MArrD1<H, SimplexD1<Theta, V>>>,
-    pub thetad_h: Vec<MArrD1<H, SimplexD1<Thetad, V>>>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct ConditionRecord<V> {
+struct ConditionRecord<V> {
     b00: V,
     b01: V,
     u0: V,
@@ -189,11 +210,11 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<ConditionConfig> for Conditio
     }
 }
 
-pub struct UncertaintySamples<V> {
-    pub fh_fpsi_if_fphi0: Vec<MArrD1<FPsi, V>>,
-    pub kh_kpsi_if_kphi0: Vec<MArrD1<KPsi, V>>,
-    pub fh_fo_fphi: Vec<MArrD2<FO, FPhi, V>>,
-    pub kh_ko_kphi: Vec<MArrD2<KO, KPhi, V>>,
+struct UncertaintySamples<V> {
+    fh_fpsi_if_fphi0: Vec<MArrD1<FPsi, V>>,
+    kh_kpsi_if_kphi0: Vec<MArrD1<KPsi, V>>,
+    fh_fo_fphi: Vec<MArrD2<FO, FPhi, V>>,
+    kh_ko_kphi: Vec<MArrD2<KO, KPhi, V>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,14 +272,14 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<UncertaintyConfig> for Uncert
     fn try_from(value: UncertaintyConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             fh_fpsi_if_fphi0: UncertaintyD1Record::conv_from(value.fh_fpsi_if_fphi0)?,
-            kh_kpsi_if_kphi0: UncertaintyD1Record::conv_from(value.fh_kpsi_if_kphi0)?,
+            kh_kpsi_if_kphi0: UncertaintyD1Record::conv_from(value.kh_kpsi_if_kphi0)?,
             fh_fo_fphi: UncertaintyD2Record::conv_from(value.fh_fo_fphi)?,
             kh_ko_kphi: UncertaintyD2Record::conv_from(value.kh_ko_kphi)?,
         })
     }
 }
 
-pub fn reset_fixed<V: MyFloat, R: Rng>(
+fn reset_fixed<V: MyFloat, R: Rng>(
     condition: &ConditionSamples<V>,
     uncertainty: &UncertaintySamples<V>,
     fixed: &mut FixedOpinions<V>,
@@ -288,6 +309,83 @@ pub fn reset_fixed<V: MyFloat, R: Rng>(
         uncertainty_fh_fo_fphi,
         uncertainty_kh_ko_kphi,
     );
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InformationConfig {
+    /// also used for $M$ in correction
+    misinfo: String,
+    correction: String,
+    observation: String,
+    inhibition: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SupportLevel<V> {
+    level: V,
+    agent_idx: usize,
+}
+
+pub struct SupportLevels<V>(Vec<SupportLevel<V>>);
+
+impl<V> SupportLevels<V> {
+    /// descending ordered by level
+    pub fn conv_from(path: String) -> anyhow::Result<Self>
+    where
+        V: MyFloat + for<'a> Deserialize<'a>,
+    {
+        let file = File::open(&path)?;
+        let mut rdr = csv::Reader::from_reader(file);
+        let mut v: Vec<SupportLevel<V>> = rdr.deserialize().try_collect()?;
+        v.sort_by(|a, b| b.level.partial_cmp(&a.level).unwrap());
+        Ok(Self(v))
+    }
+
+    pub fn top(&self, n: usize) -> Vec<usize> {
+        (0..n).map(|i| self.0[i].agent_idx).collect()
+    }
+    pub fn random<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
+        self.0
+            .choose_multiple(rng, n)
+            .map(|s| s.agent_idx)
+            .collect()
+    }
+    pub fn middle(&self, n: usize) -> Vec<usize>
+    where
+        V: MyFloat,
+    {
+        let l = self.0.len();
+        let c = self.0.len() / 2;
+        let median = if l % 2 == 1 {
+            self.0[c].level
+        } else {
+            (self.0[c].level + self.0[c - 1].level) / V::from_u32(2).unwrap()
+        };
+
+        let from = c.checked_sub(n).unwrap_or(0);
+        let to = (c + n).min(l);
+        (from..to)
+            .sorted_by(|&i, &j| {
+                let a = (self.0[i].level - median).abs();
+                let b = (self.0[j].level - median).abs();
+                a.partial_cmp(&b).unwrap()
+            })
+            .take(n)
+            .map(|i| self.0[i].agent_idx)
+            .collect_vec()
+    }
+    pub fn bottom(&self, n: usize) -> Vec<usize> {
+        let l = self.0.len() - 1;
+        (0..n).map(|i| self.0[l - i].agent_idx).collect()
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SharerTrustSamples<V> {
+    pub misinfo: Vec<V>,
+    pub correction: Vec<V>,
+    pub obserbation: Vec<V>,
+    pub inhibition: Vec<V>,
 }
 
 pub struct InformationSamples<V> {
@@ -406,11 +504,19 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<InformationConfig> for Inform
 #[serde_as]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct InitialOpinions<V: MyFloat> {
+struct InitialOpinions<V: MyFloat> {
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     psi: OpinionD1<Psi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    fpsi: OpinionD1<FPsi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    kpsi: OpinionD1<KPsi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     phi: OpinionD1<Phi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    fphi: OpinionD1<FPhi, V>,
+    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
+    kphi: OpinionD1<KPhi, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
     o: OpinionD1<O, V>,
     #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
@@ -420,23 +526,15 @@ pub struct InitialOpinions<V: MyFloat> {
     #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
     h_psi_if_phi1: MArrD1<Psi, SimplexD1<H, V>>,
     #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
-    h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
-    fpsi: OpinionD1<FPsi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
-    fphi: OpinionD1<FPhi, V>,
-    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
     fh_fpsi_if_fphi1: MArrD1<FPsi, SimplexD1<FH, V>>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
-    kpsi: OpinionD1<KPsi, V>,
-    #[serde_as(as = "TryFromInto<(Vec<V>, V, Vec<V>)>")]
-    kphi: OpinionD1<KPhi, V>,
     #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
     kh_kpsi_if_kphi1: MArrD1<KPsi, SimplexD1<KH, V>>,
+    #[serde_as(as = "TryFromInto<Vec<(Vec<V>, V)>>")]
+    h_b_if_phi1: MArrD1<B, SimplexD1<H, V>>,
 }
 
 impl<V: MyFloat> InitialOpinions<V> {
-    pub fn reset_to(self, state: &mut StateOpinions<V>)
+    fn reset_to(self, state: &mut StateOpinions<V>)
     where
         Standard: Distribution<V>,
         StandardNormal: Distribution<V>,
@@ -479,7 +577,7 @@ impl<V: MyFloat> InitialOpinions<V> {
 #[serde_as]
 #[derive(Debug, serde::Deserialize, Clone)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct InitialBaseRates<V> {
+struct InitialBaseRates<V> {
     #[serde_as(as = "TryFromInto<Vec<V>>")]
     a: MArrD1<A, V>,
     #[serde_as(as = "TryFromInto<Vec<V>>")]
@@ -497,7 +595,7 @@ pub struct InitialBaseRates<V> {
 }
 
 impl<V: MyFloat> InitialBaseRates<V> {
-    pub fn reset_to(self, ded: &mut DeducedOpinions<V>) {
+    fn reset_to(self, ded: &mut DeducedOpinions<V>) {
         let InitialBaseRates {
             a,
             b,
@@ -540,7 +638,7 @@ pub struct Informing {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct InformingParams {
+pub struct InformingParams<V> {
     pub informer: InformerParams,
     /// ordered by step & non-duplicated
     pub misinfo: Vec<Informing>,
@@ -549,10 +647,11 @@ pub struct InformingParams {
     pub obs_threshold_selfish: usize,
     /// ordered by step & non-duplicated
     pub inhibition: Vec<Informing>,
+    pub prob_post_observation: V,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct ProbabilityParams<V> {
+pub struct ProbabilitySamples<V> {
     pub viewing: Vec<V>,
     pub viewing_friend: Vec<V>,
     pub viewing_social: Vec<V>,
@@ -614,5 +713,62 @@ impl<V: MyFloat> CptSamples<V> {
             lambda,
         } = self.0.choose(rng).unwrap();
         cpt.reset(alpha, beta, lambda, gamma, delta);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::read_to_string;
+
+    use subjective_logic::{
+        marr_d1, marr_d2,
+        mul::labeled::{OpinionD1, SimplexD1},
+    };
+
+    use crate::exec::Exec;
+
+    use super::Config;
+
+    #[test]
+    fn test_config() -> anyhow::Result<()> {
+        let config: Config = toml::from_str(&read_to_string("./test/config.toml")?)?;
+        let exec: Exec<f32> = config.try_into()?;
+        assert_eq!(exec.community_psi1.0.len(), 100);
+        assert!(exec.community_psi1.0[10].level > exec.community_psi1.0[90].level);
+        assert_eq!(exec.opinion.condition.o_b.len(), 7);
+        assert_eq!(
+            exec.opinion.condition.o_b[3],
+            marr_d1![
+                SimplexD1::new(marr_d1![1.0, 0.00], 0.00),
+                SimplexD1::new(marr_d1![0.0, 0.75], 0.25)
+            ]
+        );
+        assert_eq!(
+            exec.opinion.uncertainty.fh_fpsi_if_fphi0[0],
+            marr_d1![0.1, 0.1]
+        );
+        assert_eq!(
+            exec.opinion.uncertainty.kh_ko_kphi[0],
+            marr_d2![[0.1, 0.1], [0.1, 0.1]]
+        );
+        assert_eq!(
+            exec.information.inhibition[0].0,
+            OpinionD1::new(marr_d1![0.0, 1.0], 0.0, marr_d1![0.05, 0.95])
+        );
+        assert_eq!(
+            exec.information.inhibition[0].1,
+            marr_d1![
+                SimplexD1::new(marr_d1![0.5, 0.0], 0.5),
+                SimplexD1::new(marr_d1![0.1, 0.7], 0.2),
+            ]
+        );
+        assert_eq!(
+            exec.information.inhibition[0].2,
+            marr_d1![
+                SimplexD1::new(marr_d1![0.5, 0.0], 0.5),
+                SimplexD1::new(marr_d1![0.1, 0.6], 0.3),
+            ]
+        );
+        Ok(())
     }
 }

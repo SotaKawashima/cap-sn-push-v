@@ -8,6 +8,7 @@ use base::{
     runner::{run, RuntimeParams},
     stat::FileWriters,
 };
+use config::Config;
 use exec::{AgentExt, Exec, Instance};
 use input::format::DataFormat;
 use polars_arrow::datatypes::Metadata;
@@ -52,7 +53,7 @@ where
         compressing,
     } = args;
     let runtime = DataFormat::read(&runtime_path)?.parse::<RuntimeParams>()?;
-    let config = DataFormat::read(&config_path)?.parse()?;
+    let config: Config = DataFormat::read(&config_path)?.parse()?;
     let metadata = Metadata::from_iter([
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
@@ -65,6 +66,26 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = Exec::<V>::try_new(config)?;
+    let exec = Exec::<V>::try_from(config)?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{start, Cli};
+
+    #[test]
+    fn test_start() -> anyhow::Result<()> {
+        let args = Cli {
+            identifier: "test-start".to_string(),
+            output_dir: "./test/result".into(),
+            runtime: "./test/runtime.toml".to_string(),
+            config: "./test/config.toml".to_string(),
+            overwriting: true,
+            compressing: true,
+        };
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(async { start::<f32>(args).await })?;
+        Ok(())
+    }
 }

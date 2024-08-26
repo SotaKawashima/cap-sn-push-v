@@ -1,0 +1,21 @@
+informer.num_misinfo = 10
+informer.num_correction = 10
+informer.inhibition = { Bottom = 10 }
+
+misinfo = [
+    { step = 0, num_agents = 3 },
+    { step = 1, num_agents = 3 },
+    { step = 2, num_agents = 3 },
+]
+correction = [
+    { step = 2, num_agents = 3 },
+    { step = 3, num_agents = 3 },
+    { step = 4, num_agents = 3 },
+]
+inhibition = [
+    { step = 4, num_agents = 3 },
+    { step = 5, num_agents = 3 },
+    { step = 6, num_agents = 3 },
+]
+obs_threshold_selfish = 10
+prob_post_observation = 0.2

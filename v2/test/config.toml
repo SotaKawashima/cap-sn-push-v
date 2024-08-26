@@ -1,0 +1,33 @@
+[agent]
+probabilities  = "./test/agent/probs.toml"
+sharer_trust   = "./test/agent/trust.toml"
+prospect       = "./test/agent/prospect.csv"
+cpt            = "./test/agent/cpt.csv"
+initial_states = "./test/agent/initial_states.toml"
+
+[agent.condition]
+o_b           = "./test/ops/cond/95_60-90.csv"
+a_fh          = "./test/ops/cond/95_70-95.csv"
+b_kh          = "./test/ops/cond/95_60-85.csv"
+theta_h       = "./test/ops/cond/95_60-90.csv"
+thetad_h      = "./test/ops/cond/95_60-90.csv"
+h_psi_if_phi0 = "./test/ops/cond/95_80-90.csv"
+h_b_if_phi0   = "./test/ops/cond/95_80-90.csv"
+
+[agent.uncertainty]
+fh_fpsi_if_fphi0 = "./test/ops/unct/1d_10.csv"
+kh_kpsi_if_kphi0 = "./test/ops/unct/1d_10.csv"
+fh_fo_fphi       = "./test/ops/unct/2d_10.csv"
+kh_ko_kphi       = "./test/ops/unct/2d_10.csv"
+
+[strategy]
+informing = "./test/strategy/informing.toml"
+
+[strategy.information]
+misinfo     = "./test/strategy/info/n95_95.csv"
+correction  = "./test/strategy/info/a80-90_50.csv"
+observation = "./test/strategy/info/a100_95.csv"
+inhibition  = "./test/strategy/info/inhibition.csv"
+
+[environment]
+network = "./test/network/ba100.toml"

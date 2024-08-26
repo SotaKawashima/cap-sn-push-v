@@ -8,59 +8,23 @@ use base::{
     opinion::{AccessProb, MyFloat, Trusts},
 };
 use graph_lib::prelude::{Graph, GraphB};
-use input::format::DataFormat;
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
-use serde::Deserialize;
 
 use crate::config::*;
 
 pub struct Exec<V: MyFloat> {
-    graph: GraphB,
-    fnum_agents: V,
-    mean_degree: V,
-    sharer_trust: SharerTrustSamples<V>,
-    condition: ConditionSamples<V>,
-    uncertainty: UncertaintySamples<V>,
-    initial_opinions: InitialOpinions<V>,
-    initial_base_rates: InitialBaseRates<V>,
-    information: InformationSamples<V>,
-    // informer: InformerParams,
-    informing: InformingParams,
-    /// descending ordered by level
-    community_psi1: SupportLevels<V>,
-    prob_post_observation: V,
-    probabilies: ProbabilityParams<V>,
-    prospect: ProspectSamples<V>,
-    cpt: CptSamples<V>,
-}
-
-impl<V> Exec<V>
-where
-    V: MyFloat + for<'a> Deserialize<'a>,
-{
-    pub fn try_new(config: Config<V>) -> anyhow::Result<Self> {
-        let graph: GraphB = config.graph.try_into()?;
-        let fnum_agents = V::from_usize(graph.node_count()).unwrap();
-        let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
-        Ok(Self {
-            graph,
-            fnum_agents,
-            mean_degree,
-            sharer_trust: DataFormat::read(&config.sharer_trust_path)?.parse()?,
-            condition: config.condition.try_into()?,
-            uncertainty: config.uncertainty.try_into()?,
-            initial_opinions: config.initial_opinions,
-            initial_base_rates: config.initial_base_rate,
-            information: config.information.try_into()?,
-            informing: DataFormat::read(&config.informing_path)?.parse()?,
-            community_psi1: SupportLevels::conv_from(config.community_psi1_path)?,
-            prob_post_observation: config.prob_post_observation,
-            probabilies: DataFormat::read(&config.probabilities_path)?.parse()?,
-            prospect: ProspectSamples::conv_from(config.prospect_path)?,
-            cpt: CptSamples::conv_from(config.cpt_path)?,
-        })
-    }
+    pub graph: GraphB,
+    pub fnum_agents: V,
+    pub mean_degree: V,
+    pub sharer_trust: SharerTrustSamples<V>,
+    pub opinion: OpinionSamples<V>,
+    pub information: InformationSamples<V>,
+    pub informing: InformingParams<V>,
+    pub community_psi1: SupportLevels<V>,
+    pub probabilies: ProbabilitySamples<V>,
+    pub prospect: ProspectSamples<V>,
+    pub cpt: CptSamples<V>,
 }
 
 impl<V> Executor<V, AgentExt<V>, Instance> for Exec<V>
@@ -237,10 +201,8 @@ where
     fn reset<R: Rng>(wrapper: &mut AgentWrapper<V, Self>, exec: &Exec<V>, rng: &mut R) {
         wrapper.ext.clear();
         wrapper.core.reset(|ops, decision| {
-            reset_fixed(&exec.condition, &exec.uncertainty, &mut ops.fixed, rng);
-            exec.initial_opinions.clone().reset_to(&mut ops.state);
-            exec.initial_base_rates.clone().reset_to(&mut ops.ded);
             decision.reset(0, |prospect, cpt| {
+                exec.opinion.reset_to(ops, rng);
                 exec.prospect.reset_to(prospect, rng);
                 exec.cpt.reset_to(cpt, rng);
             });
@@ -406,7 +368,7 @@ where
         }
         if ins.total_num_selfish() > ins.exec.informing.obs_threshold_selfish {
             ins.ext.observation.retain(|&agent_idx| {
-                if ins.exec.prob_post_observation <= ins.rng.gen() {
+                if ins.exec.informing.prob_post_observation <= ins.rng.gen() {
                     return true;
                 }
                 let op = ins
