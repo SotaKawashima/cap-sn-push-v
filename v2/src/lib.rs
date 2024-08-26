@@ -61,27 +61,27 @@ where
     let Cli {
         identifier,
         output_dir,
-        runtime,
-        config,
+        runtime: runtime_path,
+        config: config_path,
         overwriting,
         compressing,
     } = args;
-    let runtime_data = DataFormat::read(&runtime)?.parse::<RuntimeParams>()?;
+    let runtime = DataFormat::read(&runtime_path)?.parse::<RuntimeParams>()?;
+    let config = DataFormat::read(&config_path)?.parse()?;
     let metadata = Metadata::from_iter([
+        ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-        ("runtime".to_string(), runtime),
-        // ("agent_params".to_string(), agent_params),
-        // ("scenario".to_string(), scenario),
+        ("runtime".to_string(), runtime_path),
+        ("config".to_string(), config_path),
         (
             "iteration_count".to_string(),
-            runtime_data.iteration_count.to_string(),
+            runtime.iteration_count.to_string(),
         ),
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let config = DataFormat::read(&config)?.parse()?;
     let exec = Exec::<V>::try_new(config)?;
-    run::<V, _, AgentExt<V>, Instance>(writers, &runtime_data, exec, None).await
+    run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
 #[derive(Debug, Deserialize)]

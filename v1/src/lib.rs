@@ -73,6 +73,7 @@ where
         .parse::<ScenarioParam<V>>()?
         .try_into()?;
     let metadata = Metadata::from_iter([
+        ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
         ("runtime".to_string(), runtime),
         ("agent_params".to_string(), agent_params),
