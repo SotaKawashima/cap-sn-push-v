@@ -2277,7 +2277,10 @@ dependencies = [
  "serde",
  "serde_with",
  "subjective-logic",
+ "tokio",
  "toml",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
