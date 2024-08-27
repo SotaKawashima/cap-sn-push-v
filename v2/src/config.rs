@@ -323,20 +323,17 @@ impl<V: MyFloat> SupportLevels<V> {
         self.levels[idx]
     }
 
-    fn from_iter<I>(iter: I) -> Self
+    fn from_iter<I>(into_iter: I) -> Self
     where
-        I: Iterator<Item = SupportLevel<V>>,
+        I: IntoIterator<Item = SupportLevel<V>>,
     {
-        let lvs = iter
+        let levels = into_iter.into_iter().map(|s| s.level).collect_vec();
+        let indexes_by_level = levels
+            .iter()
             .enumerate()
-            .sorted_by(|a, b| b.1.level.partial_cmp(&a.1.level).unwrap())
+            .sorted_by(|a, b| b.1.partial_cmp(&a.1).unwrap())
+            .map(|(i, _)| i)
             .collect_vec();
-        let mut levels = vec![V::zero(); lvs.len()];
-        let mut indexes_by_level = Vec::with_capacity(lvs.len());
-        for (i, lv) in lvs {
-            levels[i] = lv.level;
-            indexes_by_level.push(i);
-        }
         Self {
             levels,
             indexes_by_level,
@@ -755,11 +752,14 @@ mod tests {
 
     use crate::exec::Exec;
 
-    use super::Config;
+    use super::{Config, SupportLevel, SupportLevels};
 
     #[test]
     fn test_support_levels() {
-        todo!()
+        let data = vec![0.5, 0.2, 0.3, 0.1, 0.6];
+        let sls = SupportLevels::<f32>::from_iter(data.iter().map(|&level| SupportLevel { level }));
+        assert_eq!(sls.levels, data);
+        assert_eq!(sls.indexes_by_level, vec![4, 0, 2, 1, 3]);
     }
 
     #[test]
