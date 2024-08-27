@@ -1,13 +1,11 @@
 [workspace]
 resolver = "2"
-members = [
-    "base", "input", "v1"
-, "v2"]
+members = ["base", "input", "v1", "v2"]
 
 [workspace.dependencies]
 subjective-logic = { git = "https://github.com/shinomi-lab/subjective-logic.git", tag = "v0.10.0" }
 graph-lib = { git = "https://github.com/shinomi-lab/graph-lib.git", tag = "v0.4.2" }
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = { version = "0.1", features = ["release_max_level_off"] }
 anyhow = "1.0"
@@ -19,7 +17,17 @@ rand = { version = "0.8", features = ["small_rng"] }
 rand_distr = "0.4"
 num-traits = "0.2"
 itertools = "0.13"
-tokio = { version = "1.37", features = ["rt", "macros", "rt-multi-thread", "sync", "time"] }
-polars-arrow = { version = "0.40", features = ["io_ipc", "io_ipc_write_async", "io_ipc_compression"] }
+tokio = { version = "1.39", features = [
+    "rt",
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+polars-arrow = { version = "0.42", features = [
+    "io_ipc",
+    "io_ipc_write_async",
+    "io_ipc_compression",
+] }
 thiserror = "1.0"
 num_cpus = "1.8"

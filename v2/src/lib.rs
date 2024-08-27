@@ -9,7 +9,7 @@ use base::{
     stat::FileWriters,
 };
 use config::Config;
-use exec::{AgentExt, Exec, Instance};
+use exec::{AgentExt, Instance};
 use input::format::DataFormat;
 use polars_arrow::datatypes::Metadata;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
@@ -25,7 +25,7 @@ pub struct Cli {
     runtime: String,
     /// the path of a agent parameters config file
     #[arg(long)]
-    config: String,
+    config: PathBuf,
     /// Enable overwriting of a output file
     #[arg(short, default_value_t = false)]
     overwriting: bool,
@@ -58,7 +58,10 @@ where
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
         ("runtime".to_string(), runtime_path),
-        ("config".to_string(), config_path),
+        (
+            "config".to_string(),
+            config_path.to_string_lossy().to_string(),
+        ),
         (
             "iteration_count".to_string(),
             runtime.iteration_count.to_string(),
@@ -66,7 +69,7 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = Exec::<V>::try_from(config)?;
+    let exec = config.into_exec(&config_path)?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
@@ -80,7 +83,7 @@ mod tests {
             identifier: "test-start".to_string(),
             output_dir: "./test/result".into(),
             runtime: "./test/runtime.toml".to_string(),
-            config: "./test/config.toml".to_string(),
+            config: "./test/config.toml".into(),
             overwriting: true,
             compressing: true,
         };

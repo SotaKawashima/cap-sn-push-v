@@ -20,19 +20,20 @@ pub enum FileReadError {
 }
 
 impl DataFormat {
-    pub fn read(path: &str) -> Result<Self, FileReadError> {
-        match Path::new(path).extension() {
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, FileReadError> {
+        let path = path.as_ref();
+        match path.extension() {
             None => Err(FileReadError::NoExtension),
             Some(ext) => match <&str>::try_from(ext)? {
                 "json" => Ok(DataFormat::JSON(fs::read_to_string(path).map_err(
                     |err| FileReadError::IOError {
-                        path: path.to_string(),
+                        path: path.to_string_lossy().to_string(),
                         err,
                     },
                 )?)),
                 "toml" => Ok(DataFormat::TOML(fs::read_to_string(path).map_err(
                     |err| FileReadError::IOError {
-                        path: path.to_string(),
+                        path: path.to_string_lossy().to_string(),
                         err,
                     },
                 )?)),

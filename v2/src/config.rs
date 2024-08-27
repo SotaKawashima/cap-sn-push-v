@@ -1,4 +1,8 @@
-use std::{fmt::Debug, fs::File, path::Path};
+use std::{
+    fmt::Debug,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use base::{
     decision::{Prospect, CPT},
@@ -6,7 +10,6 @@ use base::{
         DeducedOpinions, FPhi, FPsi, FixedOpinions, KPhi, KPsi, MyFloat, MyOpinions, Phi, Psi,
         StateOpinions, Theta, Thetad, A, B, FH, FO, H, KH, KO, O,
     },
-    util::GraphInfo,
 };
 use graph_lib::prelude::{Graph, GraphB};
 use input::format::DataFormat;
@@ -29,52 +32,31 @@ use crate::exec::Exec;
 pub struct Config {
     agent: AgentConfig,
     strategy: StrategyConfig,
-    environment: EnvironmentConfig,
+    network: NetworkConfig,
 }
 
-#[derive(Debug, Deserialize)]
-struct AgentConfig {
-    probabilities: String,
-    sharer_trust: String,
-    prospect: String,
-    cpt: String,
-    initial_states: String,
-    condition: ConditionConfig,
-    uncertainty: UncertaintyConfig,
+fn join_path<P: AsRef<Path>>(path: &mut PathBuf, root: P) {
+    if !path.is_absolute() {
+        *path = root.as_ref().join(&path);
+    }
 }
 
-#[derive(Debug, Deserialize)]
-struct StrategyConfig {
-    informing: String,
-    information: InformationConfig,
-}
+impl Config {
+    pub fn into_exec<V, P>(self, root: P) -> anyhow::Result<Exec<V>>
+    where
+        V: MyFloat + for<'a> Deserialize<'a>,
+        P: AsRef<Path>,
+    {
+        let Self {
+            mut agent,
+            mut strategy,
+            mut network,
+        } = self;
+        agent.set_root(&root);
+        strategy.set_root(&root);
+        network.set_root(&root);
 
-#[derive(Debug, Deserialize)]
-struct EnvironmentConfig {
-    network: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct NetworkConfig {
-    graph: GraphInfo,
-    community: String,
-}
-
-impl<V> TryFrom<Config> for Exec<V>
-where
-    V: MyFloat + for<'a> Deserialize<'a>,
-{
-    type Error = anyhow::Error;
-
-    fn try_from(
-        Config {
-            agent,
-            strategy,
-            environment,
-        }: Config,
-    ) -> Result<Self, Self::Error> {
-        let network: NetworkConfig = DataFormat::read(&environment.network)?.parse()?;
-        let graph: GraphB = network.graph.try_into()?;
+        let graph = network.parse_graph()?;
         let fnum_agents = V::from_usize(graph.node_count()).unwrap();
         let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
         let community_psi1 =
@@ -85,7 +67,7 @@ where
             initial_base_rates,
         } = DataFormat::read(&agent.initial_states)?.parse()?;
 
-        Ok(Self {
+        Ok(Exec {
             graph,
             fnum_agents,
             mean_degree,
@@ -106,6 +88,94 @@ where
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct AgentConfig {
+    probabilities: PathBuf,
+    sharer_trust: PathBuf,
+    prospect: PathBuf,
+    cpt: PathBuf,
+    initial_states: PathBuf,
+    condition: ConditionConfig,
+    uncertainty: UncertaintyConfig,
+}
+
+impl AgentConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.probabilities, &root);
+        join_path(&mut self.sharer_trust, &root);
+        join_path(&mut self.prospect, &root);
+        join_path(&mut self.cpt, &root);
+        join_path(&mut self.initial_states, &root);
+        self.condition.set_root(&root);
+        self.uncertainty.set_root(&root);
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct StrategyConfig {
+    informing: PathBuf,
+    information: InformationConfig,
+}
+
+impl StrategyConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.informing, &root);
+        self.information.set_root(&root);
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InformationConfig {
+    /// also used for $M$ in correction
+    misinfo: PathBuf,
+    correction: PathBuf,
+    observation: PathBuf,
+    inhibition: PathBuf,
+}
+
+impl InformationConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.misinfo, &root);
+        join_path(&mut self.correction, &root);
+        join_path(&mut self.observation, &root);
+        join_path(&mut self.inhibition, &root);
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkConfig {
+    path: PathBuf,
+    graph: PathBuf,
+    directed: bool,
+    transposed: bool,
+    community: PathBuf,
+}
+
+impl NetworkConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.path, &root);
+        join_path(&mut self.graph, &self.path);
+        join_path(&mut self.community, &self.path);
+    }
+
+    fn parse_graph(&self) -> anyhow::Result<GraphB> {
+        println!("{:?}", self.graph);
+        let builder = graph_lib::io::ParseBuilder::new(
+            File::open(&self.graph)?,
+            graph_lib::io::DataFormat::EdgeList,
+        );
+        if !self.directed {
+            if self.transposed {
+                Ok(GraphB::Ud(builder.transpose().parse()?))
+            } else {
+                Ok(GraphB::Ud(builder.parse()?))
+            }
+        } else {
+            Ok(GraphB::Di(builder.parse()?))
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
@@ -116,21 +186,42 @@ struct InitialStates<V: MyFloat> {
 
 #[derive(Debug, Deserialize)]
 struct ConditionConfig {
-    h_psi_if_phi0: String,
-    h_b_if_phi0: String,
-    o_b: String,
-    a_fh: String,
-    b_kh: String,
-    theta_h: String,
-    thetad_h: String,
+    h_psi_if_phi0: PathBuf,
+    h_b_if_phi0: PathBuf,
+    o_b: PathBuf,
+    a_fh: PathBuf,
+    b_kh: PathBuf,
+    theta_h: PathBuf,
+    thetad_h: PathBuf,
+}
+
+impl ConditionConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.h_psi_if_phi0, &root);
+        join_path(&mut self.h_b_if_phi0, &root);
+        join_path(&mut self.o_b, &root);
+        join_path(&mut self.a_fh, &root);
+        join_path(&mut self.b_kh, &root);
+        join_path(&mut self.theta_h, &root);
+        join_path(&mut self.thetad_h, &root);
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct UncertaintyConfig {
-    fh_fpsi_if_fphi0: String,
-    kh_kpsi_if_kphi0: String,
-    fh_fo_fphi: String,
-    kh_ko_kphi: String,
+    fh_fpsi_if_fphi0: PathBuf,
+    kh_kpsi_if_kphi0: PathBuf,
+    fh_fo_fphi: PathBuf,
+    kh_ko_kphi: PathBuf,
+}
+
+impl UncertaintyConfig {
+    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+        join_path(&mut self.fh_fpsi_if_fphi0, &root);
+        join_path(&mut self.kh_kpsi_if_kphi0, &root);
+        join_path(&mut self.fh_fo_fphi, &root);
+        join_path(&mut self.kh_ko_kphi, &root);
+    }
 }
 
 pub struct OpinionSamples<V: MyFloat> {
@@ -298,15 +389,6 @@ fn reset_fixed<V: MyFloat, R: Rng>(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct InformationConfig {
-    /// also used for $M$ in correction
-    misinfo: String,
-    correction: String,
-    observation: String,
-    inhibition: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct SupportLevel<V> {
     level: V,
 }
@@ -420,25 +502,17 @@ struct OpinionRecord<V> {
     a1: V,
 }
 
-impl<V> OpinionRecord<V> {
-    fn conv_from<D1>(path: String) -> anyhow::Result<Vec<OpinionD1<D1, V>>>
-    where
-        D1: Domain<Idx: Debug>,
-        V: MyFloat + for<'a> Deserialize<'a>,
-    {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        rdr.deserialize()
-            .map(|res| {
-                res.map_err(|e| e.into()).and_then(|rec: Self| {
-                    Ok(OpinionD1::try_new(
-                        marr_d1![rec.b0, rec.b1],
-                        rec.u,
-                        marr_d1![rec.a0, rec.a1],
-                    )?)
-                })
-            })
-            .try_collect()
+impl<V: MyFloat, D1> TryFrom<OpinionRecord<V>> for OpinionD1<D1, V>
+where
+    D1: Domain<Idx: Debug>,
+{
+    type Error = anyhow::Error;
+    fn try_from(value: OpinionRecord<V>) -> Result<Self, Self::Error> {
+        Ok(OpinionD1::try_new(
+            marr_d1![value.b0, value.b1],
+            value.u,
+            marr_d1![value.a0, value.a1],
+        )?)
     }
 }
 
@@ -463,39 +537,30 @@ struct InhibitionRecord<V> {
     b1_u: V,
 }
 
-impl<V: MyFloat + for<'a> Deserialize<'a>> InhibitionRecord<V> {
-    fn conv_from(
-        path: String,
-    ) -> anyhow::Result<
-        Vec<(
-            OpinionD1<Phi, V>,
-            MArrD1<Psi, SimplexD1<H, V>>,
-            MArrD1<B, SimplexD1<H, V>>,
-        )>,
-    > {
-        let file = File::open(&path)?;
-        let mut rdr = csv::Reader::from_reader(file);
-        rdr.deserialize()
-            .map(|res| {
-                res.map_err(|e| e.into()).and_then(|rec: Self| {
-                    Ok((
-                        OpinionD1::try_new(
-                            marr_d1![rec.phi_b0, rec.phi_b1],
-                            rec.phi_u,
-                            marr_d1![rec.phi_a0, rec.phi_a1],
-                        )?,
-                        marr_d1![
-                            SimplexD1::try_new(marr_d1![rec.psi0_b0, rec.psi0_b1], rec.psi0_u)?,
-                            SimplexD1::try_new(marr_d1![rec.psi1_b0, rec.psi1_b1], rec.psi1_u)?,
-                        ],
-                        marr_d1![
-                            SimplexD1::try_new(marr_d1![rec.b0_b0, rec.b0_b1], rec.b0_u)?,
-                            SimplexD1::try_new(marr_d1![rec.b1_b0, rec.b1_b1], rec.b1_u)?,
-                        ],
-                    ))
-                })
-            })
-            .try_collect()
+impl<V: MyFloat> TryFrom<InhibitionRecord<V>>
+    for (
+        OpinionD1<Phi, V>,
+        MArrD1<Psi, SimplexD1<H, V>>,
+        MArrD1<B, SimplexD1<H, V>>,
+    )
+{
+    type Error = anyhow::Error;
+    fn try_from(value: InhibitionRecord<V>) -> Result<Self, Self::Error> {
+        Ok((
+            OpinionD1::try_new(
+                marr_d1![value.phi_b0, value.phi_b1],
+                value.phi_u,
+                marr_d1![value.phi_a0, value.phi_a1],
+            )?,
+            marr_d1![
+                SimplexD1::try_new(marr_d1![value.psi0_b0, value.psi0_b1], value.psi0_u)?,
+                SimplexD1::try_new(marr_d1![value.psi1_b0, value.psi1_b1], value.psi1_u)?,
+            ],
+            marr_d1![
+                SimplexD1::try_new(marr_d1![value.b0_b0, value.b0_b1], value.b0_u)?,
+                SimplexD1::try_new(marr_d1![value.b1_b0, value.b1_b1], value.b1_u)?,
+            ],
+        ))
     }
 }
 
@@ -504,10 +569,10 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<InformationConfig> for Inform
 
     fn try_from(value: InformationConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            misinfo: OpinionRecord::conv_from(value.misinfo)?,
-            correction: OpinionRecord::conv_from(value.correction)?,
-            observation: OpinionRecord::conv_from(value.observation)?,
-            inhibition: InhibitionRecord::conv_from(value.inhibition)?,
+            misinfo: read_csv_and_then(&value.misinfo, OpinionRecord::try_into)?,
+            correction: read_csv_and_then(&value.correction, OpinionRecord::try_into)?,
+            observation: read_csv_and_then(&value.observation, OpinionRecord::try_into)?,
+            inhibition: read_csv_and_then(&value.inhibition, InhibitionRecord::try_into)?,
         })
     }
 }
@@ -743,7 +808,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::fs::read_to_string;
+    use std::{fs::read_to_string, path::Path};
 
     use subjective_logic::{
         marr_d1, marr_d2,
@@ -763,9 +828,21 @@ mod tests {
     }
 
     #[test]
+    fn test_path() {
+        let d0 = Path::new("/hoge");
+        let d1 = Path::new("./fuga");
+        let d2 = d0.join(d1);
+        assert!(!d1.is_absolute());
+        assert_ne!(d1, Path::new("fuga"));
+        println!("{d2:?}");
+        assert_eq!(d2, Path::new("/hoge/fuga"));
+    }
+
+    #[test]
     fn test_config() -> anyhow::Result<()> {
-        let config: Config = toml::from_str(&read_to_string("./test/config.toml")?)?;
-        let exec: Exec<f32> = config.try_into()?;
+        let config_path = Path::new("./test/config.toml");
+        let config: Config = toml::from_str(&read_to_string(&config_path)?)?;
+        let exec: Exec<f32> = config.into_exec(config_path.parent().unwrap())?;
         assert_eq!(exec.community_psi1.levels.len(), 100);
         assert!(
             exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]
