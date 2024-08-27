@@ -134,6 +134,7 @@ pub struct DeducedOpinions<V> {
     thetad: OpinionD1<Thetad, V>,
 }
 
+#[derive(Debug)]
 pub struct Trusts<V> {
     pub p: V,
     pub fp: V,
@@ -143,6 +144,7 @@ pub struct Trusts<V> {
     pub km: V,
 }
 
+#[derive(Debug)]
 pub struct AccessProb<V> {
     pub fp: V,
     pub kp: V,
@@ -703,14 +705,16 @@ where
         trusts: Trusts<V>,
         ap: AccessProb<V>,
     ) -> MyOpinionsUpd<'a, V> {
+        debug!("{:?}", &trusts);
+        debug!("{:?}", &ap);
+        debug!("before: {:?}", &self.state);
+
         let mut diff = self.state.receive(p, &trusts, &ap, &self.ded);
-        debug!("{:?}", &diff);
-
         diff.swap(&mut self.state);
-        debug!("{:?}", &self.state);
-
         self.ded = self.ded.deduce(&self.state, &self.fixed);
-        debug!("{:?}", &self.ded);
+
+        debug!("after: {:?}", &self.state);
+        debug!("after: {:?}", &self.ded);
 
         MyOpinionsUpd {
             inner: self,
