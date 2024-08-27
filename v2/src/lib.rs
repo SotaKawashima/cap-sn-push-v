@@ -21,16 +21,16 @@ pub struct Cli {
     /// the path of output files
     output_dir: PathBuf,
     /// the path of a runtime config file
-    #[arg(short, long)]
+    #[arg(long)]
     runtime: String,
     /// the path of a agent parameters config file
-    #[arg(short, long)]
+    #[arg(long)]
     config: String,
     /// Enable overwriting of a output file
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, default_value_t = false)]
     overwriting: bool,
     /// Compress a output file
-    #[arg(short, long, default_value_t = true)]
+    #[arg(short, default_value_t = false)]
     compressing: bool,
 }
 
