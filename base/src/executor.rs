@@ -231,6 +231,8 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
         let mut t = 0;
         while !self.rps.is_empty() || !self.selfishes.is_empty() || self.ext.is_continued(self.exec)
         {
+            let span = span!(Level::INFO, "t", t = t);
+            let _guard = span.enter();
             self.step(memory, num_iter, t);
             t += 1;
         }
