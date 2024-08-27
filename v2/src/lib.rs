@@ -1,7 +1,7 @@
 mod config;
 mod exec;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base::{
     opinion::MyFloat,
@@ -69,7 +69,7 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = config.into_exec(&config_path)?;
+    let exec = config.into_exec(&config_path.parent().unwrap_or_else(|| &(Path::new("/"))))?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
