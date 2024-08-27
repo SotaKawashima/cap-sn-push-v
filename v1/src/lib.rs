@@ -1,7 +1,7 @@
 mod parameters;
 mod scenario;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use base::{
     executor::{AgentExtTrait, AgentIdx, Executor, InfoIdx, InstanceExt, InstanceWrapper},
@@ -255,8 +255,8 @@ where
 struct InstanceV1<V> {
     event_table: BTreeMap<u32, VecDeque<Inform>>,
     observable: Vec<usize>,
-    info_trust_map: HashMap<InfoIdx, V>,
-    corr_misinfo_trust_map: HashMap<InfoIdx, V>,
+    info_trust_map: BTreeMap<InfoIdx, V>,
+    corr_misinfo_trust_map: BTreeMap<InfoIdx, V>,
 }
 
 impl<'a, V> Executor<V, AgentExt<V>, InstanceV1<V>> for ExecV1<V>
@@ -392,8 +392,8 @@ where
 {
     fn from_exec(exec: &ExecV1<V>, _: &mut R) -> Self {
         Self {
-            info_trust_map: HashMap::new(),
-            corr_misinfo_trust_map: HashMap::new(),
+            info_trust_map: BTreeMap::new(),
+            corr_misinfo_trust_map: BTreeMap::new(),
             observable: Vec::from_iter(0..exec.scenario.num_nodes),
             event_table: exec.scenario.table.clone(),
         }

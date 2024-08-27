@@ -12,6 +12,7 @@ use crate::info::InfoLabel;
 
 #[derive(Default)]
 pub struct InfoData {
+    num_posted: u32,
     num_received: u32,
     num_shared: u32,
     num_viewed: u32,
@@ -19,6 +20,10 @@ pub struct InfoData {
 }
 
 impl InfoData {
+    pub fn posted(&mut self) {
+        self.num_posted += 1;
+    }
+
     pub fn received(&mut self) {
         self.num_received += 1;
     }
@@ -48,6 +53,7 @@ pub struct InfoStat {
     num_iter: Vec<u32>,
     t: Vec<u32>,
     info_label: Vec<u8>,
+    num_posted: Vec<u32>,
     num_received: Vec<u32>,
     num_shared: Vec<u32>,
     num_viewed: Vec<u32>,
@@ -60,6 +66,7 @@ impl StatTrait for InfoStat {
             Field::new("num_iter", ArrowDataType::UInt32, false),
             Field::new("t", ArrowDataType::UInt32, false),
             Field::new("info_label", ArrowDataType::UInt8, false),
+            Field::new("num_posted", ArrowDataType::UInt32, false),
             Field::new("num_received", ArrowDataType::UInt32, false),
             Field::new("num_shared", ArrowDataType::UInt32, false),
             Field::new("num_viewed", ArrowDataType::UInt32, false),
@@ -72,6 +79,7 @@ impl StatTrait for InfoStat {
             Box::new(PrimitiveArray::from_vec(self.num_iter)),
             Box::new(PrimitiveArray::from_vec(self.t)),
             Box::new(PrimitiveArray::from_vec(self.info_label)),
+            Box::new(PrimitiveArray::from_vec(self.num_posted)),
             Box::new(PrimitiveArray::from_vec(self.num_received)),
             Box::new(PrimitiveArray::from_vec(self.num_shared)),
             Box::new(PrimitiveArray::from_vec(self.num_viewed)),
@@ -95,6 +103,7 @@ impl InfoStat {
         self.num_iter.push(num_iter);
         self.t.push(t);
         self.info_label.push(label.into());
+        self.num_posted.push(d.num_posted);
         self.num_received.push(d.num_received);
         self.num_shared.push(d.num_shared);
         self.num_viewed.push(d.num_viewed);

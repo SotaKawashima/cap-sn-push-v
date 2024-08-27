@@ -91,7 +91,7 @@ pub trait AgentExtTrait<V: Clone>: Sized {
     ) -> AccessProb<V>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AgentIdx(pub usize);
 
 impl From<usize> for AgentIdx {
@@ -100,7 +100,7 @@ impl From<usize> for AgentIdx {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InfoIdx(pub usize);
 
 impl From<usize> for InfoIdx {
@@ -211,7 +211,8 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
     fn new_info(&mut self, obj: InfoContent<'a, V>) -> InfoIdx {
         let info_idx = self.infos.len();
         let info = Info::new(info_idx, obj);
-        self.info_data_table.entry(*info.label()).or_default();
+        let d = self.info_data_table.entry(*info.label()).or_default();
+        d.posted();
         self.infos.push(info);
         info_idx.into()
     }
@@ -359,24 +360,4 @@ pub trait InstanceExt<V: Clone, R, E>: Sized {
         ins: &mut InstanceWrapper<'a, E, V, R, Self>,
         t: u32,
     ) -> Vec<(AgentIdx, InfoContent<'a, V>)>;
-    // fn informer_trusts<'a>(
-    //     ins: &mut InstanceWrapper<'a, E, V, R, Self>,
-    //     agent_idx: AgentIdx,
-    //     info_idx: InfoIdx,
-    // ) -> Trusts<V>;
-    // fn informer_access_probs<'a>(
-    //     ins: &mut InstanceWrapper<'a, E, V, R, Self>,
-    //     agent_idx: AgentIdx,
-    //     info_idx: InfoIdx,
-    // ) -> AccessProb<V>;
-    // fn sharer_trusts<'a>(
-    //     ins: &mut InstanceWrapper<'a, E, V, R, Self>,
-    //     agent_idx: AgentIdx,
-    //     info_idx: InfoIdx,
-    // ) -> Trusts<V>;
-    // fn sharer_access_probs<'a>(
-    //     ins: &mut InstanceWrapper<'a, E, V, R, Self>,
-    //     agent_idx: AgentIdx,
-    //     info_idx: InfoIdx,
-    // ) -> AccessProb<V>;
 }

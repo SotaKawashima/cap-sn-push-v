@@ -159,7 +159,6 @@ impl NetworkConfig {
     }
 
     fn parse_graph(&self) -> anyhow::Result<GraphB> {
-        println!("{:?}", self.graph);
         let builder = graph_lib::io::ParseBuilder::new(
             File::open(&self.graph)?,
             graph_lib::io::DataFormat::EdgeList,

@@ -56,15 +56,6 @@ pub struct AgentExt<V> {
 }
 
 impl<V> AgentExt<V> {
-    // fn reset(&mut self, psi1_support_level: V) {
-    // self.trusts = InfoMap::new();
-    // self.arrival_prob = None;
-    // self.viewing_probs = None;
-    // self.plural_ignores = None;
-    // self.visit_prob = None;
-    // self.psi1_support_level = psi1_support_level;
-    // }
-
     fn get_trust<R: Rng>(&mut self, label: InfoLabel, exec: &Exec<V>, rng: &mut R) -> V
     where
         V: MyFloat,
