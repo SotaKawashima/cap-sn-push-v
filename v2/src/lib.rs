@@ -24,13 +24,13 @@ pub struct Cli {
     runtime: String,
     /// the path of a network config file
     #[arg(long)]
-    network_config: PathBuf,
+    network: PathBuf,
     /// the path of a agent config file
     #[arg(long)]
-    agent_config: PathBuf,
+    agent: PathBuf,
     /// the path of a strategy config file
     #[arg(long)]
-    strategy_config: PathBuf,
+    strategy: PathBuf,
     /// Enable overwriting of a output file
     #[arg(short, default_value_t = false)]
     overwriting: bool,
@@ -53,9 +53,9 @@ where
         identifier,
         output_dir,
         runtime: runtime_path,
-        network_config,
-        agent_config,
-        strategy_config,
+        network: network_config,
+        agent: agent_config,
+        strategy: strategy_config,
         overwriting,
         compressing,
     } = args;
@@ -98,9 +98,9 @@ mod tests {
             identifier: "test-start".to_string(),
             output_dir: "./test/result".into(),
             runtime: "./test/runtime.toml".to_string(),
-            agent_config: "./test/agent_config.toml".into(),
-            network_config: "./test/network_config.toml".into(),
-            strategy_config: "./test/strategy_config.toml".into(),
+            agent: "./test/agent_config.toml".into(),
+            network: "./test/network_config.toml".into(),
+            strategy: "./test/strategy_config.toml".into(),
             overwriting: true,
             compressing: true,
         };
