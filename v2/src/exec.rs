@@ -369,7 +369,11 @@ where
         Self {
             misinfo_informers,
             corection_informers,
-            inhibition_informers,
+            inhibition_informers: if exec.informing.enable_inhibition {
+                inhibition_informers
+            } else {
+                BTreeMap::new()
+            },
             observation,
             max_step_num_observation: V::to_usize(
                 &(exec.informing.max_step_pop_observation * exec.fnum_agents),
@@ -461,6 +465,7 @@ where
                 ));
             }
         }
+
         informers
     }
 }

@@ -756,6 +756,7 @@ pub struct InformingParams<V> {
 
     /// order by step & non-duplicated
     pub max_pop_inhibition: Sampling<V>,
+    pub enable_inhibition: bool,
     pub inhibition: Vec<Informing<V>>,
 }
 

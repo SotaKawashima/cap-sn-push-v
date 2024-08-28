@@ -16,6 +16,7 @@ inhibition = [
     { step = 5, pop_agents = 0.02 },
     { step = 6, pop_agents = 0.02 },
 ]
+enable_inhibition = true
 max_pop_observation = 0.4
 max_step_pop_observation = 0.02
 prob_post_observation = 0.2
