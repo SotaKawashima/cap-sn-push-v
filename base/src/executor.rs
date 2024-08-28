@@ -143,6 +143,7 @@ pub struct InstanceWrapper<'a, E, V: Clone, R, X> {
     agent_stat: AgentStat,
     pop_stat: PopStat,
     total_num_selfish: usize,
+    prev_num_selfish: usize,
     rps: Vec<(AgentIdx, InfoIdx)>,
     pub ext: X,
 }
@@ -167,6 +168,7 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
             agent_stat,
             pop_stat,
             total_num_selfish,
+            prev_num_selfish: 0,
             rps,
             ext,
         }
@@ -208,6 +210,9 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
         self.total_num_selfish
     }
 
+    pub fn prev_num_selfish(&self) -> usize {
+        self.prev_num_selfish
+    }
     fn new_info(&mut self, obj: InfoContent<'a, V>) -> InfoIdx {
         let info_idx = self.infos.len();
         let info = Info::new(info_idx, obj);
@@ -323,13 +328,14 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
             if agent.core.progress_selfish_status() {
                 self.agent_stat.push_selfish(num_iter, t, agent_idx.0);
                 pop_data.selfish();
-                self.total_num_selfish += 1;
             }
             if agent.core.is_willing_selfish() {
                 temp.push(*agent_idx);
             }
         }
         self.selfishes = temp;
+        self.total_num_selfish += pop_data.num_selfish as usize;
+        self.prev_num_selfish = pop_data.num_selfish as usize;
         self.pop_stat.push(num_iter, t, pop_data);
         self.push_info_stats(num_iter, t);
     }

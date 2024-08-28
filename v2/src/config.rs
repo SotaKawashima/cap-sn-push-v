@@ -428,11 +428,13 @@ impl<V: MyFloat> SupportLevels<V> {
             .collect()
     }
 
-    pub fn top(&self, n: usize) -> Vec<usize> {
-        self.indexes_by_level.iter().take(n).cloned().collect()
+    pub fn top<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
+        let mut v = self.indexes_by_level.iter().take(n).cloned().collect_vec();
+        v.shuffle(rng);
+        v
     }
 
-    pub fn middle(&self, n: usize) -> Vec<usize>
+    pub fn middle<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize>
     where
         V: MyFloat,
     {
@@ -451,7 +453,7 @@ impl<V: MyFloat> SupportLevels<V> {
 
         let from = c.checked_sub(n).unwrap_or(0);
         let to = (c + n).min(l);
-        (from..to)
+        let mut v = (from..to)
             .sorted_by(|&i, &j| {
                 let a = (level_of!(i) - median).abs();
                 let b = (level_of!(j) - median).abs();
@@ -459,16 +461,21 @@ impl<V: MyFloat> SupportLevels<V> {
             })
             .take(n)
             .map(|i| self.indexes_by_level[i])
-            .collect()
+            .collect_vec();
+        v.shuffle(rng);
+        v
     }
 
-    pub fn bottom(&self, n: usize) -> Vec<usize> {
-        self.indexes_by_level
+    pub fn bottom<R: Rng>(&self, n: usize, rng: &mut R) -> Vec<usize> {
+        let mut v = self
+            .indexes_by_level
             .iter()
             .rev()
             .take(n)
             .cloned()
-            .collect()
+            .collect_vec();
+        v.shuffle(rng);
+        v
     }
 }
 
@@ -692,37 +699,36 @@ impl<V: MyFloat> InitialBaseRates<V> {
     }
 }
 #[derive(Debug, serde::Deserialize)]
-pub enum Sampling {
-    Random(usize),
-    Top(usize),
-    Middle(usize),
-    Bottom(usize),
+pub enum Sampling<V> {
+    Random(V),
+    Top(V),
+    Middle(V),
+    Bottom(V),
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct InformerParams {
-    pub num_misinfo: usize,
-    pub num_correction: usize,
-    pub inhibition: Sampling,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct Informing {
+pub struct Informing<V> {
     pub step: u32,
-    pub num_agents: usize,
+    pub pop_agents: V,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct InformingParams<V> {
-    pub informer: InformerParams,
     /// order by step & non-duplicated
-    pub misinfo: Vec<Informing>,
+    pub max_pop_misinfo: V,
+    pub misinfo: Vec<Informing<V>>,
+
     /// order by step & non-duplicated
-    pub correction: Vec<Informing>,
-    pub obs_threshold_selfish: usize,
-    /// order by step & non-duplicated
-    pub inhibition: Vec<Informing>,
+    pub max_pop_correction: V,
+    pub correction: Vec<Informing<V>>,
+
+    pub max_pop_observation: V,
     pub prob_post_observation: V,
+    pub max_step_pop_observation: V,
+
+    /// order by step & non-duplicated
+    pub max_pop_inhibition: Sampling<V>,
+    pub inhibition: Vec<Informing<V>>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -814,9 +820,8 @@ mod tests {
         mul::labeled::{OpinionD1, SimplexD1},
     };
 
-    use crate::exec::Exec;
-
     use super::{Config, SupportLevel, SupportLevels};
+    use crate::exec::Exec;
 
     #[test]
     fn test_support_levels() {

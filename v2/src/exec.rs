@@ -1,4 +1,4 @@
-use std::{borrow::Cow, vec::Drain};
+use std::{borrow::Cow, collections::BTreeMap};
 
 use base::{
     agent::Decision,
@@ -255,39 +255,11 @@ impl<'a, T> MyEntry<'a, T> {
 }
 
 pub struct Instance {
-    /// desc ordered by support levels
-    misinfo: Informers,
-    /// asc ordered by support levels
-    corection: Informers,
-    observation: Vec<usize>,
-    /// order is determined by inhibition sampling parameter
-    inhibition: Informers,
-}
-
-struct Informers {
-    agents: Vec<usize>,
-    next_index: usize,
-}
-
-impl Informers {
-    fn new(agents: Vec<usize>) -> Self {
-        Self {
-            agents,
-            next_index: 0,
-        }
-    }
-}
-
-impl Informers {
-    fn pick(&mut self, t: u32, informings: &[Informing]) -> Option<Drain<'_, usize>> {
-        match informings.get(self.next_index) {
-            Some(&Informing { step, num_agents }) if step == t => {
-                self.next_index += 1;
-                Some(self.agents.drain(0..(num_agents.min(self.agents.len()))))
-            }
-            _ => None,
-        }
-    }
+    misinfo_informers: BTreeMap<u32, Vec<AgentIdx>>,
+    corection_informers: BTreeMap<u32, Vec<AgentIdx>>,
+    inhibition_informers: BTreeMap<u32, Vec<AgentIdx>>,
+    observation: Vec<AgentIdx>,
+    max_step_num_observation: usize,
 }
 
 impl Instance {
@@ -314,26 +286,97 @@ where
     R: Rng,
 {
     fn from_exec(exec: &Exec<V>, rng: &mut R) -> Self {
+        let mut is_observation = vec![true; exec.graph.node_count()];
+
+        fn make_informers<V: MyFloat, R: Rng>(
+            exec: &Exec<V>,
+            rng: &mut R,
+            sampling: &Sampling<V>,
+            informings: &[Informing<V>],
+            is_observation: &mut [bool],
+        ) -> BTreeMap<u32, Vec<AgentIdx>> {
+            let mut informers = BTreeMap::new();
+            let samples = match sampling {
+                &Sampling::Random(p) => exec
+                    .community_psi1
+                    .random(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
+                &Sampling::Top(p) => exec
+                    .community_psi1
+                    .top(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
+                &Sampling::Middle(p) => exec
+                    .community_psi1
+                    .middle(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
+                &Sampling::Bottom(p) => exec
+                    .community_psi1
+                    .bottom(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
+            };
+            let mut iter = samples.into_iter();
+            for Informing { step, pop_agents } in informings {
+                if iter.len() == 0 {
+                    continue;
+                }
+                if informers.contains_key(step) {
+                    continue;
+                }
+                let n = V::to_usize(&(*pop_agents * exec.fnum_agents)).unwrap();
+                let agents = (0..n)
+                    .flat_map(|_| {
+                        iter.next().map(|i| {
+                            is_observation[i] = false;
+                            AgentIdx(i)
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                informers.insert(*step, agents);
+            }
+            informers
+        }
+
+        let misinfo_informers = make_informers(
+            exec,
+            rng,
+            &Sampling::Top(exec.informing.max_pop_misinfo),
+            &exec.informing.misinfo,
+            &mut is_observation,
+        );
+        let corection_informers = make_informers(
+            exec,
+            rng,
+            &Sampling::Bottom(exec.informing.max_pop_correction),
+            &exec.informing.correction,
+            &mut is_observation,
+        );
+        let inhibition_informers = make_informers(
+            exec,
+            rng,
+            &exec.informing.max_pop_inhibition,
+            &exec.informing.inhibition,
+            &mut is_observation,
+        );
+        let mut observation = is_observation
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, b)| if b { Some(i.into()) } else { None })
+            .take(V::to_usize(&(exec.informing.max_pop_observation * exec.fnum_agents)).unwrap())
+            .collect::<Vec<_>>();
+        observation.shuffle(rng);
+
         Self {
-            misinfo: Informers::new(exec.community_psi1.top(exec.informing.informer.num_misinfo)),
-            corection: Informers::new(
-                exec.community_psi1
-                    .bottom(exec.informing.informer.num_correction),
-            ),
-            observation: (0..exec.graph.node_count()).collect(),
-            inhibition: match exec.informing.informer.inhibition {
-                Sampling::Random(n) => Informers::new(exec.community_psi1.random(n, rng)),
-                Sampling::Top(n) => Informers::new(exec.community_psi1.top(n)),
-                Sampling::Middle(n) => Informers::new(exec.community_psi1.middle(n)),
-                Sampling::Bottom(n) => Informers::new(exec.community_psi1.bottom(n)),
-            },
+            misinfo_informers,
+            corection_informers,
+            inhibition_informers,
+            observation,
+            max_step_num_observation: V::to_usize(
+                &(exec.informing.max_step_pop_observation * exec.fnum_agents),
+            )
+            .unwrap(),
         }
     }
 
-    fn is_continued(&self, exec: &Exec<V>) -> bool {
-        (self.misinfo.next_index < exec.informing.misinfo.len() - 1)
-            && (self.corection.next_index < exec.informing.correction.len() - 1)
-            && (self.inhibition.next_index < exec.informing.inhibition.len() - 1)
+    fn is_continued(&self, _: &Exec<V>) -> bool {
+        !self.misinfo_informers.is_empty()
+            || !self.corection_informers.is_empty()
+            || !self.inhibition_informers.is_empty()
     }
 
     fn get_informers_with<'a>(
@@ -341,7 +384,7 @@ where
         t: u32,
     ) -> Vec<(AgentIdx, InfoContent<'a, V>)> {
         let mut informers = Vec::new();
-        if let Some(d) = ins.ext.misinfo.pick(t, &ins.exec.informing.misinfo) {
+        if let Some(d) = ins.ext.misinfo_informers.remove(&t) {
             for agent_idx in d {
                 informers.push((
                     agent_idx.into(),
@@ -353,7 +396,7 @@ where
                 ));
             }
         }
-        if let Some(d) = ins.ext.corection.pick(t, &ins.exec.informing.correction) {
+        if let Some(d) = ins.ext.corection_informers.remove(&t) {
             for agent_idx in d {
                 informers.push((
                     agent_idx.into(),
@@ -372,28 +415,30 @@ where
                 ));
             }
         }
-        if ins.total_num_selfish() > ins.exec.informing.obs_threshold_selfish {
-            ins.ext.observation.retain(|&agent_idx| {
-                if ins.exec.informing.prob_post_observation <= ins.rng.gen() {
-                    return true;
+        if !ins.ext.observation.is_empty() {
+            let p = V::from_usize(ins.prev_num_selfish()).unwrap() / ins.exec.fnum_agents;
+            for _ in 0..ins.ext.max_step_num_observation {
+                if ins.exec.informing.prob_post_observation * p <= ins.rng.gen() {
+                    continue;
                 }
-                let op = ins
-                    .exec
-                    .information
-                    .observation
-                    .iter()
-                    .choose(&mut ins.rng)
-                    .unwrap();
-                informers.push((
-                    agent_idx.into(),
-                    InfoContent::Observation {
-                        op: Cow::Borrowed(op),
-                    },
-                ));
-                false
-            });
+                if let Some(agent_idx) = ins.ext.observation.pop() {
+                    let op = ins
+                        .exec
+                        .information
+                        .observation
+                        .iter()
+                        .choose(&mut ins.rng)
+                        .unwrap();
+                    informers.push((
+                        agent_idx,
+                        InfoContent::Observation {
+                            op: Cow::Borrowed(op),
+                        },
+                    ));
+                }
+            }
         }
-        if let Some(d) = ins.ext.inhibition.pick(t, &ins.exec.informing.inhibition) {
+        if let Some(d) = ins.ext.inhibition_informers.remove(&t) {
             for agent_idx in d {
                 let (op1, op2, op3) = ins
                     .exec
@@ -412,5 +457,35 @@ where
             }
         }
         informers
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::read_to_string, path::Path};
+
+    use base::executor::InstanceExt;
+    use rand::{rngs::SmallRng, SeedableRng};
+
+    use super::{Config, Exec, Instance};
+
+    #[test]
+    fn test_instance() -> anyhow::Result<()> {
+        let config_path = Path::new("./test/config.toml");
+        let config: Config = toml::from_str(&read_to_string(&config_path)?)?;
+        let exec: Exec<f32> = config.into_exec(config_path.parent().unwrap())?;
+        let mut rng = SmallRng::seed_from_u64(0);
+        let ins = Instance::from_exec(&exec, &mut rng);
+        for t in [0, 1, 2] {
+            assert_eq!(ins.misinfo_informers.get(&t).unwrap().len(), 2);
+        }
+        for t in [2, 3, 4] {
+            assert_eq!(ins.corection_informers.get(&t).unwrap().len(), 2);
+        }
+        for t in [4, 5, 6] {
+            assert_eq!(ins.inhibition_informers.get(&t).unwrap().len(), 2);
+        }
+        assert_eq!(ins.observation.len(), 40);
+        Ok(())
     }
 }

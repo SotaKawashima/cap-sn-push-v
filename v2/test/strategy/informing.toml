@@ -1,21 +1,21 @@
-informer.num_misinfo = 10
-informer.num_correction = 10
-informer.inhibition = { Bottom = 10 }
-
+max_pop_misinfo = 0.1
 misinfo = [
-    { step = 0, num_agents = 3 },
-    { step = 1, num_agents = 3 },
-    { step = 2, num_agents = 3 },
+    { step = 0, pop_agents = 0.02 },
+    { step = 1, pop_agents = 0.02 },
+    { step = 2, pop_agents = 0.02 },
 ]
+max_pop_correction = 0.1
 correction = [
-    { step = 2, num_agents = 3 },
-    { step = 3, num_agents = 3 },
-    { step = 4, num_agents = 3 },
+    { step = 2, pop_agents = 0.02 },
+    { step = 3, pop_agents = 0.02 },
+    { step = 4, pop_agents = 0.02 },
 ]
+max_pop_inhibition = { Middle = 0.1 }
 inhibition = [
-    { step = 4, num_agents = 3 },
-    { step = 5, num_agents = 3 },
-    { step = 6, num_agents = 3 },
+    { step = 4, pop_agents = 0.02 },
+    { step = 5, pop_agents = 0.02 },
+    { step = 6, pop_agents = 0.02 },
 ]
-obs_threshold_selfish = 10
+max_pop_observation = 0.4
+max_step_pop_observation = 0.02
 prob_post_observation = 0.2
