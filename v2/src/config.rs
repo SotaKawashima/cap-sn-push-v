@@ -28,7 +28,6 @@ use subjective_logic::{
 
 use crate::exec::Exec;
 
-#[derive(Debug, Deserialize)]
 pub struct Config {
     agent: AgentConfig,
     strategy: StrategyConfig,
@@ -42,19 +41,48 @@ fn join_path<P: AsRef<Path>>(path: &mut PathBuf, root: P) {
 }
 
 impl Config {
-    pub fn into_exec<V, P>(self, root: P) -> anyhow::Result<Exec<V>>
+    pub fn try_new<P: AsRef<Path>>(
+        network_config: P,
+        agent_config: P,
+        strategy_config: P,
+    ) -> anyhow::Result<Self> {
+        let mut agent: AgentConfig = DataFormat::read(&agent_config)?.parse()?;
+        let mut strategy: StrategyConfig = DataFormat::read(&strategy_config)?.parse()?;
+        let mut network: NetworkConfig = DataFormat::read(&network_config)?.parse()?;
+        agent.set_root(
+            agent_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/"))),
+        );
+        strategy.set_root(
+            strategy_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/"))),
+        );
+        network.set_root(
+            network_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/"))),
+        );
+        Ok(Self {
+            agent,
+            strategy,
+            network,
+        })
+    }
+
+    pub fn into_exec<V>(self) -> anyhow::Result<Exec<V>>
     where
         V: MyFloat + for<'a> Deserialize<'a>,
-        P: AsRef<Path>,
     {
         let Self {
-            mut agent,
-            mut strategy,
-            mut network,
+            agent,
+            strategy,
+            network,
         } = self;
-        agent.set_root(&root);
-        strategy.set_root(&root);
-        network.set_root(&root);
 
         let graph = network.parse_graph()?;
         let fnum_agents = V::from_usize(graph.node_count()).unwrap();
@@ -813,7 +841,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::read_to_string, path::Path};
+    use std::path::Path;
 
     use subjective_logic::{
         marr_d1, marr_d2,
@@ -844,9 +872,12 @@ mod tests {
 
     #[test]
     fn test_config() -> anyhow::Result<()> {
-        let config_path = Path::new("./test/config.toml");
-        let config: Config = toml::from_str(&read_to_string(&config_path)?)?;
-        let exec: Exec<f32> = config.into_exec(config_path.parent().unwrap())?;
+        let config = Config::try_new(
+            "./test/network_config.toml",
+            "./test/agent_config.toml",
+            "./test/strategy_config.toml",
+        )?;
+        let exec: Exec<f32> = config.into_exec()?;
         assert_eq!(exec.community_psi1.levels.len(), 100);
         assert!(
             exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]

@@ -1,8 +1,6 @@
 mod config;
 mod exec;
 
-use std::path::{Path, PathBuf};
-
 use base::{
     opinion::MyFloat,
     runner::{run, RuntimeParams},
@@ -13,6 +11,7 @@ use exec::{AgentExt, Instance};
 use input::format::DataFormat;
 use polars_arrow::datatypes::Metadata;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use std::path::PathBuf;
 
 #[derive(clap::Parser)]
 pub struct Cli {
@@ -23,9 +22,15 @@ pub struct Cli {
     /// the path of a runtime config file
     #[arg(long)]
     runtime: String,
-    /// the path of a agent parameters config file
+    /// the path of a network config file
     #[arg(long)]
-    config: PathBuf,
+    network_config: PathBuf,
+    /// the path of a agent config file
+    #[arg(long)]
+    agent_config: PathBuf,
+    /// the path of a strategy config file
+    #[arg(long)]
+    strategy_config: PathBuf,
     /// Enable overwriting of a output file
     #[arg(short, default_value_t = false)]
     overwriting: bool,
@@ -48,19 +53,29 @@ where
         identifier,
         output_dir,
         runtime: runtime_path,
-        config: config_path,
+        network_config,
+        agent_config,
+        strategy_config,
         overwriting,
         compressing,
     } = args;
     let runtime = DataFormat::read(&runtime_path)?.parse::<RuntimeParams>()?;
-    let config: Config = DataFormat::read(&config_path)?.parse()?;
+    let config = Config::try_new(&network_config, &agent_config, &strategy_config)?;
     let metadata = Metadata::from_iter([
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
         ("runtime".to_string(), runtime_path),
         (
-            "config".to_string(),
-            config_path.to_string_lossy().to_string(),
+            "agent_config".to_string(),
+            agent_config.to_string_lossy().to_string(),
+        ),
+        (
+            "network_config".to_string(),
+            network_config.to_string_lossy().to_string(),
+        ),
+        (
+            "strategy_config".to_string(),
+            strategy_config.to_string_lossy().to_string(),
         ),
         (
             "iteration_count".to_string(),
@@ -69,7 +84,7 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = config.into_exec(&config_path.parent().unwrap_or_else(|| &(Path::new("/"))))?;
+    let exec = config.into_exec()?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
@@ -83,7 +98,9 @@ mod tests {
             identifier: "test-start".to_string(),
             output_dir: "./test/result".into(),
             runtime: "./test/runtime.toml".to_string(),
-            config: "./test/config.toml".into(),
+            agent_config: "./test/agent_config.toml".into(),
+            network_config: "./test/network_config.toml".into(),
+            strategy_config: "./test/strategy_config.toml".into(),
             overwriting: true,
             compressing: true,
         };

@@ -462,8 +462,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::read_to_string, path::Path};
-
     use base::executor::InstanceExt;
     use rand::{rngs::SmallRng, SeedableRng};
 
@@ -471,9 +469,12 @@ mod tests {
 
     #[test]
     fn test_instance() -> anyhow::Result<()> {
-        let config_path = Path::new("./test/config.toml");
-        let config: Config = toml::from_str(&read_to_string(&config_path)?)?;
-        let exec: Exec<f32> = config.into_exec(config_path.parent().unwrap())?;
+        let config = Config::try_new(
+            "./test/network_config.toml",
+            "./test/agent_config.toml",
+            "./test/strategy_config.toml",
+        )?;
+        let exec: Exec<f32> = config.into_exec()?;
         let mut rng = SmallRng::seed_from_u64(0);
         let ins = Instance::from_exec(&exec, &mut rng);
         for t in [0, 1, 2] {

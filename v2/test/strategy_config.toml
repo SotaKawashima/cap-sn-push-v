@@ -1,0 +1,7 @@
+informing = "./strategy/informing.toml"
+
+[information]
+misinfo = "./strategy/info/n95_95.csv"
+correction = "./strategy/info/a80-90_50.csv"
+observation = "./strategy/info/a100_95.csv"
+inhibition = "./strategy/info/inhibition.csv"
