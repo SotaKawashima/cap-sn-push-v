@@ -62,13 +62,18 @@ impl<V> AgentExt<V> {
     {
         *self.trusts.entry(label).or_insert_with(|| match label {
             InfoLabel::Misinfo => {
-                let u = *exec.sharer_trust.misinfo.choose(rng).unwrap();
-                self.psi1_support_level + (V::one() - self.psi1_support_level) * u
+                let p = self.psi1_support_level;
+                let d = p.min(V::one() - p);
+                let u = *exec.sharer_trust.misinfo.choose(rng).unwrap(); // 0<u<1
+                let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
+                p + x // lv - d < lv + x < lv + d
             }
             InfoLabel::Corrective => {
-                V::one()
-                    - self.psi1_support_level
-                        * (V::one() - *exec.sharer_trust.correction.choose(rng).unwrap())
+                let p = V::one() - self.psi1_support_level; // opposite of support level
+                let d = p.min(V::one() - p);
+                let u = *exec.sharer_trust.correction.choose(rng).unwrap(); // 0<u<1
+                let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
+                p + x // lv - d < lv + x < lv + d
             }
             InfoLabel::Observed => *exec.sharer_trust.obserbation.choose(rng).unwrap(),
             InfoLabel::Inhibitive => *exec.sharer_trust.inhibition.choose(rng).unwrap(),
