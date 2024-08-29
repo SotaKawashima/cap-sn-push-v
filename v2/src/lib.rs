@@ -1,5 +1,6 @@
 mod config;
 mod exec;
+mod io;
 
 use base::{
     opinion::MyFloat,
@@ -9,6 +10,7 @@ use base::{
 use config::Config;
 use exec::{AgentExt, Instance};
 use input::format::DataFormat;
+use io::MyPath;
 use polars_arrow::datatypes::Metadata;
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use std::path::PathBuf;
@@ -21,16 +23,16 @@ pub struct Cli {
     output_dir: PathBuf,
     /// the path of a runtime config file
     #[arg(long)]
-    runtime: String,
+    runtime: MyPath,
     /// the path of a network config file
     #[arg(long)]
-    network: PathBuf,
+    network: MyPath,
     /// the path of a agent config file
     #[arg(long)]
-    agent: PathBuf,
+    agent: MyPath,
     /// the path of a strategy config file
     #[arg(long)]
-    strategy: PathBuf,
+    strategy: MyPath,
     /// Enable inhibition information
     #[arg(short, default_value_t = false)]
     enable_inhibition: bool,
@@ -63,12 +65,19 @@ where
         overwriting,
         compressing,
     } = args;
-    let runtime = DataFormat::read(&runtime_path)?.parse::<RuntimeParams>()?;
-    let config = Config::try_new(&network_config, &agent_config, &strategy_config)?;
+    let runtime = DataFormat::read(runtime_path.verify()?)?.parse::<RuntimeParams>()?;
+    let config = Config::try_new(
+        network_config.verify()?,
+        agent_config.verify()?,
+        strategy_config.verify()?,
+    )?;
     let metadata = Metadata::from_iter([
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-        ("runtime".to_string(), runtime_path),
+        (
+            "runtime".to_string(),
+            runtime_path.to_string_lossy().to_string(),
+        ),
         (
             "agent_config".to_string(),
             agent_config.to_string_lossy().to_string(),
@@ -105,7 +114,7 @@ mod tests {
         let args = Cli {
             identifier: "test-start".to_string(),
             output_dir: "./test/result".into(),
-            runtime: "./test/runtime.toml".to_string(),
+            runtime: "./test/runtime.toml".into(),
             agent: "./test/agent_config.toml".into(),
             network: "./test/network_config.toml".into(),
             strategy: "./test/strategy_config.toml".into(),

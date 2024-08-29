@@ -26,18 +26,12 @@ use subjective_logic::{
     multi_array::labeled::{MArrD1, MArrD2},
 };
 
-use crate::exec::Exec;
+use crate::{exec::Exec, io::MyPath};
 
 pub struct Config {
     agent: AgentConfig,
     strategy: StrategyConfig,
     network: NetworkConfig,
-}
-
-fn join_path<P: AsRef<Path>>(path: &mut PathBuf, root: P) {
-    if !path.is_absolute() {
-        *path = root.as_ref().join(&path);
-    }
 }
 
 impl Config {
@@ -87,20 +81,21 @@ impl Config {
         let graph = network.parse_graph()?;
         let fnum_agents = V::from_usize(graph.node_count()).unwrap();
         let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
-        let community_psi1 =
-            read_csv_with(network.community, |iter| SupportLevels::from_iter(iter))?;
+        let community_psi1 = read_csv_with(network.community.verify()?, |iter| {
+            SupportLevels::from_iter(iter)
+        })?;
 
         let InitialStates {
             initial_opinions,
             initial_base_rates,
-        } = DataFormat::read(&agent.initial_states)?.parse()?;
+        } = DataFormat::read(&agent.initial_states.verify()?)?.parse()?;
 
         Ok(Exec {
             enable_inhibition,
             graph,
             fnum_agents,
             mean_degree,
-            sharer_trust: DataFormat::read(&agent.sharer_trust)?.parse()?,
+            sharer_trust: DataFormat::read(&agent.sharer_trust.verify()?)?.parse()?,
             opinion: OpinionSamples {
                 condition: agent.condition.try_into()?,
                 uncertainty: agent.uncertainty.try_into()?,
@@ -108,33 +103,33 @@ impl Config {
                 initial_base_rates,
             },
             information: strategy.information.try_into()?,
-            informing: DataFormat::read(&strategy.informing)?.parse()?,
+            informing: DataFormat::read(&strategy.informing.verify()?)?.parse()?,
             community_psi1,
-            probabilies: DataFormat::read(&agent.probabilities)?.parse()?,
-            prospect: ProspectSamples(read_csv(&agent.prospect)?),
-            cpt: CptSamples(read_csv(&agent.cpt)?),
+            probabilies: DataFormat::read(&agent.probabilities.verify()?)?.parse()?,
+            prospect: ProspectSamples(read_csv(&agent.prospect.verify()?)?),
+            cpt: CptSamples(read_csv(&agent.cpt.verify()?)?),
         })
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct AgentConfig {
-    probabilities: PathBuf,
-    sharer_trust: PathBuf,
-    prospect: PathBuf,
-    cpt: PathBuf,
-    initial_states: PathBuf,
+    probabilities: MyPath,
+    sharer_trust: MyPath,
+    prospect: MyPath,
+    cpt: MyPath,
+    initial_states: MyPath,
     condition: ConditionConfig,
     uncertainty: UncertaintyConfig,
 }
 
 impl AgentConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.probabilities, &root);
-        join_path(&mut self.sharer_trust, &root);
-        join_path(&mut self.prospect, &root);
-        join_path(&mut self.cpt, &root);
-        join_path(&mut self.initial_states, &root);
+        self.probabilities.join_path(&root);
+        self.sharer_trust.join_path(&root);
+        self.prospect.join_path(&root);
+        self.cpt.join_path(&root);
+        self.initial_states.join_path(&root);
         self.condition.set_root(&root);
         self.uncertainty.set_root(&root);
     }
@@ -142,13 +137,13 @@ impl AgentConfig {
 
 #[derive(Debug, Deserialize)]
 struct StrategyConfig {
-    informing: PathBuf,
+    informing: MyPath,
     information: InformationConfig,
 }
 
 impl StrategyConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.informing, &root);
+        self.informing.join_path(&root);
         self.information.set_root(&root);
     }
 }
@@ -156,40 +151,40 @@ impl StrategyConfig {
 #[derive(Debug, Deserialize)]
 pub struct InformationConfig {
     /// also used for $M$ in correction
-    misinfo: PathBuf,
-    correction: PathBuf,
-    observation: PathBuf,
-    inhibition: PathBuf,
+    misinfo: MyPath,
+    correction: MyPath,
+    observation: MyPath,
+    inhibition: MyPath,
 }
 
 impl InformationConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.misinfo, &root);
-        join_path(&mut self.correction, &root);
-        join_path(&mut self.observation, &root);
-        join_path(&mut self.inhibition, &root);
+        self.misinfo.join_path(&root);
+        self.correction.join_path(&root);
+        self.observation.join_path(&root);
+        self.inhibition.join_path(&root);
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct NetworkConfig {
     path: PathBuf,
-    graph: PathBuf,
+    graph: MyPath,
     directed: bool,
     transposed: bool,
-    community: PathBuf,
+    community: MyPath,
 }
 
 impl NetworkConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.path, &root);
-        join_path(&mut self.graph, &self.path);
-        join_path(&mut self.community, &self.path);
+        let root = root.as_ref().join(&self.path);
+        self.graph.join_path(&root);
+        self.community.join_path(&root);
     }
 
     fn parse_graph(&self) -> anyhow::Result<GraphB> {
         let builder = graph_lib::io::ParseBuilder::new(
-            File::open(&self.graph)?,
+            File::open(&self.graph.verify()?)?,
             graph_lib::io::DataFormat::EdgeList,
         );
         if !self.directed {
@@ -214,41 +209,41 @@ struct InitialStates<V: MyFloat> {
 
 #[derive(Debug, Deserialize)]
 struct ConditionConfig {
-    h_psi_if_phi0: PathBuf,
-    h_b_if_phi0: PathBuf,
-    o_b: PathBuf,
-    a_fh: PathBuf,
-    b_kh: PathBuf,
-    theta_h: PathBuf,
-    thetad_h: PathBuf,
+    h_psi_if_phi0: MyPath,
+    h_b_if_phi0: MyPath,
+    o_b: MyPath,
+    a_fh: MyPath,
+    b_kh: MyPath,
+    theta_h: MyPath,
+    thetad_h: MyPath,
 }
 
 impl ConditionConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.h_psi_if_phi0, &root);
-        join_path(&mut self.h_b_if_phi0, &root);
-        join_path(&mut self.o_b, &root);
-        join_path(&mut self.a_fh, &root);
-        join_path(&mut self.b_kh, &root);
-        join_path(&mut self.theta_h, &root);
-        join_path(&mut self.thetad_h, &root);
+        self.h_psi_if_phi0.join_path(&root);
+        self.h_b_if_phi0.join_path(&root);
+        self.o_b.join_path(&root);
+        self.a_fh.join_path(&root);
+        self.b_kh.join_path(&root);
+        self.theta_h.join_path(&root);
+        self.thetad_h.join_path(&root);
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct UncertaintyConfig {
-    fh_fpsi_if_fphi0: PathBuf,
-    kh_kpsi_if_kphi0: PathBuf,
-    fh_fo_fphi: PathBuf,
-    kh_ko_kphi: PathBuf,
+    fh_fpsi_if_fphi0: MyPath,
+    kh_kpsi_if_kphi0: MyPath,
+    fh_fo_fphi: MyPath,
+    kh_ko_kphi: MyPath,
 }
 
 impl UncertaintyConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        join_path(&mut self.fh_fpsi_if_fphi0, &root);
-        join_path(&mut self.kh_kpsi_if_kphi0, &root);
-        join_path(&mut self.fh_fo_fphi, &root);
-        join_path(&mut self.kh_ko_kphi, &root);
+        self.fh_fpsi_if_fphi0.join_path(&root);
+        self.kh_kpsi_if_kphi0.join_path(&root);
+        self.fh_fo_fphi.join_path(&root);
+        self.kh_ko_kphi.join_path(&root);
     }
 }
 
@@ -313,13 +308,16 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<ConditionConfig> for Conditio
 
     fn try_from(value: ConditionConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            h_psi_if_phi0: read_csv_and_then(value.h_psi_if_phi0, ConditionRecord::try_into)?,
-            h_b_if_phi0: read_csv_and_then(value.h_b_if_phi0, ConditionRecord::try_into)?,
-            o_b: read_csv_and_then(value.o_b, ConditionRecord::try_into)?,
-            a_fh: read_csv_and_then(value.a_fh, ConditionRecord::try_into)?,
-            b_kh: read_csv_and_then(value.b_kh, ConditionRecord::try_into)?,
-            theta_h: read_csv_and_then(value.theta_h, ConditionRecord::try_into)?,
-            thetad_h: read_csv_and_then(value.thetad_h, ConditionRecord::try_into)?,
+            h_psi_if_phi0: read_csv_and_then(
+                value.h_psi_if_phi0.verify()?,
+                ConditionRecord::try_into,
+            )?,
+            h_b_if_phi0: read_csv_and_then(value.h_b_if_phi0.verify()?, ConditionRecord::try_into)?,
+            o_b: read_csv_and_then(value.o_b.verify()?, ConditionRecord::try_into)?,
+            a_fh: read_csv_and_then(value.a_fh.verify()?, ConditionRecord::try_into)?,
+            b_kh: read_csv_and_then(value.b_kh.verify()?, ConditionRecord::try_into)?,
+            theta_h: read_csv_and_then(value.theta_h.verify()?, ConditionRecord::try_into)?,
+            thetad_h: read_csv_and_then(value.thetad_h.verify()?, ConditionRecord::try_into)?,
         })
     }
 }
@@ -371,15 +369,21 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<UncertaintyConfig> for Uncert
     fn try_from(value: UncertaintyConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             fh_fpsi_if_fphi0: read_csv_and_then(
-                value.fh_fpsi_if_fphi0,
+                value.fh_fpsi_if_fphi0.verify()?,
                 UncertaintyD1Record::try_into,
             )?,
             kh_kpsi_if_kphi0: read_csv_and_then(
-                value.kh_kpsi_if_kphi0,
+                value.kh_kpsi_if_kphi0.verify()?,
                 UncertaintyD1Record::try_into,
             )?,
-            fh_fo_fphi: read_csv_and_then(value.fh_fo_fphi, UncertaintyD2Record::try_into)?,
-            kh_ko_kphi: read_csv_and_then(value.kh_ko_kphi, UncertaintyD2Record::try_into)?,
+            fh_fo_fphi: read_csv_and_then(
+                value.fh_fo_fphi.verify()?,
+                UncertaintyD2Record::try_into,
+            )?,
+            kh_ko_kphi: read_csv_and_then(
+                value.kh_ko_kphi.verify()?,
+                UncertaintyD2Record::try_into,
+            )?,
         })
     }
 }
@@ -604,10 +608,10 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<InformationConfig> for Inform
 
     fn try_from(value: InformationConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            misinfo: read_csv_and_then(&value.misinfo, OpinionRecord::try_into)?,
-            correction: read_csv_and_then(&value.correction, OpinionRecord::try_into)?,
-            observation: read_csv_and_then(&value.observation, OpinionRecord::try_into)?,
-            inhibition: read_csv_and_then(&value.inhibition, InhibitionRecord::try_into)?,
+            misinfo: read_csv_and_then(&value.misinfo.verify()?, OpinionRecord::try_into)?,
+            correction: read_csv_and_then(&value.correction.verify()?, OpinionRecord::try_into)?,
+            observation: read_csv_and_then(&value.observation.verify()?, OpinionRecord::try_into)?,
+            inhibition: read_csv_and_then(&value.inhibition.verify()?, InhibitionRecord::try_into)?,
         })
     }
 }
