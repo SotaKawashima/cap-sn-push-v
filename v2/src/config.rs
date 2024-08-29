@@ -74,7 +74,7 @@ impl Config {
         })
     }
 
-    pub fn into_exec<V>(self) -> anyhow::Result<Exec<V>>
+    pub fn into_exec<V>(self, enable_inhibition: bool) -> anyhow::Result<Exec<V>>
     where
         V: MyFloat + for<'a> Deserialize<'a>,
     {
@@ -96,6 +96,7 @@ impl Config {
         } = DataFormat::read(&agent.initial_states)?.parse()?;
 
         Ok(Exec {
+            enable_inhibition,
             graph,
             fnum_agents,
             mean_degree,
@@ -756,7 +757,6 @@ pub struct InformingParams<V> {
 
     /// order by step & non-duplicated
     pub max_pop_inhibition: Sampling<V>,
-    pub enable_inhibition: bool,
     pub inhibition: Vec<Informing<V>>,
 }
 
@@ -878,7 +878,7 @@ mod tests {
             "./test/agent_config.toml",
             "./test/strategy_config.toml",
         )?;
-        let exec: Exec<f32> = config.into_exec()?;
+        let exec: Exec<f32> = config.into_exec(true)?;
         assert_eq!(exec.community_psi1.levels.len(), 100);
         assert!(
             exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]

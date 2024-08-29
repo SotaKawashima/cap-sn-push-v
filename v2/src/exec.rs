@@ -13,6 +13,7 @@ use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 use crate::config::*;
 
 pub struct Exec<V: MyFloat> {
+    pub enable_inhibition: bool,
     pub graph: GraphB,
     pub fnum_agents: V,
     pub mean_degree: V,
@@ -374,7 +375,7 @@ where
         Self {
             misinfo_informers,
             corection_informers,
-            inhibition_informers: if exec.informing.enable_inhibition {
+            inhibition_informers: if exec.enable_inhibition {
                 inhibition_informers
             } else {
                 BTreeMap::new()
@@ -502,7 +503,7 @@ mod tests {
             "./test/agent_config.toml",
             "./test/strategy_config.toml",
         )?;
-        let exec: Exec<f32> = config.into_exec()?;
+        let exec: Exec<f32> = config.into_exec(true)?;
         let mut rng = SmallRng::seed_from_u64(0);
         let ins = Instance::from_exec(&exec, &mut rng);
         for t in [0, 1, 2] {
@@ -524,7 +525,7 @@ mod tests {
         let mut agent = Agent::<f32>::default();
         agent.reset(|ops, dec| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -8.0, -0.001);
+                prs.reset(-1.0, -5.00, -0.001);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
@@ -541,11 +542,11 @@ mod tests {
             ];
             let theta_h = marr_d1![
                 Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+                Simplex::new(marr_d1![0.0, 0.90], 0.1)
             ];
             let thetad_h = marr_d1![
                 Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+                Simplex::new(marr_d1![0.0, 0.90], 0.1)
             ];
             let h_psi_if_phi0 = marr_d1![
                 Simplex::new(marr_d1![0.25, 0.0], 0.75),
@@ -619,7 +620,7 @@ mod tests {
             )),
         };
         let info = Info::new(0, p);
-        let t = new_trusts(1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.1, 0.8);
+        let t = new_trusts(1.0, 0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.8);
         agent.read_info(&info, t);
         Ok(())
     }

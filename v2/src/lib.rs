@@ -31,6 +31,9 @@ pub struct Cli {
     /// the path of a strategy config file
     #[arg(long)]
     strategy: PathBuf,
+    /// Enable inhibition information
+    #[arg(short, default_value_t = false)]
+    enable_inhibition: bool,
     /// Enable overwriting of a output file
     #[arg(short, default_value_t = false)]
     overwriting: bool,
@@ -56,6 +59,7 @@ where
         network: network_config,
         agent: agent_config,
         strategy: strategy_config,
+        enable_inhibition,
         overwriting,
         compressing,
     } = args;
@@ -78,13 +82,17 @@ where
             strategy_config.to_string_lossy().to_string(),
         ),
         (
+            "enable_inhibition".to_string(),
+            enable_inhibition.to_string(),
+        ),
+        (
             "iteration_count".to_string(),
             runtime.iteration_count.to_string(),
         ),
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = config.into_exec()?;
+    let exec = config.into_exec(enable_inhibition)?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
@@ -101,6 +109,7 @@ mod tests {
             agent: "./test/agent_config.toml".into(),
             network: "./test/network_config.toml".into(),
             strategy: "./test/strategy_config.toml".into(),
+            enable_inhibition: true,
             overwriting: true,
             compressing: true,
         };
