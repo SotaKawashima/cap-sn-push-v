@@ -10,7 +10,7 @@ use tracing::*;
 use crate::{
     decision::{Prospect, CPT},
     info::Info,
-    opinion::{AccessProb, DeducedOpinions, MyFloat, MyOpinions, MyOpinionsUpd, Trusts},
+    opinion::{DeducedOpinions, MyFloat, MyOpinions, MyOpinionsUpd, Trusts},
 };
 
 #[derive(Debug)]
@@ -19,14 +19,14 @@ pub struct BehaviorByInfo {
     pub first_access: bool,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Agent<V> {
     ops: MyOpinions<V>,
     infos_accessed: BTreeSet<usize>,
     decision: Decision<V>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Decision<V> {
     cpt: CPT<V>,
     prospect: Prospect<V>,
@@ -187,6 +187,10 @@ impl DelayActionStatus {
 }
 
 impl<V> Agent<V> {
+    pub fn ops(&self) -> &MyOpinions<V> {
+        &self.ops
+    }
+
     fn clear(&mut self) {
         self.infos_accessed.clear();
     }
@@ -215,12 +219,7 @@ impl<V> Agent<V> {
         p
     }
 
-    pub fn read_info(
-        &mut self,
-        info: &Info<V>,
-        trusts: Trusts<V>,
-        ap: AccessProb<V>,
-    ) -> BehaviorByInfo
+    pub fn read_info(&mut self, info: &Info<V>, trusts: Trusts<V>) -> BehaviorByInfo
     where
         V: MyFloat,
         StandardNormal: Distribution<V>,
@@ -230,7 +229,7 @@ impl<V> Agent<V> {
         let first_access = self.infos_accessed.insert(info.idx);
 
         // compute values of prospects
-        let mut upd = self.ops.receive(info.content(), trusts, ap);
+        let mut upd = self.ops.receive(info.content(), trusts);
         self.decision.try_decide_selfish(&upd);
         let sharing = self.decision.try_decide_sharing(&mut upd, info.idx);
 
@@ -240,14 +239,14 @@ impl<V> Agent<V> {
         }
     }
 
-    pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>, ap: AccessProb<V>)
+    pub fn set_info_opinions(&mut self, info: &Info<V>, trusts: Trusts<V>)
     where
         V: MyFloat,
         StandardNormal: Distribution<V>,
         Exp1: Distribution<V>,
         Open01: Distribution<V>,
     {
-        let mut upd = self.ops.receive(info.content(), trusts, ap);
+        let mut upd = self.ops.receive(info.content(), trusts);
         self.decision.try_decide_selfish(&upd);
         self.decision.predict(&mut upd);
     }

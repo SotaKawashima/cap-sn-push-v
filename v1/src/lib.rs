@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use base::{
     executor::{AgentExtTrait, AgentIdx, Executor, InfoIdx, InstanceExt, InstanceWrapper},
     info::{InfoContent, InfoLabel},
-    opinion::{AccessProb, MyFloat, Trusts},
+    opinion::{MyFloat, OtherTrusts, Trusts},
     runner::{run, RuntimeParams},
     stat::FileWriters,
 };
@@ -153,42 +153,45 @@ where
         self.visit_prob = exec.agent_params.access_prob.sample(rng);
     }
 
-    fn informer_trusts<'a, R>(
-        &mut self,
-        _: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        _: InfoIdx,
-    ) -> Trusts<V> {
-        Trusts {
-            p: V::one(),
-            fp: V::one(),
-            kp: V::one(),
-            fm: V::zero(),
-            km: V::zero(),
-        }
-    }
-
-    fn informer_access_probs<'a, R: Rng>(
+    fn informer_trusts<'a, R: Rng>(
         &mut self,
         ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
         _: InfoIdx,
-    ) -> AccessProb<V> {
-        AccessProb {
-            fp: V::zero(),
-            kp: V::zero(),
-            pred_fp: ins
-                .exec
-                .agent_params
-                .trust_params
-                .friend_access_prob
-                .sample(&mut ins.rng)
-                * ins
+    ) -> Trusts<V> {
+        let my_trust = V::one();
+        Trusts {
+            my_trust,
+            pred_friend_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: ins
                     .exec
                     .agent_params
                     .trust_params
-                    .friend_arrival_prob
-                    .sample(&mut ins.rng),
-            fm: V::one(),
-            km: V::one(),
+                    .friend_access_prob
+                    .sample(&mut ins.rng)
+                    * ins
+                        .exec
+                        .agent_params
+                        .trust_params
+                        .friend_arrival_prob
+                        .sample(&mut ins.rng),
+            },
+            friend_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: V::one(),
+            },
+            social_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: V::one(),
+            },
+            friend_misinfo_trusts: OtherTrusts {
+                trust: V::zero(),
+                certainty: V::one(),
+            },
+            social_misinfo_trusts: OtherTrusts {
+                trust: V::zero(),
+                certainty: V::one(),
+            },
         }
     }
 
@@ -201,7 +204,7 @@ where
         let trust_sampler = params
             .info_trust_params
             .get_sampler(ins.get_info_label(info_idx));
-        let info_trust = *ins
+        let my_trust = *ins
             .ext
             .info_trust_map
             .entry(info_idx)
@@ -216,21 +219,6 @@ where
                     .get_sampler(&InfoLabel::Misinfo)
                     .sample(&mut ins.rng)
             });
-
-        Trusts {
-            p: info_trust,
-            fp: info_trust,
-            kp: info_trust,
-            fm: corr_misinfo_trust,
-            km: corr_misinfo_trust,
-        }
-    }
-
-    fn sharer_access_probs<'a, R: Rng>(
-        &mut self,
-        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        info_idx: InfoIdx,
-    ) -> AccessProb<V> {
         let params = &ins.exec.agent_params.trust_params;
         let friend_access_prob = params.friend_access_prob.sample(&mut ins.rng);
         let social_access_prob = params.social_access_prob.sample(&mut ins.rng);
@@ -241,13 +229,28 @@ where
             - (V::one()
                 - V::from_usize(ins.num_shared(info_idx)).unwrap() / ins.exec.scenario.fnum_nodes)
                 .powf(ins.exec.scenario.mean_degree);
-
-        AccessProb {
-            fp: friend_access_prob * receipt_prob,
-            kp: social_access_prob * receipt_prob,
-            fm: misinfo_friend,
-            km: misinfo_social,
-            pred_fp: friend_access_prob * friend_arrival_prob,
+        Trusts {
+            my_trust,
+            pred_friend_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: friend_access_prob * friend_arrival_prob,
+            },
+            friend_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: friend_access_prob * receipt_prob,
+            },
+            social_trusts: OtherTrusts {
+                trust: my_trust,
+                certainty: social_access_prob * receipt_prob,
+            },
+            friend_misinfo_trusts: OtherTrusts {
+                trust: corr_misinfo_trust,
+                certainty: misinfo_friend,
+            },
+            social_misinfo_trusts: OtherTrusts {
+                trust: corr_misinfo_trust,
+                certainty: misinfo_social,
+            },
         }
     }
 }

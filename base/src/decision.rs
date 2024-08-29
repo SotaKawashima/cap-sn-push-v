@@ -200,7 +200,7 @@ impl<Idx, V: Float> LevelSet<Idx, V> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Prospect<V> {
     pub selfish: [LevelSet<Theta, V>; 2],
     pub sharing: [LevelSet<(A, Thetad), V>; 2],

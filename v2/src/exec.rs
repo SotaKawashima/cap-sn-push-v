@@ -4,7 +4,7 @@ use base::{
     agent::Decision,
     executor::{AgentExtTrait, AgentIdx, Executor, InfoIdx, InstanceExt, InstanceWrapper},
     info::{InfoContent, InfoLabel},
-    opinion::{AccessProb, MyFloat, MyOpinions, Trusts},
+    opinion::{MyFloat, MyOpinions, OtherTrusts, Trusts},
 };
 use graph_lib::prelude::{Graph, GraphB};
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
@@ -117,6 +117,41 @@ impl<V> AgentExt<V> {
     }
 }
 
+fn new_trusts<V: MyFloat>(
+    my_trust: V,
+    trust_mis: V,
+    receipt_prob: V,
+    friend_viewing_probs: V,
+    social_viewing_probs: V,
+    arrival_prob: V,
+    friend_plural_ignorance: V,
+    social_plural_ignorance: V,
+) -> Trusts<V> {
+    Trusts {
+        my_trust,
+        social_trusts: OtherTrusts {
+            trust: my_trust,
+            certainty: friend_viewing_probs * receipt_prob,
+        },
+        friend_trusts: OtherTrusts {
+            trust: my_trust,
+            certainty: social_viewing_probs * receipt_prob,
+        },
+        pred_friend_trusts: OtherTrusts {
+            trust: my_trust,
+            certainty: friend_viewing_probs * arrival_prob,
+        },
+        social_misinfo_trusts: OtherTrusts {
+            trust: trust_mis,
+            certainty: social_plural_ignorance,
+        },
+        friend_misinfo_trusts: OtherTrusts {
+            trust: trust_mis,
+            certainty: friend_plural_ignorance,
+        },
+    }
+}
+
 impl<V> AgentExtTrait<V> for AgentExt<V>
 where
     V: MyFloat,
@@ -133,29 +168,19 @@ where
         ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
         _: InfoIdx,
     ) -> Trusts<V> {
+        let my_trust = V::one();
         let trust_mis = self.get_trust(InfoLabel::Misinfo, ins.exec, &mut ins.rng);
-        Trusts {
-            p: V::one(),
-            fp: V::one(),
-            kp: V::one(),
-            fm: trust_mis,
-            km: trust_mis,
-        }
-    }
-
-    fn informer_access_probs<'a, R: Rng>(
-        &mut self,
-        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        _: InfoIdx,
-    ) -> AccessProb<V> {
-        let (fm, km) = self.get_plural_ignorances(ins.exec, &mut ins.rng);
-        AccessProb {
-            fp: V::zero(),
-            kp: V::zero(),
-            pred_fp: V::zero(),
-            fm,
-            km,
-        }
+        let (fpi, kpi) = self.get_plural_ignorances(ins.exec, &mut ins.rng);
+        new_trusts(
+            my_trust,
+            trust_mis,
+            V::zero(),
+            V::zero(),
+            V::zero(),
+            V::zero(),
+            fpi,
+            kpi,
+        )
     }
 
     fn sharer_trusts<'a, R: Rng>(
@@ -163,33 +188,13 @@ where
         ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
         info_idx: InfoIdx,
     ) -> Trusts<V> {
-        let trust = self.get_trust(*ins.get_info_label(info_idx), ins.exec, &mut ins.rng);
+        let my_trust = self.get_trust(*ins.get_info_label(info_idx), ins.exec, &mut ins.rng);
         let trust_mis = self.get_trust(InfoLabel::Misinfo, ins.exec, &mut ins.rng);
-        Trusts {
-            p: trust,
-            fp: trust,
-            kp: trust,
-            fm: trust_mis,
-            km: trust_mis,
-        }
-    }
-
-    fn sharer_access_probs<'a, R: Rng>(
-        &mut self,
-        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        info_idx: InfoIdx,
-    ) -> AccessProb<V> {
         let r = Instance::receipt_prob(ins, info_idx);
         let (fq, kq) = self.viewing_probs(ins.exec, &mut ins.rng);
         let arr = self.arrival_prob(ins.exec, &mut ins.rng);
-        let (fm, km) = self.get_plural_ignorances(ins.exec, &mut ins.rng);
-        AccessProb {
-            fp: fq * r,
-            kp: kq * r,
-            pred_fp: fq * arr,
-            fm,
-            km,
-        }
+        let (fpi, kpi) = self.get_plural_ignorances(ins.exec, &mut ins.rng);
+        new_trusts(my_trust, trust_mis, r, fq, kq, arr, fpi, kpi)
     }
 
     fn visit_prob<R: Rng>(&mut self, exec: &Self::Exec, rng: &mut R) -> V {
@@ -472,10 +477,23 @@ where
 
 #[cfg(test)]
 mod tests {
-    use base::executor::InstanceExt;
-    use rand::{rngs::SmallRng, SeedableRng};
+    use std::borrow::Cow;
 
-    use super::{Config, Exec, Instance};
+    use base::{
+        agent::Agent,
+        executor::InstanceExt,
+        info::{Info, InfoContent},
+    };
+    use rand::{rngs::SmallRng, SeedableRng};
+    use subjective_logic::{
+        marr_d1, marr_d2,
+        mul::{
+            labeled::{OpinionD1, SimplexD1},
+            Simplex,
+        },
+    };
+
+    use super::{new_trusts, Config, Exec, Instance};
 
     #[test]
     fn test_instance() -> anyhow::Result<()> {
@@ -497,6 +515,112 @@ mod tests {
             assert_eq!(ins.inhibition_informers.get(&t).unwrap().len(), 2);
         }
         assert_eq!(ins.observation.len(), 40);
+        Ok(())
+    }
+
+    #[tracing_test::traced_test]
+    #[test]
+    fn test_agent() -> anyhow::Result<()> {
+        let mut agent = Agent::<f32>::default();
+        agent.reset(|ops, dec| {
+            dec.reset(0, |prs, cpt| {
+                prs.reset(-1.0, -8.0, -0.001);
+                cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
+            });
+            let o_b = marr_d1![
+                Simplex::new(marr_d1![0.5, 0.0], 0.5),
+                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+            ];
+            let b_kh = marr_d1![
+                Simplex::new(marr_d1![0.5, 0.0], 0.5),
+                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+            ];
+            let a_fh = marr_d1![
+                Simplex::new(marr_d1![0.5, 0.0], 0.5),
+                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+            ];
+            let theta_h = marr_d1![
+                Simplex::new(marr_d1![0.5, 0.0], 0.5),
+                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+            ];
+            let thetad_h = marr_d1![
+                Simplex::new(marr_d1![0.5, 0.0], 0.5),
+                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+            ];
+            let h_psi_if_phi0 = marr_d1![
+                Simplex::new(marr_d1![0.25, 0.0], 0.75),
+                Simplex::new(marr_d1![0.0, 0.925], 0.075)
+            ];
+            let h_b_if_phi0 = marr_d1![
+                Simplex::new(marr_d1![0.25, 0.0], 0.75),
+                Simplex::new(marr_d1![0.0, 0.95], 0.05)
+            ];
+            let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.1, 0.1];
+            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.1, 0.1];
+            let uncertainty_fh_fo_fphi = marr_d2![[0.1, 0.1], [0.1, 0.1]];
+            let uncertainty_kh_ko_kphi = marr_d2![[0.1, 0.1], [0.1, 0.1]];
+            ops.fixed.reset(
+                o_b,
+                b_kh,
+                a_fh,
+                theta_h,
+                thetad_h,
+                h_psi_if_phi0,
+                h_b_if_phi0,
+                uncertainty_fh_fpsi_if_fphi0,
+                uncertainty_kh_kpsi_if_kphi0,
+                uncertainty_fh_fo_fphi,
+                uncertainty_kh_ko_kphi,
+            );
+            ops.state.reset(
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                    .try_into()
+                    .unwrap(),
+                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                    .try_into()
+                    .unwrap(),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                    .try_into()
+                    .unwrap(),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                    .try_into()
+                    .unwrap(),
+            );
+            ops.ded.reset(
+                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+            );
+        });
+
+        let p = InfoContent::Correction {
+            op: Cow::Owned(OpinionD1::new(
+                marr_d1![0.95, 0.0],
+                0.05,
+                marr_d1![0.95, 0.05],
+            )),
+            misinfo: Cow::Owned(OpinionD1::new(
+                marr_d1![0.0, 0.90],
+                0.10,
+                marr_d1![0.2, 0.8],
+            )),
+        };
+        let info = Info::new(0, p);
+        let t = new_trusts(1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.1, 0.8);
+        agent.read_info(&info, t);
         Ok(())
     }
 }

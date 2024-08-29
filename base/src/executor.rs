@@ -10,7 +10,7 @@ use tracing::{debug, span, Level};
 use crate::{
     agent::{Agent, Decision},
     info::{Info, InfoContent, InfoLabel},
-    opinion::{AccessProb, MyFloat, MyOpinions, Trusts},
+    opinion::{MyFloat, MyOpinions, Trusts},
     stat::{AgentStat, InfoData, InfoStat, PopData, PopStat, Stat},
 };
 
@@ -74,21 +74,11 @@ pub trait AgentExtTrait<V: Clone>: Sized {
         ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
         info_idx: InfoIdx,
     ) -> Trusts<V>;
-    fn informer_access_probs<'a, R: Rng>(
-        &mut self,
-        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        info_idx: InfoIdx,
-    ) -> AccessProb<V>;
     fn sharer_trusts<'a, R: Rng>(
         &mut self,
         ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
         info_idx: InfoIdx,
     ) -> Trusts<V>;
-    fn sharer_access_probs<'a, R: Rng>(
-        &mut self,
-        ins: &mut InstanceWrapper<'a, Self::Exec, V, R, Self::Ix>,
-        info_idx: InfoIdx,
-    ) -> AccessProb<V>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -267,10 +257,9 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
             let _guard = span.enter();
             let agent = memory.get_agent_mut(agent_idx.0);
             let trusts = agent.ext.informer_trusts(self, info_idx);
-            let ap = agent.ext.informer_access_probs(self, info_idx);
             let info = &self.infos[info_idx.0];
             debug!(target: "recv", l = ?info.label(), "#" = info.idx);
-            agent.core.set_info_opinions(&info, trusts, ap);
+            agent.core.set_info_opinions(&info, trusts);
             if agent.core.is_willing_selfish() {
                 self.selfishes.push(agent_idx);
             }
@@ -288,9 +277,8 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
             }
 
             let trusts = agent.ext.sharer_trusts(self, info_idx);
-            let ap = agent.ext.sharer_access_probs(self, info_idx);
             let (info, d) = self.get_info_mut(info_idx);
-            let b = agent.core.read_info(info, trusts, ap);
+            let b = agent.core.read_info(info, trusts);
             info.viewed();
             d.viewed();
             if b.sharing {
@@ -299,7 +287,6 @@ impl<'a, E, V: MyFloat, R, Ix> InstanceWrapper<'a, E, V, R, Ix> {
                 s.push((agent_idx, info_idx));
             }
             if b.first_access {
-                // println!("i={num_iter} t={t} agent_idx={agent_idx} info_idx={info_idx}");
                 d.first_viewed();
             }
             if agent.core.is_willing_selfish() {
