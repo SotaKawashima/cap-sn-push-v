@@ -568,7 +568,7 @@ fn deduce_h<V: MyFloat>(
     let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, &b.base_rate, h);
     let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(&b.base_rate, h);
     let h_phi_psi_b = MArrD3::<Phi, _, _, _>::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1]);
-    debug!("{:?}", h_phi_psi_b);
+    debug!(target: "H|Phi,Psi,B", Cond=?h_phi_psi_b);
 
     let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(&h_phi_psi_b, || h.clone());
     h

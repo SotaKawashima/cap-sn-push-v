@@ -36,6 +36,9 @@ pub struct Cli {
     /// Enable inhibition information
     #[arg(short, default_value_t = false)]
     enable_inhibition: bool,
+    /// delayed steps of selfish from receiving information
+    #[arg(short, default_value_t = 0)]
+    delay_selfish: u32,
     /// Enable overwriting of a output file
     #[arg(short, default_value_t = false)]
     overwriting: bool,
@@ -62,6 +65,7 @@ where
         agent: agent_config,
         strategy: strategy_config,
         enable_inhibition,
+        delay_selfish,
         overwriting,
         compressing,
     } = args;
@@ -94,6 +98,7 @@ where
             "enable_inhibition".to_string(),
             enable_inhibition.to_string(),
         ),
+        ("delay_selfish".to_string(), delay_selfish.to_string()),
         (
             "iteration_count".to_string(),
             runtime.iteration_count.to_string(),
@@ -101,7 +106,7 @@ where
     ]);
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
-    let exec = config.into_exec(enable_inhibition)?;
+    let exec = config.into_exec(enable_inhibition, delay_selfish)?;
     run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
 }
 
@@ -119,6 +124,7 @@ mod tests {
             network: "./test/network_config.toml".into(),
             strategy: "./test/strategy_config.toml".into(),
             enable_inhibition: true,
+            delay_selfish: 0,
             overwriting: true,
             compressing: true,
         };

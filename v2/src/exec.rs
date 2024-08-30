@@ -25,6 +25,7 @@ pub struct Exec<V: MyFloat> {
     pub probabilies: ProbabilitySamples<V>,
     pub prospect: ProspectSamples<V>,
     pub cpt: CptSamples<V>,
+    pub delay_selfish: u32,
 }
 
 impl<V> Executor<V, AgentExt<V>, Instance> for Exec<V>
@@ -212,7 +213,7 @@ where
         exec: &Self::Exec,
         rng: &mut R,
     ) {
-        decision.reset(0, |prospect, cpt| {
+        decision.reset(exec.delay_selfish, |prospect, cpt| {
             exec.opinion.reset_to(ops, rng);
             exec.prospect.reset_to(prospect, rng);
             exec.cpt.reset_to(cpt, rng);
@@ -483,10 +484,10 @@ mod tests {
     use std::borrow::Cow;
 
     use base::{
-        agent::Agent,
+        agent::{Agent, Decision},
         executor::InstanceExt,
         info::{Info, InfoContent},
-        opinion::{FPsi, FH, FO},
+        opinion::{FPsi, MyOpinions, FH, FO},
     };
     use rand::{rngs::SmallRng, SeedableRng};
     use subjective_logic::{
@@ -507,7 +508,7 @@ mod tests {
             "./test/agent_config.toml",
             "./test/strategy_config.toml",
         )?;
-        let exec: Exec<f32> = config.into_exec(true)?;
+        let exec: Exec<f32> = config.into_exec(true, 0)?;
         let mut rng = SmallRng::seed_from_u64(0);
         let ins = Instance::from_exec(&exec, &mut rng);
         for t in [0, 1, 2] {
@@ -527,44 +528,44 @@ mod tests {
     #[test]
     fn test_agent() -> anyhow::Result<()> {
         let mut agent = Agent::<f32>::default();
-        agent.reset(|ops, dec| {
+        let reset = |ops: &mut MyOpinions<f32>, dec: &mut Decision<f32>| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -7.00, -0.001);
+                prs.reset(-1.0, -6.00, -0.001);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.0, 0.95], 0.05)
+                Simplex::new(marr_d1![0.0, 0.8], 0.2)
             ];
             let b_kh = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.0, 0.9], 0.1)
+                Simplex::new(marr_d1![0.1, 0.8], 0.1)
             ];
             let a_fh = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.0, 0.9], 0.1)
+                Simplex::new(marr_d1![0.2, 0.7], 0.1)
             ];
             let theta_h = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.0, 0.8], 0.2)
+                Simplex::new(marr_d1![0.1, 0.5], 0.4)
             ];
             let thetad_h = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.0, 0.8], 0.2)
+                Simplex::new(marr_d1![0.1, 0.8], 0.1)
             ];
             let h_psi_if_phi0 = marr_d1![
                 // Simplex::new(marr_d1![0.25, 0.25], 0.5),
-                Simplex::new(marr_d1![0.8, 0.0], 0.2),
-                Simplex::new(marr_d1![0.0, 0.9], 0.1)
+                Simplex::new(marr_d1![0.0, 0.0], 1.0),
+                Simplex::new(marr_d1![0.7, 0.3], 0.0)
             ];
             let h_b_if_phi0 = marr_d1![
-                Simplex::new(marr_d1![0.8, 0.0], 0.2),
-                Simplex::new(marr_d1![0.0, 0.925], 0.075)
+                Simplex::new(marr_d1![0.7, 0.0], 0.3),
+                Simplex::new(marr_d1![0.0, 0.90], 0.1)
             ];
             let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.3, 0.3];
-            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.3, 0.3];
+            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.5, 0.5];
             let uncertainty_fh_fphi_fo = marr_d2![[0.3, 0.3], [0.3, 0.3]];
-            let uncertainty_kh_kphi_ko = marr_d2![[0.3, 0.3], [0.3, 0.3]];
+            let uncertainty_kh_kphi_ko = marr_d2![[0.5, 0.5], [0.5, 0.5]];
             ops.fixed.reset(
                 o_b,
                 b_kh,
@@ -610,9 +611,13 @@ mod tests {
                 OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
                 OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
             );
-        });
+        };
 
-        let p = InfoContent::Correction {
+        let m = InfoContent::Misinfo {
+            op: Cow::Owned(OpinionD1::new(marr_d1![0.0, 0.9], 0.1, marr_d1![0.3, 0.7])),
+        };
+        let m_info = Info::new(0, m);
+        let c = InfoContent::Correction {
             op: Cow::Owned(OpinionD1::new(
                 marr_d1![0.95, 0.0],
                 0.05,
@@ -624,9 +629,18 @@ mod tests {
                 marr_d1![0.3, 0.7],
             )),
         };
-        let info = Info::new(0, p);
-        let t = new_trusts(1.0, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5);
-        agent.read_info(&info, t);
+        let c_info = Info::new(1, c);
+        let o = InfoContent::Observation {
+            op: Cow::Owned(OpinionD1::new(marr_d1![0.9, 0.0], 0.1, marr_d1![0.9, 0.1])),
+        };
+        let o_info = Info::new(2, o);
+        agent.reset(reset);
+        agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5));
+        agent.reset(reset);
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.reset(reset);
+        agent.read_info(&o_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         Ok(())
     }
 

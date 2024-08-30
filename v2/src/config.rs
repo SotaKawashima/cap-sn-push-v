@@ -68,7 +68,11 @@ impl Config {
         })
     }
 
-    pub fn into_exec<V>(self, enable_inhibition: bool) -> anyhow::Result<Exec<V>>
+    pub fn into_exec<V>(
+        self,
+        enable_inhibition: bool,
+        delay_selfish: u32,
+    ) -> anyhow::Result<Exec<V>>
     where
         V: MyFloat + for<'a> Deserialize<'a>,
     {
@@ -92,6 +96,7 @@ impl Config {
 
         Ok(Exec {
             enable_inhibition,
+            delay_selfish,
             graph,
             fnum_agents,
             mean_degree,
@@ -882,7 +887,7 @@ mod tests {
             "./test/agent_config.toml",
             "./test/strategy_config.toml",
         )?;
-        let exec: Exec<f32> = config.into_exec(true)?;
+        let exec: Exec<f32> = config.into_exec(true, 0)?;
         assert_eq!(exec.community_psi1.levels.len(), 100);
         assert!(
             exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]
