@@ -63,18 +63,20 @@ impl<V> AgentExt<V> {
     {
         *self.trusts.entry(label).or_insert_with(|| match label {
             InfoLabel::Misinfo => {
-                let p = self.psi1_support_level;
-                let d = p.min(V::one() - p);
-                let u = *exec.sharer_trust.misinfo.choose(rng).unwrap(); // 0<u<1
-                let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
-                p + x // lv - d < lv + x < lv + d
+                // let p = self.psi1_support_level;
+                // let d = p.min(V::one() - p);
+                // let u = *exec.sharer_trust.misinfo.choose(rng).unwrap(); // 0<u<1
+                // let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
+                // p + x // lv - d < lv + x < lv + d
+                *exec.sharer_trust.misinfo.choose(rng).unwrap()
             }
             InfoLabel::Corrective => {
-                let p = V::one() - self.psi1_support_level; // opposite of support level
-                let d = p.min(V::one() - p);
-                let u = *exec.sharer_trust.correction.choose(rng).unwrap(); // 0<u<1
-                let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
-                p + x // lv - d < lv + x < lv + d
+                // let p = V::one() - self.psi1_support_level; // opposite of support level
+                // let d = p.min(V::one() - p);
+                // let u = *exec.sharer_trust.correction.choose(rng).unwrap(); // 0<u<1
+                // let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
+                // p + x // lv - d < lv + x < lv + d
+                *exec.sharer_trust.correction.choose(rng).unwrap()
             }
             InfoLabel::Observed => *exec.sharer_trust.obserbation.choose(rng).unwrap(),
             InfoLabel::Inhibitive => *exec.sharer_trust.inhibition.choose(rng).unwrap(),
@@ -527,7 +529,7 @@ mod tests {
         let mut agent = Agent::<f32>::default();
         agent.reset(|ops, dec| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -4.00, -0.001);
+                prs.reset(-1.0, -7.00, -0.001);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
@@ -543,19 +545,20 @@ mod tests {
                 Simplex::new(marr_d1![0.0, 0.9], 0.1)
             ];
             let theta_h = marr_d1![
-                Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.90], 0.1)
+                Simplex::new(marr_d1![0.95, 0.0], 0.05),
+                Simplex::new(marr_d1![0.0, 0.8], 0.2)
             ];
             let thetad_h = marr_d1![
-                Simplex::new(marr_d1![0.8, 0.0], 0.2),
+                Simplex::new(marr_d1![0.95, 0.0], 0.05),
                 Simplex::new(marr_d1![0.0, 0.8], 0.2)
             ];
             let h_psi_if_phi0 = marr_d1![
-                Simplex::new(marr_d1![0.25, 0.25], 0.5),
+                // Simplex::new(marr_d1![0.25, 0.25], 0.5),
+                Simplex::new(marr_d1![0.8, 0.0], 0.2),
                 Simplex::new(marr_d1![0.0, 0.9], 0.1)
             ];
             let h_b_if_phi0 = marr_d1![
-                Simplex::new(marr_d1![0.7, 0.1], 0.2),
+                Simplex::new(marr_d1![0.8, 0.0], 0.2),
                 Simplex::new(marr_d1![0.0, 0.925], 0.075)
             ];
             let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.3, 0.3];
@@ -622,7 +625,7 @@ mod tests {
             )),
         };
         let info = Info::new(0, p);
-        let t = new_trusts(1.0, 0.9, 0.5, 0.05, 0.05, 0.8, 0.9, 0.5);
+        let t = new_trusts(1.0, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5);
         agent.read_info(&info, t);
         Ok(())
     }
