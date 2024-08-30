@@ -117,9 +117,9 @@ where
     #[serde_as(as = "TryFromInto<Vec<EValueParam<V>>>")]
     uncertainty_kh_kpsi_if_kphi0: MArrD1<KPsi, EValue<V>>,
     #[serde_as(as = "TryFromInto<Vec<Vec<EValueParam<V>>>>")]
-    uncertainty_fh_fo_fphi: MArrD2<FO, FPhi, EValue<V>>,
+    uncertainty_fh_fphi_fo: MArrD2<FPhi, FO, EValue<V>>,
     #[serde_as(as = "TryFromInto<Vec<Vec<EValueParam<V>>>>")]
-    uncertainty_kh_ko_kphi: MArrD2<KO, KPhi, EValue<V>>,
+    uncertainty_kh_kphi_ko: MArrD2<KPhi, KO, EValue<V>>,
 }
 
 #[serde_as]
@@ -227,8 +227,8 @@ where
             h_b_if_phi0,
             MArrD1::from_fn(|i| self.fixed.uncertainty_fh_fpsi_if_fphi0[i].sample(rng)),
             MArrD1::from_fn(|i| self.fixed.uncertainty_kh_kpsi_if_kphi0[i].sample(rng)),
-            MArrD2::from_fn(|i| self.fixed.uncertainty_fh_fo_fphi[i].sample(rng)),
-            MArrD2::from_fn(|i| self.fixed.uncertainty_kh_ko_kphi[i].sample(rng)),
+            MArrD2::from_fn(|i| self.fixed.uncertainty_fh_fphi_fo[i].sample(rng)),
+            MArrD2::from_fn(|i| self.fixed.uncertainty_kh_kphi_ko[i].sample(rng)),
         );
         debug!("{:?}", self.fixed);
     }

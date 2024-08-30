@@ -82,8 +82,8 @@ pub struct FixedOpinions<V> {
     pub h_b_if_phi0: MArrD1<B, SimplexD1<H, V>>,
     pub uncertainty_fh_fpsi_if_fphi0: MArrD1<FPsi, V>,
     pub uncertainty_kh_kpsi_if_kphi0: MArrD1<KPsi, V>,
-    pub uncertainty_fh_fo_fphi: MArrD2<FO, FPhi, V>,
-    pub uncertainty_kh_ko_kphi: MArrD2<KO, KPhi, V>,
+    pub uncertainty_fh_fphi_fo: MArrD2<FPhi, FO, V>,
+    pub uncertainty_kh_kphi_ko: MArrD2<KPhi, KO, V>,
 }
 
 #[derive(Debug)]
@@ -396,8 +396,8 @@ impl<V: MyFloat> FixedOpinions<V> {
         h_b_if_phi0: MArrD1<B, SimplexD1<H, V>>,
         uncertainty_fh_fpsi_if_fphi0: MArrD1<FPsi, V>,
         uncertainty_kh_kpsi_if_kphi0: MArrD1<KPsi, V>,
-        uncertainty_fh_fo_fphi: MArrD2<FO, FPhi, V>,
-        uncertainty_kh_ko_kphi: MArrD2<KO, KPhi, V>,
+        uncertainty_fh_fphi_fo: MArrD2<FPhi, FO, V>,
+        uncertainty_kh_kphi_ko: MArrD2<KPhi, KO, V>,
     ) {
         *self = Self {
             o_b,
@@ -409,8 +409,8 @@ impl<V: MyFloat> FixedOpinions<V> {
             h_b_if_phi0,
             uncertainty_fh_fpsi_if_fphi0,
             uncertainty_kh_kpsi_if_kphi0,
-            uncertainty_fh_fo_fphi,
-            uncertainty_kh_ko_kphi,
+            uncertainty_fh_fphi_fo,
+            uncertainty_kh_kphi_ko,
         }
     }
 }
@@ -429,20 +429,28 @@ fn deduce_fh<V: MyFloat>(
             V::one() - fixed.uncertainty_fh_fpsi_if_fphi0[fpsi.into()],
         )
     });
+    let h_o_if_phi0 = MArrD1::<O, _>::from_fn(|o| {
+        OpinionRefD1::<_, V>::from((&b_o[o], base_rate_b))
+            .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
+    });
+    debug!(target: "H|O,phi0", Cond=?h_o_if_phi0);
+
     let fh_fo_if_fphi0 = MArrD1::<FO, _>::from_fn(|fo| {
         transform_simplex::<_, FH, _>(
-            OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
-                .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
-                .projection(),
-            V::one() - fixed.uncertainty_fh_fo_fphi[(fo, FPhi(0))],
+            h_o_if_phi0[fo.into()].projection(),
+            // OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
+            //     .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
+            //     .projection(),
+            V::one() - fixed.uncertainty_fh_fphi_fo[(FPhi(0), fo)],
         )
     });
+
     let fh_fo_if_fphi1 = MArrD1::<FO, _>::from_fn(|fo| {
         transform_simplex::<_, FH, _>(
             OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
                 .deduce_with(&state.h_b_if_phi1, || base_rate_h.clone())
                 .projection(),
-            V::one() - fixed.uncertainty_fh_fo_fphi[(fo, FPhi(1))],
+            V::one() - fixed.uncertainty_fh_fphi_fo[(FPhi(1), fo)],
         )
     });
     let fh_fpsi_fo_if_fphi0 = MArrD1::<FH, _>::merge_cond2(
@@ -459,13 +467,23 @@ fn deduce_fh<V: MyFloat>(
         &state.fo.base_rate,
         base_rate_fh,
     );
+
+    debug!(target: "FPsi", a=?state.fpsi.base_rate);
+    debug!(target: "  FO", a=?state.fo.base_rate);
+    debug!(target: "  FH", a=?base_rate_fh);
+    debug!(target: "FH|Fphi0,FPsi", Cond=?fh_fpsi_if_fphi0);
+    debug!(target: "FH|Fphi0,  FO", Cond=?fh_fo_if_fphi0);
+    debug!(target: "FH|Fphi0,FPsi,FO", Cond=?fh_fpsi_fo_if_fphi0);
+    debug!(target: "FH|Fphi1,FPsi", Cond=?state.fh_fpsi_if_fphi1);
+    debug!(target: "FH|Fphi1,  FO", Cond=?fh_fo_if_fphi1);
+    debug!(target: "FH|Fphi1,FPsi,FO", Cond=?fh_fpsi_fo_if_fphi1);
+
     let fh_fphi_fpsi_fo =
         MArrD3::<FPhi, FPsi, FO, _>::new(vec![fh_fpsi_fo_if_fphi0, fh_fpsi_fo_if_fphi1]);
-
-    debug!("{:?}", fh_fphi_fpsi_fo);
-
     let fh = OpinionD3::product3(&state.fphi, &state.fpsi, &state.fo)
         .deduce_with(&fh_fphi_fpsi_fo, || base_rate_fh.clone());
+
+    debug!(target:"FH", w=?fh);
     fh
 }
 
@@ -488,7 +506,7 @@ fn deduce_kh<V: MyFloat>(
             OpinionRefD1::from((&b_o[ko.into()], base_rate_b))
                 .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
                 .projection(),
-            V::one() - fixed.uncertainty_kh_ko_kphi[(ko, KPhi(0))],
+            V::one() - fixed.uncertainty_kh_kphi_ko[(KPhi(0), ko)],
         )
     });
     let kh_ko_if_kphi1 = MArrD1::<KO, _>::from_fn(|ko| {
@@ -496,12 +514,13 @@ fn deduce_kh<V: MyFloat>(
             OpinionRefD1::from((&b_o[ko.into()], base_rate_b))
                 .deduce_with(&state.h_b_if_phi1, || base_rate_h.clone())
                 .projection(),
-            V::one() - fixed.uncertainty_kh_ko_kphi[(ko, KPhi(1))],
+            V::one() - fixed.uncertainty_kh_kphi_ko[(KPhi(1), ko)],
         )
     });
-
     debug!(target: "KH|Kphi0,KPsi", Cond=?kh_kpsi_if_kphi0);
     debug!(target: "KH|Kphi0,  KO", Cond=?kh_ko_if_kphi0);
+    debug!(target: "KH|Kphi1,KPsi", Cond=?state.kh_kpsi_if_kphi1);
+    debug!(target: "KH|Kphi1,  KO", Cond=?kh_ko_if_kphi1);
     let kh_kpsi_ko_if_kphi0 = MArrD1::<KH, _>::merge_cond2(
         &kh_kpsi_if_kphi0,
         &kh_ko_if_kphi0,
@@ -516,13 +535,13 @@ fn deduce_kh<V: MyFloat>(
         &state.ko.base_rate,
         base_rate_kh,
     );
-    debug!(target: "KH|Kphi0,KPsi,KO", Cond=?kh_kpsi_ko_if_kphi0);
-    debug!(target: "KH|Kphi1,KPsi,KO", Cond=?kh_kpsi_ko_if_kphi1);
 
     let kh_kphi_kpsi_ko =
         MArrD3::<KPhi, KPsi, KO, _>::new(vec![kh_kpsi_ko_if_kphi0, kh_kpsi_ko_if_kphi1]);
     let kh = OpinionD3::product3(&state.kphi, &state.kpsi, &state.ko)
         .deduce_with(&kh_kphi_kpsi_ko, || base_rate_kh.clone());
+
+    debug!(target:"KH", w=?kh);
     kh
 }
 
@@ -580,6 +599,7 @@ impl<V: MyFloat> DeducedOpinions<V> {
     fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> Self {
         let ab = &self.b.base_rate;
         let b_o = fixed.o_b.inverse(ab, &state.o.base_rate);
+        debug!(target: "B|O", Cond=?b_o);
         let fh = deduce_fh(
             state,
             fixed,

@@ -234,16 +234,16 @@ impl ConditionConfig {
 struct UncertaintyConfig {
     fh_fpsi_if_fphi0: MyPath,
     kh_kpsi_if_kphi0: MyPath,
-    fh_fo_fphi: MyPath,
-    kh_ko_kphi: MyPath,
+    fh_fphi_fo: MyPath,
+    kh_kphi_ko: MyPath,
 }
 
 impl UncertaintyConfig {
     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
         self.fh_fpsi_if_fphi0.join_path(&root);
         self.kh_kpsi_if_kphi0.join_path(&root);
-        self.fh_fo_fphi.join_path(&root);
-        self.kh_ko_kphi.join_path(&root);
+        self.fh_fphi_fo.join_path(&root);
+        self.kh_kphi_ko.join_path(&root);
     }
 }
 
@@ -325,8 +325,8 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<ConditionConfig> for Conditio
 struct UncertaintySamples<V> {
     fh_fpsi_if_fphi0: Vec<MArrD1<FPsi, V>>,
     kh_kpsi_if_kphi0: Vec<MArrD1<KPsi, V>>,
-    fh_fo_fphi: Vec<MArrD2<FO, FPhi, V>>,
-    kh_ko_kphi: Vec<MArrD2<KO, KPhi, V>>,
+    fh_fphi_fo: Vec<MArrD2<FPhi, FO, V>>,
+    kh_kphi_ko: Vec<MArrD2<KPhi, KO, V>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -376,12 +376,12 @@ impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<UncertaintyConfig> for Uncert
                 value.kh_kpsi_if_kphi0.verify()?,
                 UncertaintyD1Record::try_into,
             )?,
-            fh_fo_fphi: read_csv_and_then(
-                value.fh_fo_fphi.verify()?,
+            fh_fphi_fo: read_csv_and_then(
+                value.fh_fphi_fo.verify()?,
                 UncertaintyD2Record::try_into,
             )?,
-            kh_ko_kphi: read_csv_and_then(
-                value.kh_ko_kphi.verify()?,
+            kh_kphi_ko: read_csv_and_then(
+                value.kh_kphi_ko.verify()?,
                 UncertaintyD2Record::try_into,
             )?,
         })
@@ -403,8 +403,8 @@ fn reset_fixed<V: MyFloat, R: Rng>(
     let h_b_if_phi0 = condition.h_b_if_phi0.choose(rng).unwrap().to_owned();
     let uncertainty_fh_fpsi_if_fphi0 = uncertainty.fh_fpsi_if_fphi0.choose(rng).unwrap().to_owned();
     let uncertainty_kh_kpsi_if_kphi0 = uncertainty.kh_kpsi_if_kphi0.choose(rng).unwrap().to_owned();
-    let uncertainty_fh_fo_fphi = uncertainty.fh_fo_fphi.choose(rng).unwrap().to_owned();
-    let uncertainty_kh_ko_kphi = uncertainty.kh_ko_kphi.choose(rng).unwrap().to_owned();
+    let uncertainty_fh_fo_fphi = uncertainty.fh_fphi_fo.choose(rng).unwrap().to_owned();
+    let uncertainty_kh_ko_kphi = uncertainty.kh_kphi_ko.choose(rng).unwrap().to_owned();
     fixed.reset(
         o_b,
         b_kh,
@@ -901,7 +901,7 @@ mod tests {
             marr_d1![0.1, 0.1]
         );
         assert_eq!(
-            exec.opinion.uncertainty.kh_ko_kphi[0],
+            exec.opinion.uncertainty.kh_kphi_ko[0],
             marr_d2![[0.1, 0.1], [0.1, 0.1]]
         );
         assert_eq!(

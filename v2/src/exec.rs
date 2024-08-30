@@ -132,11 +132,11 @@ fn new_trusts<V: MyFloat>(
         my_trust,
         social_trusts: OtherTrusts {
             trust: my_trust,
-            certainty: friend_viewing_probs * receipt_prob,
+            certainty: social_viewing_probs * receipt_prob,
         },
         friend_trusts: OtherTrusts {
             trust: my_trust,
-            certainty: social_viewing_probs * receipt_prob,
+            certainty: friend_viewing_probs * receipt_prob,
         },
         pred_friend_trusts: OtherTrusts {
             trust: my_trust,
@@ -484,14 +484,16 @@ mod tests {
         agent::Agent,
         executor::InstanceExt,
         info::{Info, InfoContent},
+        opinion::{FPsi, FH, FO},
     };
     use rand::{rngs::SmallRng, SeedableRng};
     use subjective_logic::{
         marr_d1, marr_d2,
         mul::{
             labeled::{OpinionD1, SimplexD1},
-            Simplex,
+            MergeJointConditions2, Simplex,
         },
+        multi_array::labeled::{MArrD1, MArrD2},
     };
 
     use super::{new_trusts, Config, Exec, Instance};
@@ -525,41 +527,41 @@ mod tests {
         let mut agent = Agent::<f32>::default();
         agent.reset(|ops, dec| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -5.00, -0.001);
+                prs.reset(-1.0, -4.00, -0.001);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
-                Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+                Simplex::new(marr_d1![0.95, 0.0], 0.05),
+                Simplex::new(marr_d1![0.0, 0.95], 0.05)
             ];
             let b_kh = marr_d1![
-                Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+                Simplex::new(marr_d1![0.95, 0.0], 0.05),
+                Simplex::new(marr_d1![0.0, 0.9], 0.1)
             ];
             let a_fh = marr_d1![
-                Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.5], 0.5)
+                Simplex::new(marr_d1![0.95, 0.0], 0.05),
+                Simplex::new(marr_d1![0.0, 0.9], 0.1)
             ];
             let theta_h = marr_d1![
                 Simplex::new(marr_d1![0.5, 0.0], 0.5),
                 Simplex::new(marr_d1![0.0, 0.90], 0.1)
             ];
             let thetad_h = marr_d1![
-                Simplex::new(marr_d1![0.5, 0.0], 0.5),
-                Simplex::new(marr_d1![0.0, 0.90], 0.1)
+                Simplex::new(marr_d1![0.8, 0.0], 0.2),
+                Simplex::new(marr_d1![0.0, 0.8], 0.2)
             ];
             let h_psi_if_phi0 = marr_d1![
-                Simplex::new(marr_d1![0.25, 0.0], 0.75),
-                Simplex::new(marr_d1![0.0, 0.925], 0.075)
+                Simplex::new(marr_d1![0.25, 0.25], 0.5),
+                Simplex::new(marr_d1![0.0, 0.9], 0.1)
             ];
             let h_b_if_phi0 = marr_d1![
-                Simplex::new(marr_d1![0.25, 0.0], 0.75),
-                Simplex::new(marr_d1![0.0, 0.95], 0.05)
+                Simplex::new(marr_d1![0.7, 0.1], 0.2),
+                Simplex::new(marr_d1![0.0, 0.925], 0.075)
             ];
-            let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.1, 0.1];
-            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.1, 0.1];
-            let uncertainty_fh_fo_fphi = marr_d2![[0.1, 0.1], [0.1, 0.1]];
-            let uncertainty_kh_ko_kphi = marr_d2![[0.1, 0.1], [0.1, 0.1]];
+            let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.3, 0.3];
+            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.3, 0.3];
+            let uncertainty_fh_fphi_fo = marr_d2![[0.3, 0.3], [0.3, 0.3]];
+            let uncertainty_kh_kphi_ko = marr_d2![[0.3, 0.3], [0.3, 0.3]];
             ops.fixed.reset(
                 o_b,
                 b_kh,
@@ -570,40 +572,40 @@ mod tests {
                 h_b_if_phi0,
                 uncertainty_fh_fpsi_if_fphi0,
                 uncertainty_kh_kpsi_if_kphi0,
-                uncertainty_fh_fo_fphi,
-                uncertainty_kh_ko_kphi,
+                uncertainty_fh_fphi_fo,
+                uncertainty_kh_kphi_ko,
             );
             ops.state.reset(
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
                 vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
                     .try_into()
                     .unwrap(),
                 vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
                     .try_into()
                     .unwrap(),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
                 vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
                     .try_into()
                     .unwrap(),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
                 vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
                     .try_into()
                     .unwrap(),
             );
             ops.ded.reset(
-                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.80, 0.2].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.80, 0.2].try_into().unwrap()),
                 OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
                 OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.99, 0.01].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
+                OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
             );
         });
 
@@ -616,12 +618,37 @@ mod tests {
             misinfo: Cow::Owned(OpinionD1::new(
                 marr_d1![0.0, 0.90],
                 0.10,
-                marr_d1![0.2, 0.8],
+                marr_d1![0.3, 0.7],
             )),
         };
         let info = Info::new(0, p);
-        let t = new_trusts(1.0, 0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.8);
+        let t = new_trusts(1.0, 0.9, 0.5, 0.05, 0.05, 0.8, 0.9, 0.5);
         agent.read_info(&info, t);
         Ok(())
+    }
+
+    #[test]
+    fn test_cond() {
+        let c0 = marr_d1!(FPsi; [
+            SimplexD1::new(marr_d1!(FH;[0.52, 0.18]), 0.3),
+            SimplexD1::new(marr_d1![0.07, 0.63], 0.3),
+            // SimplexD1::new(marr_d1![0.02, 0.93], 0.05),
+        ]);
+        let c1 = marr_d1!(FO; [
+            SimplexD1::new(marr_d1!(FH;[0.523, 0.177]), 0.3),
+            SimplexD1::new(marr_d1![0.023, 0.677], 0.3),
+            // SimplexD1::new(marr_d1![0.02, 0.93], 0.05),
+        ]);
+        let c: MArrD2<FPsi, FO, SimplexD1<FH, f32>> = MArrD1::<FH, _>::merge_cond2(
+            &c0,
+            &c1,
+            &marr_d1![0.95, 0.05],
+            &marr_d1![0.95, 0.05],
+            &marr_d1![0.80, 0.20],
+        );
+        println!("{:?}", c[(FPsi(0), FO(0))]);
+        println!("{:?}", c[(FPsi(0), FO(1))]);
+        println!("{:?}", c[(FPsi(1), FO(0))]);
+        println!("{:?}", c[(FPsi(1), FO(1))]);
     }
 }
