@@ -135,7 +135,8 @@ pub struct DeducedOpinions<V> {
 }
 
 struct Temp<V> {
-    b_o: MArrD1<O, SimplexD1<B, V>>,
+    fh_fphi_fpsi_fo: MArrD3<FPhi, FPsi, FO, SimplexD1<FH, V>>,
+    h_phi_psi_b: MArrD3<Phi, Psi, B, SimplexD1<H, V>>,
 }
 
 #[derive(Debug)]
@@ -375,6 +376,45 @@ impl<V: MyFloat> StateOpinions<V> {
         );
         h_psi_b_if_phi1
     }
+
+    fn deduce_fh(
+        &self,
+        fh_fphi_fpsi_fo: &MArrD3<FPhi, FPsi, FO, SimplexD1<FH, V>>,
+        base_rate_fh: &MArrD1<FH, V>,
+    ) -> OpinionD1<FH, V> {
+        OpinionD3::product3(&self.fphi, &self.fpsi, &self.fo)
+            .deduce_with(fh_fphi_fpsi_fo, || base_rate_fh.clone())
+    }
+
+    fn deduce_kh(
+        &self,
+        kh_kphi_kpsi_ko: &MArrD3<KPhi, KPsi, KO, SimplexD1<KH, V>>,
+        base_rate_kh: &MArrD1<KH, V>,
+    ) -> OpinionD1<KH, V> {
+        OpinionD3::product3(&self.kphi, &self.kpsi, &self.ko)
+            .deduce_with(kh_kphi_kpsi_ko, || base_rate_kh.clone())
+    }
+
+    fn deduce_b(
+        &self,
+        kh: &OpinionD1<KH, V>,
+        b_kh_o: &MArrD2<KH, O, SimplexD1<B, V>>,
+        base_rate_b: &MArrD1<B, V>,
+    ) -> OpinionD1<B, V> {
+        debug!(target: "B|KH,O", cond=?b_kh_o);
+        OpinionD2::product2(kh, &self.o).deduce_with(b_kh_o, || base_rate_b.clone())
+    }
+
+    fn deduce_h(
+        &self,
+        b: &OpinionD1<B, V>,
+        h_phi_psi_b: &MArrD3<Phi, Psi, B, SimplexD1<H, V>>,
+        base_rate_h: &MArrD1<H, V>,
+    ) -> OpinionD1<H, V> {
+        debug!(target: "H|Phi,Psi,B", Cond=?h_phi_psi_b);
+        OpinionD3::product3(&self.phi, &self.psi, b)
+            .deduce_with(h_phi_psi_b, || base_rate_h.clone())
+    }
 }
 
 impl<V: MyFloat> FixedOpinions<V> {
@@ -419,14 +459,14 @@ impl<V: MyFloat> FixedOpinions<V> {
     }
 }
 
-fn deduce_fh<V: MyFloat>(
+fn compute_fh_fphi_fpsi_fo<V: MyFloat>(
     state: &StateOpinions<V>,
     fixed: &FixedOpinions<V>,
     b_o: &MArrD1<O, SimplexD1<B, V>>,
     base_rate_b: &MArrD1<B, V>,
     base_rate_h: &MArrD1<H, V>,
     base_rate_fh: &MArrD1<FH, V>,
-) -> OpinionD1<FH, V> {
+) -> MArrD3<FPhi, FPsi, FO, SimplexD1<FH, V>> {
     let fh_fpsi_if_fphi0 = MArrD1::<FPsi, _>::from_fn(|fpsi| {
         transform_simplex::<_, FH, _>(
             fixed.h_psi_if_phi0[fpsi.into()].projection(base_rate_h),
@@ -437,14 +477,10 @@ fn deduce_fh<V: MyFloat>(
         OpinionRefD1::<_, V>::from((&b_o[o], base_rate_b))
             .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
     });
-    debug!(target: "H|O,phi0", Cond=?h_o_if_phi0);
 
     let fh_fo_if_fphi0 = MArrD1::<FO, _>::from_fn(|fo| {
         transform_simplex::<_, FH, _>(
             h_o_if_phi0[fo.into()].projection(),
-            // OpinionRefD1::from((&b_o[fo.into()], base_rate_b))
-            //     .deduce_with(&fixed.h_b_if_phi0, || base_rate_h.clone())
-            //     .projection(),
             V::one() - fixed.uncertainty_fh_fphi_fo[(FPhi(0), fo)],
         )
     });
@@ -472,9 +508,7 @@ fn deduce_fh<V: MyFloat>(
         base_rate_fh,
     );
 
-    debug!(target: "FPsi", a=?state.fpsi.base_rate);
-    debug!(target: "  FO", a=?state.fo.base_rate);
-    debug!(target: "  FH", a=?base_rate_fh);
+    debug!(target: " H|O,phi0", Cond=?h_o_if_phi0);
     debug!(target: "FH|Fphi0,FPsi", Cond=?fh_fpsi_if_fphi0);
     debug!(target: "FH|Fphi0,  FO", Cond=?fh_fo_if_fphi0);
     debug!(target: "FH|Fphi0,FPsi,FO", Cond=?fh_fpsi_fo_if_fphi0);
@@ -482,21 +516,17 @@ fn deduce_fh<V: MyFloat>(
     debug!(target: "FH|Fphi1,  FO", Cond=?fh_fo_if_fphi1);
     debug!(target: "FH|Fphi1,FPsi,FO", Cond=?fh_fpsi_fo_if_fphi1);
 
-    let fh_fphi_fpsi_fo =
-        MArrD3::<FPhi, FPsi, FO, _>::new(vec![fh_fpsi_fo_if_fphi0, fh_fpsi_fo_if_fphi1]);
-    let fh = OpinionD3::product3(&state.fphi, &state.fpsi, &state.fo)
-        .deduce_with(&fh_fphi_fpsi_fo, || base_rate_fh.clone());
-    fh
+    MArrD3::new(vec![fh_fpsi_fo_if_fphi0, fh_fpsi_fo_if_fphi1])
 }
 
-fn deduce_kh<V: MyFloat>(
+fn compute_kh_kphi_kpsi_ko<V: MyFloat>(
     state: &StateOpinions<V>,
     fixed: &FixedOpinions<V>,
     b_o: &MArrD1<O, SimplexD1<B, V>>,
     base_rate_b: &MArrD1<B, V>,
     base_rate_h: &MArrD1<H, V>,
     base_rate_kh: &MArrD1<KH, V>,
-) -> OpinionD1<KH, V> {
+) -> MArrD3<KPhi, KPsi, KO, SimplexD1<KH, V>> {
     let kh_kpsi_if_kphi0 = MArrD1::<KPsi, _>::from_fn(|kpsi| {
         transform_simplex::<_, KH, _>(
             fixed.h_psi_if_phi0[kpsi.into()].projection(base_rate_h),
@@ -519,10 +549,7 @@ fn deduce_kh<V: MyFloat>(
             V::one() - fixed.uncertainty_kh_kphi_ko[(KPhi(1), ko)],
         )
     });
-    debug!(target: "KH|Kphi0,KPsi", Cond=?kh_kpsi_if_kphi0);
-    debug!(target: "KH|Kphi0,  KO", Cond=?kh_ko_if_kphi0);
-    debug!(target: "KH|Kphi1,KPsi", Cond=?state.kh_kpsi_if_kphi1);
-    debug!(target: "KH|Kphi1,  KO", Cond=?kh_ko_if_kphi1);
+
     let kh_kpsi_ko_if_kphi0 = MArrD1::<KH, _>::merge_cond2(
         &kh_kpsi_if_kphi0,
         &kh_ko_if_kphi0,
@@ -530,8 +557,6 @@ fn deduce_kh<V: MyFloat>(
         &state.ko.base_rate,
         base_rate_kh,
     );
-    debug!(target:"KH|Kphi0,KPsi,KO", w=?kh_kpsi_ko_if_kphi0);
-
     let kh_kpsi_ko_if_kphi1 = MArrD1::<KH, _>::merge_cond2(
         &state.kh_kpsi_if_kphi1,
         &kh_ko_if_kphi1,
@@ -540,40 +565,40 @@ fn deduce_kh<V: MyFloat>(
         base_rate_kh,
     );
 
-    let kh_kphi_kpsi_ko =
-        MArrD3::<KPhi, KPsi, KO, _>::new(vec![kh_kpsi_ko_if_kphi0, kh_kpsi_ko_if_kphi1]);
-    let kh = OpinionD3::product3(&state.kphi, &state.kpsi, &state.ko)
-        .deduce_with(&kh_kphi_kpsi_ko, || base_rate_kh.clone());
-    kh
+    debug!(target: "KH|Kphi0,KPsi", Cond=?kh_kpsi_if_kphi0);
+    debug!(target: "KH|Kphi0,  KO", Cond=?kh_ko_if_kphi0);
+    debug!(target: "KH|Kphi1,KPsi", Cond=?state.kh_kpsi_if_kphi1);
+    debug!(target: "KH|Kphi1,  KO", Cond=?kh_ko_if_kphi1);
+    debug!(target: "KH|Kphi0,KPsi,KO", Cond=?kh_kpsi_ko_if_kphi0);
+
+    MArrD3::new(vec![kh_kpsi_ko_if_kphi0, kh_kpsi_ko_if_kphi1])
 }
 
-fn deduce_b<V: MyFloat>(
+fn compute_b_kh_o<V: MyFloat>(
     state: &StateOpinions<V>,
     fixed: &FixedOpinions<V>,
     b_o: &MArrD1<O, SimplexD1<B, V>>,
-    kh: &OpinionD1<KH, V>,
-    b: &MArrD1<B, V>,
-) -> OpinionD1<B, V> {
-    let b_kh_o =
-        MArrD1::<B, _>::merge_cond2(&fixed.b_kh, b_o, &kh.base_rate, &state.o.base_rate, b);
-    debug!(target: "B|KH,O", cond=?b_kh_o);
-    let b = OpinionD2::product2(kh, &state.o).deduce_with(&b_kh_o, || b.clone());
-    b
+    base_rate_kh: &MArrD1<KH, V>,
+    base_rate_b: &MArrD1<B, V>,
+) -> MArrD2<KH, O, SimplexD1<B, V>> {
+    MArrD1::<B, _>::merge_cond2(
+        &fixed.b_kh,
+        b_o,
+        base_rate_kh,
+        &state.o.base_rate,
+        base_rate_b,
+    )
 }
 
-fn deduce_h<V: MyFloat>(
+fn compute_h_phi_psi_b<V: MyFloat>(
     state: &StateOpinions<V>,
     fixed: &FixedOpinions<V>,
-    b: &OpinionD1<B, V>,
-    h: &MArrD1<H, V>,
-) -> OpinionD1<H, V> {
-    let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, &b.base_rate, h);
-    let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(&b.base_rate, h);
-    let h_phi_psi_b = MArrD3::<Phi, _, _, _>::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1]);
-    debug!(target: "H|Phi,Psi,B", Cond=?h_phi_psi_b);
-
-    let h = OpinionD3::product3(&state.phi, &state.psi, &b).deduce_with(&h_phi_psi_b, || h.clone());
-    h
+    base_rate_b: &MArrD1<B, V>,
+    base_rate_h: &MArrD1<H, V>,
+) -> MArrD3<Phi, Psi, B, SimplexD1<H, V>> {
+    let h_psi_b_if_phi0 = fixed.h_psi_b_if_phi0(&state.psi.base_rate, base_rate_b, base_rate_h);
+    let h_psi_b_if_phi1 = state.h_psi_b_if_phi1(base_rate_b, base_rate_h);
+    MArrD3::new(vec![h_psi_b_if_phi0, h_psi_b_if_phi1])
 }
 
 impl<V: MyFloat> DeducedOpinions<V> {
@@ -599,10 +624,8 @@ impl<V: MyFloat> DeducedOpinions<V> {
     }
 
     fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> (Self, Temp<V>) {
-        let ab = &self.b.base_rate;
-        let b_o = fixed.o_b.inverse(ab, &state.o.base_rate);
-        debug!(target: "B|O", Cond=?b_o);
-        let fh = deduce_fh(
+        let b_o = fixed.o_b.inverse(&self.b.base_rate, &state.o.base_rate);
+        let fh_fphi_fpsi_fo = compute_fh_fphi_fpsi_fo(
             state,
             fixed,
             &b_o,
@@ -610,7 +633,8 @@ impl<V: MyFloat> DeducedOpinions<V> {
             &self.h.base_rate,
             &self.fh.base_rate,
         );
-        let kh = deduce_kh(
+        let fh = state.deduce_fh(&fh_fphi_fpsi_fo, &self.fh.base_rate);
+        let kh_kphi_kpsi_ko = compute_kh_kphi_kpsi_ko(
             state,
             fixed,
             &b_o,
@@ -618,8 +642,11 @@ impl<V: MyFloat> DeducedOpinions<V> {
             &self.h.base_rate,
             &self.kh.base_rate,
         );
-        let b = deduce_b(state, fixed, &b_o, &kh, &self.b.base_rate);
-        let h = deduce_h(state, fixed, &b, &self.h.base_rate);
+        let kh = state.deduce_kh(&kh_kphi_kpsi_ko, &self.kh.base_rate);
+        let b_kh_o = compute_b_kh_o(state, fixed, &b_o, &kh.base_rate, &self.b.base_rate);
+        let b = state.deduce_b(&kh, &b_kh_o, &self.b.base_rate);
+        let h_phi_psi_b = compute_h_phi_psi_b(state, fixed, &b.base_rate, &self.h.base_rate);
+        let h = state.deduce_h(&b, &h_phi_psi_b, &self.h.base_rate);
         let a = fh.deduce_with(&fixed.a_fh, || self.a.base_rate.clone());
         let theta = h.deduce_with(&fixed.theta_h, || self.theta.base_rate.clone());
         let thetad = h.deduce_with(&fixed.thetad_h, || self.thetad.base_rate.clone());
@@ -634,7 +661,10 @@ impl<V: MyFloat> DeducedOpinions<V> {
                 theta,
                 thetad,
             },
-            Temp { b_o },
+            Temp {
+                fh_fphi_fpsi_fo,
+                h_phi_psi_b,
+            },
         )
     }
 
@@ -718,17 +748,9 @@ impl<V: MyFloat> PredDeducedOpinions<V> {
         state: &StateOpinions<V>,
         fixed: &FixedOpinions<V>,
     ) -> Self {
-        let fh = deduce_fh(
-            state,
-            fixed,
-            &temp.b_o,
-            &ded.b.base_rate,
-            &ded.h.base_rate,
-            &ded.fh.base_rate,
-        );
-        let h = deduce_h(state, fixed, &ded.b, &ded.h.base_rate);
+        let fh = state.deduce_fh(&temp.fh_fphi_fpsi_fo, &ded.fh.base_rate);
+        let h = state.deduce_h(&ded.b, &temp.h_phi_psi_b, &ded.h.base_rate);
         let a = fh.deduce_with(&fixed.a_fh, || ded.a.base_rate.clone());
-
         Self { h, fh, a }
     }
 

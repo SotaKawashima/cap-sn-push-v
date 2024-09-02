@@ -53,7 +53,7 @@ where
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
-    V::Sampler: Sync,
+    V::Sampler: Sync + Send,
     for<'de> V: serde::Deserialize<'de>,
 {
     let Cli {

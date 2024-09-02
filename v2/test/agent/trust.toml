@@ -1,4 +1,4 @@
-misinfo     = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-correction  = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-obserbation = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-inhibition  = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+misinfo = { uniform = [0.0, 0.5] }
+correction = { uniform = [0.0, 1.0] }
+obserbation = { uniform = [0.0, 1.0] }
+inhibition = { uniform = [0.0, 1.0] }

@@ -8,11 +8,11 @@ use base::{
 };
 use graph_lib::prelude::{Graph, GraphB};
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 
 use crate::config::*;
 
-pub struct Exec<V: MyFloat> {
+pub struct Exec<V: MyFloat + SampleUniform> {
     pub enable_inhibition: bool,
     pub graph: GraphB,
     pub fnum_agents: V,
@@ -69,7 +69,7 @@ impl<V> AgentExt<V> {
                 // let u = *exec.sharer_trust.misinfo.choose(rng).unwrap(); // 0<u<1
                 // let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
                 // p + x // lv - d < lv + x < lv + d
-                *exec.sharer_trust.misinfo.choose(rng).unwrap()
+                exec.sharer_trust.misinfo.choose(rng)
             }
             InfoLabel::Corrective => {
                 // let p = V::one() - self.psi1_support_level; // opposite of support level
@@ -77,10 +77,10 @@ impl<V> AgentExt<V> {
                 // let u = *exec.sharer_trust.correction.choose(rng).unwrap(); // 0<u<1
                 // let x = d * (u * (V::one() + V::one()) - V::one()); // -d < x < d
                 // p + x // lv - d < lv + x < lv + d
-                *exec.sharer_trust.correction.choose(rng).unwrap()
+                exec.sharer_trust.correction.choose(rng)
             }
-            InfoLabel::Observed => *exec.sharer_trust.obserbation.choose(rng).unwrap(),
-            InfoLabel::Inhibitive => *exec.sharer_trust.inhibition.choose(rng).unwrap(),
+            InfoLabel::Observed => exec.sharer_trust.obserbation.choose(rng),
+            InfoLabel::Inhibitive => exec.sharer_trust.inhibition.choose(rng),
         })
     }
 
@@ -91,8 +91,8 @@ impl<V> AgentExt<V> {
     {
         *self.plural_ignores.get_or_insert_with(|| {
             (
-                *exec.probabilies.plural_ignore_friend.choose(rng).unwrap(),
-                *exec.probabilies.plural_ignore_social.choose(rng).unwrap(),
+                exec.probabilies.plural_ignore_friend.choose(rng),
+                exec.probabilies.plural_ignore_social.choose(rng),
             )
         })
     }
@@ -104,8 +104,8 @@ impl<V> AgentExt<V> {
     {
         *self.viewing_probs.get_or_insert_with(|| {
             (
-                *exec.probabilies.viewing_friend.choose(rng).unwrap(),
-                *exec.probabilies.viewing_social.choose(rng).unwrap(),
+                exec.probabilies.viewing_friend.choose(rng),
+                exec.probabilies.viewing_social.choose(rng),
             )
         })
     }
@@ -117,7 +117,7 @@ impl<V> AgentExt<V> {
     {
         *self
             .arrival_prob
-            .get_or_insert_with(|| *exec.probabilies.arrival_friend.choose(rng).unwrap())
+            .get_or_insert_with(|| exec.probabilies.arrival_friend.choose(rng))
     }
 }
 
@@ -204,7 +204,7 @@ where
     fn visit_prob<R: Rng>(&mut self, exec: &Self::Exec, rng: &mut R) -> V {
         *self
             .visit_prob
-            .get_or_insert_with(|| *exec.probabilies.viewing.choose(rng).unwrap())
+            .get_or_insert_with(|| exec.probabilies.viewing.choose(rng))
     }
 
     fn reset_core<R: Rng>(

@@ -12,7 +12,7 @@ use exec::{AgentExt, Instance};
 use input::format::DataFormat;
 use io::MyPath;
 use polars_arrow::datatypes::Metadata;
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use std::path::PathBuf;
 
 #[derive(clap::Parser)]
@@ -49,12 +49,12 @@ pub struct Cli {
 
 pub async fn start<V>(args: Cli) -> anyhow::Result<()>
 where
-    V: MyFloat + 'static,
+    V: MyFloat + SampleUniform + 'static,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
-    V::Sampler: Sync,
+    V::Sampler: Sync + Send,
     for<'de> V: serde::Deserialize<'de>,
 {
     let Cli {

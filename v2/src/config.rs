@@ -15,9 +15,11 @@ use graph_lib::prelude::{Graph, GraphB};
 use input::format::DataFormat;
 use itertools::{Itertools, ProcessResults};
 use rand::{seq::SliceRandom, Rng};
-use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{
+    uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal, Uniform,
+};
 use serde::{de::DeserializeOwned, Deserialize};
-use serde_with::{serde_as, TryFromInto};
+use serde_with::{serde_as, FromInto, TryFromInto};
 use subjective_logic::{
     domain::Domain,
     errors::check_unit_interval,
@@ -518,11 +520,51 @@ impl<V: MyFloat> SupportLevels<V> {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct SharerTrustSamples<V> {
-    pub misinfo: Vec<V>,
-    pub correction: Vec<V>,
-    pub obserbation: Vec<V>,
-    pub inhibition: Vec<V>,
+#[serde(rename_all = "lowercase")]
+enum SamplerOption<V> {
+    Single(V),
+    Array(Vec<V>),
+    Uniform(V, V),
+}
+
+pub enum Sampler<V: SampleUniform> {
+    Single(V),
+    Arr(Vec<V>),
+    Uni(Uniform<V>),
+}
+
+impl<V: SampleUniform> From<SamplerOption<V>> for Sampler<V> {
+    fn from(value: SamplerOption<V>) -> Self {
+        match value {
+            SamplerOption::Single(v) => Self::Single(v),
+            SamplerOption::Array(v) => Self::Arr(v),
+            SamplerOption::Uniform(low, high) => Self::Uni(Uniform::new(low, high)),
+        }
+    }
+}
+
+impl<V: MyFloat + SampleUniform> Sampler<V> {
+    pub fn choose<R: Rng>(&self, rng: &mut R) -> V {
+        match self {
+            Self::Single(v) => *v,
+            Self::Arr(v) => *v.choose(rng).unwrap(),
+            Self::Uni(u) => u.sample(rng),
+        }
+    }
+}
+
+#[serde_as]
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct SharerTrustSamples<V: SampleUniform> {
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub misinfo: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub correction: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub obserbation: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub inhibition: Sampler<V>,
 }
 
 pub struct InformationSamples<V> {
@@ -769,14 +811,22 @@ pub struct InformingParams<V> {
     pub inhibition: Vec<Informing<V>>,
 }
 
-#[derive(Debug, serde::Deserialize)]
-pub struct ProbabilitySamples<V> {
-    pub viewing: Vec<V>,
-    pub viewing_friend: Vec<V>,
-    pub viewing_social: Vec<V>,
-    pub arrival_friend: Vec<V>,
-    pub plural_ignore_friend: Vec<V>,
-    pub plural_ignore_social: Vec<V>,
+#[serde_as]
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
+pub struct ProbabilitySamples<V: SampleUniform> {
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub viewing: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub viewing_friend: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub viewing_social: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub arrival_friend: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub plural_ignore_friend: Sampler<V>,
+    #[serde_as(as = "FromInto<SamplerOption<V>>")]
+    pub plural_ignore_social: Sampler<V>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -853,6 +903,7 @@ where
 mod tests {
     use std::path::Path;
 
+    use rand::{rngs::SmallRng, SeedableRng};
     use subjective_logic::{
         marr_d1, marr_d2,
         mul::labeled::{OpinionD1, SimplexD1},
@@ -927,6 +978,10 @@ mod tests {
                 SimplexD1::new(marr_d1![0.1, 0.6], 0.3),
             ]
         );
+        let mut rng = SmallRng::seed_from_u64(0);
+        for _ in 0..10 {
+            assert!(exec.sharer_trust.misinfo.choose(&mut rng) < 0.5);
+        }
         Ok(())
     }
 }

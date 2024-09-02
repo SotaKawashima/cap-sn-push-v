@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use futures::future::try_join_all;
 use rand::rngs::SmallRng;
+use rand_distr::uniform::SampleUniform;
 use tokio::sync::{mpsc, Mutex};
 
 use rand::{Rng, SeedableRng};
@@ -29,8 +30,8 @@ pub async fn run<V, E, Ax, Ix>(
     max_permits: Option<usize>,
 ) -> anyhow::Result<()>
 where
-    V: MyFloat + 'static,
-    V::Sampler: Sync,
+    V: MyFloat + SampleUniform + 'static,
+    V::Sampler: Sync + Send,
     Open01: Distribution<V>,
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
