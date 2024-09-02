@@ -487,16 +487,18 @@ mod tests {
         agent::{Agent, Decision},
         executor::InstanceExt,
         info::{Info, InfoContent},
-        opinion::{FPsi, MyOpinions, FH, FO},
+        opinion::{FPsi, MyOpinions, Psi, FH, FO},
     };
     use rand::{rngs::SmallRng, SeedableRng};
     use subjective_logic::{
+        iter::FromFn,
         marr_d1, marr_d2,
         mul::{
-            labeled::{OpinionD1, SimplexD1},
-            MergeJointConditions2, Simplex,
+            labeled::{OpinionD1, OpinionD2, OpinionRefD1, SimplexD1},
+            InverseCondition, MergeJointConditions2, Simplex,
         },
         multi_array::labeled::{MArrD1, MArrD2},
+        ops::Product2,
     };
 
     use super::{new_trusts, Config, Exec, Instance};
@@ -530,7 +532,7 @@ mod tests {
         let mut agent = Agent::<f32>::default();
         let reset = |ops: &mut MyOpinions<f32>, dec: &mut Decision<f32>| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -6.00, -0.001);
+                prs.reset(-1.0, -10.00, -0.001);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
@@ -538,8 +540,8 @@ mod tests {
                 Simplex::new(marr_d1![0.0, 0.8], 0.2)
             ];
             let b_kh = marr_d1![
-                Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.1, 0.8], 0.1)
+                Simplex::new(marr_d1![0.99, 0.0], 0.01),
+                Simplex::new(marr_d1![0.1, 0.89], 0.01)
             ];
             let a_fh = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
@@ -560,12 +562,12 @@ mod tests {
             ];
             let h_b_if_phi0 = marr_d1![
                 Simplex::new(marr_d1![0.7, 0.0], 0.3),
-                Simplex::new(marr_d1![0.0, 0.90], 0.1)
+                Simplex::new(marr_d1![0.0, 0.95], 0.05)
             ];
             let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.3, 0.3];
-            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.5, 0.5];
+            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.01, 0.01];
             let uncertainty_fh_fphi_fo = marr_d2![[0.3, 0.3], [0.3, 0.3]];
-            let uncertainty_kh_kphi_ko = marr_d2![[0.5, 0.5], [0.5, 0.5]];
+            let uncertainty_kh_kphi_ko = marr_d2![[0.01, 0.01], [0.05, 0.01]];
             ops.fixed.reset(
                 o_b,
                 b_kh,
@@ -579,90 +581,133 @@ mod tests {
                 uncertainty_fh_fphi_fo,
                 uncertainty_kh_kphi_ko,
             );
+            let psi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let phi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let o = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let h_psi_if_phi1 = vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                .try_into()
+                .unwrap();
+            let h_b_if_phi1 = vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                .try_into()
+                .unwrap();
+            let fo = OpinionD1::vacuous_with(vec![0.5, 0.5].try_into().unwrap());
+            let fpsi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let fphi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let fh_fpsi_if_fphi1 = vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                .try_into()
+                .unwrap();
+            let ko = OpinionD1::vacuous_with(vec![0.5, 0.5].try_into().unwrap());
+            let kpsi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let kphi = OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap());
+            let kh_kpsi_if_kphi1 = vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
+                .try_into()
+                .unwrap();
             ops.state.reset(
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
-                    .try_into()
-                    .unwrap(),
-                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
-                    .try_into()
-                    .unwrap(),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
-                    .try_into()
-                    .unwrap(),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(vec![0.95, 0.05].try_into().unwrap()),
-                vec![SimplexD1::vacuous(), SimplexD1::vacuous()]
-                    .try_into()
-                    .unwrap(),
+                psi,
+                phi,
+                o,
+                fo,
+                ko,
+                h_psi_if_phi1,
+                h_b_if_phi1,
+                fpsi,
+                fphi,
+                fh_fpsi_if_fphi1,
+                kpsi,
+                kphi,
+                kh_kpsi_if_kphi1,
             );
-            ops.ded.reset(
-                OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.80, 0.2].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.80, 0.2].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
-                OpinionD1::vacuous_with(marr_d1![0.90, 0.1].try_into().unwrap()),
-            );
+            let h = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let fh = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let kh = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let a = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let b = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let theta = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let thetad = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            ops.ded.reset(h, fh, kh, a, b, theta, thetad);
         };
 
-        let m = InfoContent::Misinfo {
-            op: Cow::Owned(OpinionD1::new(marr_d1![0.0, 0.9], 0.1, marr_d1![0.3, 0.7])),
-        };
-        let m_info = Info::new(0, m);
-        let c = InfoContent::Correction {
-            op: Cow::Owned(OpinionD1::new(
-                marr_d1![0.95, 0.0],
-                0.05,
-                marr_d1![0.95, 0.05],
-            )),
-            misinfo: Cow::Owned(OpinionD1::new(
-                marr_d1![0.0, 0.90],
-                0.10,
-                marr_d1![0.3, 0.7],
-            )),
-        };
-        let c_info = Info::new(1, c);
-        let o = InfoContent::Observation {
-            op: Cow::Owned(OpinionD1::new(marr_d1![0.9, 0.0], 0.1, marr_d1![0.9, 0.1])),
-        };
-        let o_info = Info::new(2, o);
+        let m_op = Cow::<OpinionD1<Psi, f32>>::Owned(OpinionD1::new(
+            marr_d1![0.0, 0.95],
+            0.05,
+            marr_d1![0.1, 0.9],
+        ));
+        let c_op = Cow::Owned(OpinionD1::new(
+            marr_d1![0.95, 0.0],
+            0.05,
+            marr_d1![0.5, 0.5],
+        ));
+        let m_info = Info::new(0, InfoContent::Misinfo { op: m_op.clone() });
+        let c_info = Info::new(
+            1,
+            InfoContent::Correction {
+                op: c_op,
+                misinfo: m_op.clone(),
+            },
+        );
+        // let o = InfoContent::Observation {
+        //     op: Cow::Owned(OpinionD1::new(marr_d1![0.9, 0.0], 0.1, marr_d1![0.9, 0.1])),
+        // };
+        // let o_info = Info::new(2, o);
+        // agent.reset(reset);
+        // agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5));
+        // agent.reset(reset);
+        // agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        // agent.reset(reset);
+        // agent.read_info(&o_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
-        agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5));
+        agent.read_info(&m_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.reset(reset);
+        agent.read_info(&m_info, new_trusts(0.6, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.reset(reset);
+        agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
         agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
-        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
-        agent.read_info(&o_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&m_info, new_trusts(0.8, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         Ok(())
     }
 
     #[test]
     fn test_cond() {
         let c0 = marr_d1!(FPsi; [
-            SimplexD1::new(marr_d1!(FH;[0.52, 0.18]), 0.3),
-            SimplexD1::new(marr_d1![0.07, 0.63], 0.3),
-            // SimplexD1::new(marr_d1![0.02, 0.93], 0.05),
+            SimplexD1::new(marr_d1!(FH;[0.89, 0.10]), 0.01),
+            SimplexD1::new(marr_d1![0.10, 0.89], 0.01),
         ]);
         let c1 = marr_d1!(FO; [
-            SimplexD1::new(marr_d1!(FH;[0.523, 0.177]), 0.3),
-            SimplexD1::new(marr_d1![0.023, 0.677], 0.3),
-            // SimplexD1::new(marr_d1![0.02, 0.93], 0.05),
+            SimplexD1::new(marr_d1!(FH;[0.94, 0.05]), 0.01),
+            SimplexD1::new(marr_d1![0.11, 0.88], 0.01),
         ]);
-        let c: MArrD2<FPsi, FO, SimplexD1<FH, f32>> = MArrD1::<FH, _>::merge_cond2(
-            &c0,
-            &c1,
-            &marr_d1![0.95, 0.05],
-            &marr_d1![0.95, 0.05],
-            &marr_d1![0.80, 0.20],
-        );
+
+        let a0 = marr_d1!(FPsi; [0.37, 0.63]);
+        let a1 = marr_d1!(FO; [0.5, 0.5]);
+        let ay = marr_d1!(FH; [0.85, 0.15]); // marr_d1!(FPsi; [0.95, 0.05]);
+        let inv_c0 = c0.inverse(&a0, &ay); // mbr(&a0, &c0).as_ref().unwrap());
+        let inv_c1 = c1.inverse(&a1, &ay); // mbr(&a1, &c1).as_ref().unwrap());
+        let inv_c01 = MArrD1::<FH, _>::from_fn(|fh| {
+            let r0 = OpinionRefD1::from((&inv_c0[fh], &a0));
+            let r1 = OpinionRefD1::from((&inv_c1[fh], &a1));
+            OpinionD2::product2(r0, r1).simplex
+        });
+        let c01 = inv_c01.inverse(&ay, &MArrD2::product2(&a0, &a1));
+        println!("{:?}", inv_c0);
+        println!("{:?}", inv_c1);
+        println!("{:?}", c01);
+        // let x1_y = y_x1.inverse(ax1, mbr(ax1, y_x1).as_ref().unwrap_or(ay));
+        // let x2_y = y_x2.inverse(ax2, mbr(ax2, y_x2).as_ref().unwrap_or(ay));
+        // let x12_y = CX1X2Y::from_fn(|y| {
+        //     let x1yr = OpinionRef::from((x1_y[y].borrow(), ax1));
+        //     let x2yr = OpinionRef::from((x2_y[y].borrow(), ax2));
+        //     let OpinionBase { simplex, .. } = Product2::product2(x1yr, x2yr);
+        //     simplex
+        // });
+        // let ax12 = mbr(ay, &x12_y).unwrap_or_else(|| Product2::product2(ax1, ax2));
+        // x12_y.inverse(ay, &ax12)
+
+        let c: MArrD2<FPsi, FO, SimplexD1<FH, f32>> =
+            MArrD1::<FH, _>::merge_cond2(&c0, &c1, &a0, &a1, &ay);
         println!("{:?}", c[(FPsi(0), FO(0))]);
         println!("{:?}", c[(FPsi(0), FO(1))]);
         println!("{:?}", c[(FPsi(1), FO(0))]);

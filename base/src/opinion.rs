@@ -482,8 +482,6 @@ fn deduce_fh<V: MyFloat>(
         MArrD3::<FPhi, FPsi, FO, _>::new(vec![fh_fpsi_fo_if_fphi0, fh_fpsi_fo_if_fphi1]);
     let fh = OpinionD3::product3(&state.fphi, &state.fpsi, &state.fo)
         .deduce_with(&fh_fphi_fpsi_fo, || base_rate_fh.clone());
-
-    debug!(target:"FH", w=?fh);
     fh
 }
 
@@ -528,6 +526,8 @@ fn deduce_kh<V: MyFloat>(
         &state.ko.base_rate,
         base_rate_kh,
     );
+    debug!(target:"KH|Kphi0,KPsi,KO", w=?kh_kpsi_ko_if_kphi0);
+
     let kh_kpsi_ko_if_kphi1 = MArrD1::<KH, _>::merge_cond2(
         &state.kh_kpsi_if_kphi1,
         &kh_ko_if_kphi1,
@@ -540,8 +540,6 @@ fn deduce_kh<V: MyFloat>(
         MArrD3::<KPhi, KPsi, KO, _>::new(vec![kh_kpsi_ko_if_kphi0, kh_kpsi_ko_if_kphi1]);
     let kh = OpinionD3::product3(&state.kphi, &state.kpsi, &state.ko)
         .deduce_with(&kh_kphi_kpsi_ko, || base_rate_kh.clone());
-
-    debug!(target:"KH", w=?kh);
     kh
 }
 
@@ -554,7 +552,7 @@ fn deduce_b<V: MyFloat>(
 ) -> OpinionD1<B, V> {
     let b_kh_o =
         MArrD1::<B, _>::merge_cond2(&fixed.b_kh, b_o, &kh.base_rate, &state.o.base_rate, b);
-    debug!("{:?}", b_kh_o);
+    debug!(target: "B|KH,O", cond=?b_kh_o);
     let b = OpinionD2::product2(kh, &state.o).deduce_with(&b_kh_o, || b.clone());
     b
 }
@@ -716,11 +714,13 @@ where
         debug!("before: {:?}", &self.state);
 
         let mut diff = self.state.receive(p, &trusts, &self.ded);
-        diff.swap(&mut self.state);
-        self.ded = self.ded.deduce(&self.state, &self.fixed);
+        debug!(diff=?diff);
 
-        debug!("after: {:?}", &self.state);
-        debug!("after: {:?}", &self.ded);
+        diff.swap(&mut self.state);
+        debug!(target:"after", state=?self.state);
+
+        self.ded = self.ded.deduce(&self.state, &self.fixed);
+        debug!(target:"after", ded=?self.ded);
 
         MyOpinionsUpd {
             inner: self,
