@@ -485,9 +485,10 @@ mod tests {
 
     use base::{
         agent::{Agent, Decision},
+        decision::{LevelSet, CPT},
         executor::InstanceExt,
         info::{Info, InfoContent},
-        opinion::{FPsi, MyOpinions, Psi, FH, FO},
+        opinion::{FPsi, MyOpinions, Psi, Thetad, A, FH, FO},
     };
     use rand::{rngs::SmallRng, SeedableRng};
     use subjective_logic::{
@@ -498,7 +499,7 @@ mod tests {
             InverseCondition, MergeJointConditions2, Simplex,
         },
         multi_array::labeled::{MArrD1, MArrD2},
-        ops::Product2,
+        ops::{Product2, Projection},
     };
 
     use super::{new_trusts, Config, Exec, Instance};
@@ -532,7 +533,7 @@ mod tests {
         let mut agent = Agent::<f32>::default();
         let reset = |ops: &mut MyOpinions<f32>, dec: &mut Decision<f32>| {
             dec.reset(0, |prs, cpt| {
-                prs.reset(-1.0, -10.00, -0.001);
+                prs.reset(-1.0, -8.00, -0.005);
                 cpt.reset(0.88, 0.88, 2.25, 0.61, 0.69);
             });
             let o_b = marr_d1![
@@ -545,7 +546,7 @@ mod tests {
             ];
             let a_fh = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.2, 0.7], 0.1)
+                Simplex::new(marr_d1![0.0, 0.95], 0.05)
             ];
             let theta_h = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
@@ -553,7 +554,7 @@ mod tests {
             ];
             let thetad_h = marr_d1![
                 Simplex::new(marr_d1![0.95, 0.0], 0.05),
-                Simplex::new(marr_d1![0.1, 0.8], 0.1)
+                Simplex::new(marr_d1![0.0, 0.95], 0.05)
             ];
             let h_psi_if_phi0 = marr_d1![
                 // Simplex::new(marr_d1![0.25, 0.25], 0.5),
@@ -565,9 +566,9 @@ mod tests {
                 Simplex::new(marr_d1![0.0, 0.95], 0.05)
             ];
             let uncertainty_fh_fpsi_if_fphi0 = marr_d1![0.3, 0.3];
-            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.01, 0.01];
+            let uncertainty_kh_kpsi_if_kphi0 = marr_d1![0.3, 0.3];
             let uncertainty_fh_fphi_fo = marr_d2![[0.3, 0.3], [0.3, 0.3]];
-            let uncertainty_kh_kphi_ko = marr_d2![[0.01, 0.01], [0.05, 0.01]];
+            let uncertainty_kh_kphi_ko = marr_d2![[0.3, 0.3], [0.3, 0.3]];
             ops.fixed.reset(
                 o_b,
                 b_kh,
@@ -620,7 +621,7 @@ mod tests {
             let h = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
             let fh = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
             let kh = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
-            let a = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
+            let a = OpinionD1::vacuous_with(marr_d1![0.5, 0.5].try_into().unwrap());
             let b = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
             let theta = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
             let thetad = OpinionD1::vacuous_with(marr_d1![0.95, 0.05].try_into().unwrap());
@@ -656,17 +657,17 @@ mod tests {
         // agent.reset(reset);
         // agent.read_info(&o_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
-        agent.read_info(&m_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&m_info, new_trusts(1.0, 0.9, 0.5, 0.8, 0.5, 0.5, 0.9, 0.95));
+        // agent.reset(reset);
+        // agent.read_info(&m_info, new_trusts(0.6, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        // agent.reset(reset);
+        // agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
-        agent.read_info(&m_info, new_trusts(0.6, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.8, 0.5, 0.5, 0.9, 0.95));
         agent.reset(reset);
-        agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
-        agent.reset(reset);
-        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
-        agent.reset(reset);
-        agent.read_info(&m_info, new_trusts(0.8, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
-        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
-        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&m_info, new_trusts(0.8, 0.9, 0.5, 0.8, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.8, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.8, 0.5, 0.5, 0.9, 0.95));
         Ok(())
     }
 
@@ -712,5 +713,42 @@ mod tests {
         println!("{:?}", c[(FPsi(0), FO(1))]);
         println!("{:?}", c[(FPsi(1), FO(0))]);
         println!("{:?}", c[(FPsi(1), FO(1))]);
+    }
+
+    #[test]
+    fn test_sharing() {
+        let mut cpt = CPT::default();
+        cpt.reset(0.88, 0.88, 0.69, 2.25, 0.61);
+
+        let x0 = -1.0;
+        let x1 = -10.0;
+        let y = -0.001;
+        let d0 = LevelSet::<(A, Thetad), f32>::new(&marr_d2!(A, Thetad; [[0.0, x1], [x0, x0]]));
+        let d1 = LevelSet::<(A, Thetad), f32>::new(
+            &marr_d2!(A, Thetad; [[y, x1 + y], [x0 + y, x0 + y]]),
+        );
+        // b=A[0.1856482,  0.20050177], u=0.61385006, a=A[0.49628967, 0.50371027]
+        // b=A[0.15187897, 0.17525421], u=0.6728668 , a=A[0.48121205, 0.5187879]
+        // b=Thetad[0.45818824, 0.12272677], u=0.41908503, a=Thetad[0.79127306, 0.2087269]
+        // b=Thetad[0.44344428, 0.14268395], u=0.41387182, a=Thetad[0.7584604, 0.24153961]
+        let wa0 = OpinionD1::<A, f32>::new(marr_d1![0.19, 0.20], 0.61, marr_d1![0.50, 0.50]);
+        let wa1 = OpinionD1::<A, f32>::new(marr_d1![0.10, 0.29], 0.61, marr_d1![0.48, 0.52]);
+        let wthetad0 =
+            OpinionD1::<Thetad, f32>::new(marr_d1![0.46, 0.12], 0.42, marr_d1![0.80, 0.20]);
+        let wthetad1 =
+            OpinionD1::<Thetad, f32>::new(marr_d1![0.50, 0.08], 0.42, marr_d1![0.76, 0.24]);
+        let w0 = OpinionD2::product2(&wa0, &wthetad0);
+        let w1 = OpinionD2::product2(&wa1, &wthetad1);
+        let p0 = w0.projection();
+        let p1 = w1.projection();
+        println!("{w0:?}");
+        println!("{w1:?}");
+        println!("{p0:?}");
+        println!("{p1:?}");
+        let v0 = cpt.valuate(&d0, &p0);
+        let v1 = cpt.valuate(&d1, &p1);
+        println!("{v0}, {v1}");
+        // 2024-09-02T11:36:03.828566Z  INFO test_agent:    THd: P=A[Thetad[0.38723496, 0.10306068], Thetad[0.40256393, 0.1071404]]
+        // 2024-09-02T11:36:03.828596Z  INFO test_agent:   ~THd: P=A[Thetad[0.36024895, 0.115421645], Thetad[0.39710066, 0.12722872]]
     }
 }

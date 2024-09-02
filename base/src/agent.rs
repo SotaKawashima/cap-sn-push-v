@@ -76,16 +76,13 @@ impl<V> Decision<V> {
         if sharing_status.is_done() {
             false
         } else {
-            upd.decide2(|ded, pred_ded| {
-                let p_a_thetad = ded.p_a_thetad();
-                let pred_p_a_thetad = pred_ded.p_a_thetad();
+            upd.decide2(|p_a_thetad, pred_p_a_thetad| {
                 info!(target: "   THd", P = ?p_a_thetad);
                 info!(target: "  ~THd", P = ?pred_p_a_thetad);
 
                 let values = [
-                    self.cpt.valuate(&self.prospect.sharing[0], &p_a_thetad),
-                    self.cpt
-                        .valuate(&self.prospect.sharing[1], &pred_p_a_thetad),
+                    self.cpt.valuate(&self.prospect.sharing[0], p_a_thetad),
+                    self.cpt.valuate(&self.prospect.sharing[1], pred_p_a_thetad),
                 ];
                 info!(target: "     Y", V = ?values);
                 sharing_status.decide(values);
