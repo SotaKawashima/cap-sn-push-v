@@ -136,7 +136,6 @@ pub struct DeducedOpinions<V> {
 
 struct Temp<V> {
     fh_fphi_fpsi_fo: MArrD3<FPhi, FPsi, FO, SimplexD1<FH, V>>,
-    h_phi_psi_b: MArrD3<Phi, Psi, B, SimplexD1<H, V>>,
 }
 
 #[derive(Debug)]
@@ -661,10 +660,7 @@ impl<V: MyFloat> DeducedOpinions<V> {
                 theta,
                 thetad,
             },
-            Temp {
-                fh_fphi_fpsi_fo,
-                h_phi_psi_b,
-            },
+            Temp { fh_fphi_fpsi_fo },
         )
     }
 
@@ -736,7 +732,6 @@ impl<V: MyFloat> PredDiffOpinions<V> {
 
 #[derive(Debug)]
 struct PredDeducedOpinions<V> {
-    pub h: OpinionD1<H, V>,
     pub fh: OpinionD1<FH, V>,
     pub a: OpinionD1<A, V>,
 }
@@ -749,13 +744,11 @@ impl<V: MyFloat> PredDeducedOpinions<V> {
         fixed: &FixedOpinions<V>,
     ) -> Self {
         let fh = state.deduce_fh(&temp.fh_fphi_fpsi_fo, &ded.fh.base_rate);
-        let h = state.deduce_h(&ded.b, &temp.h_phi_psi_b, &ded.h.base_rate);
         let a = fh.deduce_with(&fixed.a_fh, || ded.a.base_rate.clone());
-        Self { h, fh, a }
+        Self { fh, a }
     }
 
     fn set(self, ded: &mut DeducedOpinions<V>) {
-        ded.h = self.h;
         ded.fh = self.fh;
         ded.a = self.a;
     }
