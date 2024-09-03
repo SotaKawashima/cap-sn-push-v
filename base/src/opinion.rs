@@ -134,10 +134,6 @@ pub struct DeducedOpinions<V> {
     pub thetad: OpinionD1<Thetad, V>,
 }
 
-struct Temp<V> {
-    fh_fphi_fpsi_fo: MArrD3<FPhi, FPsi, FO, SimplexD1<FH, V>>,
-}
-
 #[derive(Debug)]
 pub struct Trusts<V> {
     // pub m: V,
@@ -622,7 +618,7 @@ impl<V: MyFloat> DeducedOpinions<V> {
         }
     }
 
-    fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> (Self, Temp<V>) {
+    fn deduce(&self, state: &StateOpinions<V>, fixed: &FixedOpinions<V>) -> Self {
         let b_o = fixed.o_b.inverse(&self.b.base_rate, &state.o.base_rate);
         let fh_fphi_fpsi_fo = compute_fh_fphi_fpsi_fo(
             state,
@@ -650,18 +646,15 @@ impl<V: MyFloat> DeducedOpinions<V> {
         let theta = h.deduce_with(&fixed.theta_h, || self.theta.base_rate.clone());
         let thetad = h.deduce_with(&fixed.thetad_h, || self.thetad.base_rate.clone());
 
-        (
-            Self {
-                h,
-                fh,
-                kh,
-                a,
-                b,
-                theta,
-                thetad,
-            },
-            Temp { fh_fphi_fpsi_fo },
-        )
+        Self {
+            h,
+            fh,
+            kh,
+            a,
+            b,
+            theta,
+            thetad,
+        }
     }
 
     pub fn p_theta(&self) -> MArrD1<Theta, V> {
@@ -738,12 +731,20 @@ struct PredDeducedOpinions<V> {
 
 impl<V: MyFloat> PredDeducedOpinions<V> {
     fn deduce(
-        temp: &Temp<V>,
         ded: &DeducedOpinions<V>,
         state: &StateOpinions<V>,
         fixed: &FixedOpinions<V>,
     ) -> Self {
-        let fh = state.deduce_fh(&temp.fh_fphi_fpsi_fo, &ded.fh.base_rate);
+        let b_o = fixed.o_b.inverse(&ded.b.base_rate, &state.o.base_rate);
+        let fh_fphi_fpsi_fo = compute_fh_fphi_fpsi_fo(
+            state,
+            fixed,
+            &b_o,
+            &ded.b.base_rate,
+            &ded.h.base_rate,
+            &ded.fh.base_rate,
+        );
+        let fh = state.deduce_fh(&fh_fphi_fpsi_fo, &ded.fh.base_rate);
         let a = fh.deduce_with(&fixed.a_fh, || ded.a.base_rate.clone());
         Self { fh, a }
     }
@@ -779,27 +780,24 @@ where
         diff.swap(&mut self.state);
         debug!(target:"after", state=?self.state);
 
-        let (ded, temp) = self.ded.deduce(&self.state, &self.fixed);
-        self.ded = ded;
+        self.ded = self.ded.deduce(&self.state, &self.fixed);
         debug!(target:"after", ded=?self.ded);
 
         MyOpinionsUpd {
             inner: self,
             p,
             trusts,
-            temp,
         }
     }
 
     fn predict(
         &mut self,
-        temp: &Temp<V>,
         p: &InfoContent<V>,
         trusts: &Trusts<V>,
     ) -> (PredDiffOpinions<V>, PredDeducedOpinions<V>) {
         let mut pred_diff = self.state.predict(p, trusts, &self.ded);
         pred_diff.swap(&mut self.state);
-        let pred_ded = PredDeducedOpinions::deduce(temp, &self.ded, &self.state, &self.fixed);
+        let pred_ded = PredDeducedOpinions::deduce(&self.ded, &self.state, &self.fixed);
         debug!(target:"pred", ded=?pred_ded);
 
         (pred_diff, pred_ded)
@@ -810,7 +808,6 @@ pub struct MyOpinionsUpd<'a, V: MyFloat> {
     inner: &'a mut MyOpinions<V>,
     p: &'a InfoContent<'a, V>,
     trusts: Trusts<V>,
-    temp: Temp<V>,
 }
 
 impl<'a, V: MyFloat> MyOpinionsUpd<'a, V> {
@@ -825,7 +822,7 @@ impl<'a, V: MyFloat> MyOpinionsUpd<'a, V> {
     where
         F: FnMut(&MArrD2<A, Thetad, V>, &MArrD2<A, Thetad, V>) -> bool,
     {
-        let (mut pred_diff, pred_ded) = self.inner.predict(&self.temp, self.p, &self.trusts);
+        let (mut pred_diff, pred_ded) = self.inner.predict(self.p, &self.trusts);
         let p_a_thetad = projection_a_thetad(&self.inner.ded.a, &self.inner.ded.thetad);
         let pred_p_a_thetad = projection_a_thetad(&pred_ded.a, &self.inner.ded.thetad);
         if f(&p_a_thetad, &pred_p_a_thetad) {
