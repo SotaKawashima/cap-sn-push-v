@@ -5,13 +5,16 @@ cpt = "./agent/cpt.csv"
 initial_states = "./agent/initial_states.toml"
 
 [condition]
-o_b = "./ops/cond/95_60-90.csv"
-a_fh = "./ops/cond/95_70-95.csv"
-b_kh = "./ops/cond/95_60-85.csv"
-theta_h = "./ops/cond/95_60-90.csv"
-thetad_h = "./ops/cond/95_60-90.csv"
-h_psi_if_phi0 = "./ops/cond/95_80-90.csv"
-h_b_if_phi0 = "./ops/cond/95_80-90.csv"
+o_b =      { import = "./ops/cond/95_60-90.csv" }
+a_fh =     { import = "./ops/cond/95_70-95.csv" }
+b_kh =     { import = "./ops/cond/95_60-85.csv" }
+theta_h =  { import = "./ops/cond/95_60-90.csv" }
+thetad_h = { import = "./ops/cond/95_60-90.csv" }
+h_psi_if_phi0 = {generate = [
+    [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+    [{b = [0,{single = 0.0}]}, {b = [1,{uniform = [0.80,0.90]}]}],
+]}
+h_b_if_phi0 = { import = "./ops/cond/95_80-90.csv" }
 
 [uncertainty]
 fh_fpsi_if_fphi0 = "./ops/unct/1d_10.csv"

@@ -8,6 +8,7 @@ base = { path = "../base" }
 input = { path = "../input" }
 num_cpus = { workspace = true }
 anyhow = { workspace = true }
+thiserror = "1.0"
 rand = { workspace = true }
 rand_distr = { workspace = true }
 graph-lib = { workspace = true }

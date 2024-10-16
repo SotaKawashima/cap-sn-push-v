@@ -1,11 +1,11 @@
 use std::{
     borrow::Cow,
     ffi::OsStr,
+    io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use anyhow::anyhow;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,21 +34,23 @@ impl<T: ?Sized + AsRef<OsStr>> From<&T> for MyPath {
 }
 
 impl MyPath {
-    pub fn join_path<P: AsRef<Path>>(&mut self, root: P) {
-        if !self.0.is_absolute() {
-            self.0 = root.as_ref().join(&self.0);
-        }
-    }
-
     pub fn to_string_lossy(&self) -> Cow<'_, str> {
         self.0.to_string_lossy()
     }
 
-    pub fn verify(&self) -> anyhow::Result<&Path> {
-        if self.0.try_exists()? {
-            Ok(self.0.as_path())
+    pub fn verified<P: AsRef<Path>>(&self, root: P) -> Result<PathBuf, io::Error> {
+        let path = if !self.0.is_absolute() {
+            root.as_ref().join(&self.0)
         } else {
-            Err(anyhow!("Path {} does not exist.", self.to_string_lossy()))
+            self.0.clone()
+        };
+        if path.try_exists()? {
+            Ok(path)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Path {} does not exist.", path.to_string_lossy()),
+            ))
         }
     }
 }
@@ -60,12 +62,12 @@ mod tests {
     #[test]
     fn test_my_path() {
         let p: MyPath = "./hoge/fuga".into();
-        let q = p.verify();
+        let q = p.verified("");
         println!("{q:?}");
         assert!(q.is_err());
         let p: MyPath = "./src/".into();
-        assert!(p.verify().is_ok());
+        assert!(p.verified("").is_ok());
         let p: MyPath = "./src/io.rs".into();
-        assert!(p.verify().is_ok());
+        assert!(p.verified("").is_ok());
     }
 }

@@ -661,7 +661,7 @@ mod tests {
         // agent.reset(reset);
         // agent.read_info(&m_info, new_trusts(0.5, 0.9, 0.5, 0.1, 0.1, 0.5, 0.9, 0.5));
         // agent.reset(reset);
-        // agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
+        agent.read_info(&c_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         // agent.reset(reset);
         // agent.read_info(&o_info, new_trusts(1.0, 0.9, 0.5, 0.1, 0.5, 0.5, 0.9, 0.95));
         reset_agent(&mut agent);

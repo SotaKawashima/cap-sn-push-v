@@ -69,11 +69,11 @@ where
         overwriting,
         compressing,
     } = args;
-    let runtime = DataFormat::read(runtime_path.verify()?)?.parse::<RuntimeParams>()?;
+    let runtime = DataFormat::read(runtime_path.verified("")?)?.parse::<RuntimeParams>()?;
     let config = Config::try_new(
-        network_config.verify()?,
-        agent_config.verify()?,
-        strategy_config.verify()?,
+        network_config.verified("")?,
+        agent_config.verified("")?,
+        strategy_config.verified("")?,
     )?;
     let metadata = Metadata::from_iter([
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),

@@ -1,9 +1,11 @@
 use std::{
     fmt::Debug,
     fs::File,
+    io,
     path::{Path, PathBuf},
 };
 
+use anyhow::{bail, ensure, Context};
 use base::{
     decision::{Prospect, CPT},
     opinion::{
@@ -21,80 +23,81 @@ use rand_distr::{
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_with::{serde_as, FromInto, TryFromInto};
 use subjective_logic::{
-    domain::Domain,
-    errors::check_unit_interval,
+    domain::{Domain, Keys},
+    errors::{check_unit_interval, InvalidValueError},
+    iter::FromFn,
     marr_d1, marr_d2,
-    mul::labeled::{OpinionD1, SimplexD1},
+    mul::{
+        labeled::{OpinionD1, SimplexD1},
+        Simplex,
+    },
     multi_array::labeled::{MArrD1, MArrD2},
 };
 
 use crate::{exec::Exec, io::MyPath};
 
-pub struct Config {
-    agent: AgentConfig,
+pub struct Config<V> {
+    agent: AgentConfig<V>,
     strategy: StrategyConfig,
     network: NetworkConfig,
+    agent_root: PathBuf,
+    strategy_root: PathBuf,
+    network_root: PathBuf,
 }
 
-impl Config {
+impl<V: for<'a> Deserialize<'a>> Config<V> {
     pub fn try_new<P: AsRef<Path>>(
         network_config: P,
         agent_config: P,
         strategy_config: P,
     ) -> anyhow::Result<Self> {
-        let mut agent: AgentConfig = DataFormat::read(&agent_config)?.parse()?;
-        let mut strategy: StrategyConfig = DataFormat::read(&strategy_config)?.parse()?;
-        let mut network: NetworkConfig = DataFormat::read(&network_config)?.parse()?;
-        agent.set_root(
-            agent_config
-                .as_ref()
-                .parent()
-                .unwrap_or_else(|| &(Path::new("/"))),
-        );
-        strategy.set_root(
-            strategy_config
-                .as_ref()
-                .parent()
-                .unwrap_or_else(|| &(Path::new("/"))),
-        );
-        network.set_root(
-            network_config
-                .as_ref()
-                .parent()
-                .unwrap_or_else(|| &(Path::new("/"))),
-        );
+        let agent: AgentConfig<V> = DataFormat::read(&agent_config)?.parse()?;
+        let strategy: StrategyConfig = DataFormat::read(&strategy_config)?.parse()?;
+        let network: NetworkConfig = DataFormat::read(&network_config)?.parse()?;
         Ok(Self {
             agent,
+            agent_root: agent_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/")))
+                .to_path_buf(),
             strategy,
+            strategy_root: strategy_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/")))
+                .to_path_buf(),
             network,
+            network_root: network_config
+                .as_ref()
+                .parent()
+                .unwrap_or_else(|| &(Path::new("/")))
+                .to_path_buf(),
         })
     }
 
-    pub fn into_exec<V>(
-        self,
-        enable_inhibition: bool,
-        delay_selfish: u32,
-    ) -> anyhow::Result<Exec<V>>
+    pub fn into_exec(self, enable_inhibition: bool, delay_selfish: u32) -> anyhow::Result<Exec<V>>
     where
-        V: MyFloat + for<'a> Deserialize<'a>,
+        V: MyFloat,
     {
         let Self {
             agent,
             strategy,
             network,
+            agent_root,
+            network_root,
+            strategy_root,
         } = self;
 
-        let graph = network.parse_graph()?;
+        let graph = network.parse_graph(&network_root)?;
         let fnum_agents = V::from_usize(graph.node_count()).unwrap();
         let mean_degree = V::from_usize(graph.edge_count()).unwrap() / fnum_agents;
-        let community_psi1 = read_csv_with(network.community.verify()?, |iter| {
-            SupportLevels::from_iter(iter)
-        })?;
+        let community_psi1 = network.parse_comm(&network_root)?;
 
         let InitialStates {
             initial_opinions,
             initial_base_rates,
-        } = DataFormat::read(&agent.initial_states.verify()?)?.parse()?;
+        } = DataFormat::read(agent.initial_states.verified(&agent_root)?)?.parse()?;
 
         Ok(Exec {
             enable_inhibition,
@@ -102,57 +105,38 @@ impl Config {
             graph,
             fnum_agents,
             mean_degree,
-            sharer_trust: DataFormat::read(&agent.sharer_trust.verify()?)?.parse()?,
+            sharer_trust: DataFormat::read(&agent.sharer_trust.verified(&agent_root)?)?.parse()?,
             opinion: OpinionSamples {
-                condition: agent.condition.try_into()?,
-                uncertainty: agent.uncertainty.try_into()?,
+                condition: agent.condition.into_samples(&agent_root)?,
+                uncertainty: agent.uncertainty.into_samples(&agent_root)?,
                 initial_opinions,
                 initial_base_rates,
             },
-            information: strategy.information.try_into()?,
-            informing: DataFormat::read(&strategy.informing.verify()?)?.parse()?,
+            information: strategy.information.into_samples(&strategy_root)?,
+            informing: DataFormat::read(&strategy.informing.verified(strategy_root)?)?.parse()?,
             community_psi1,
-            probabilies: DataFormat::read(&agent.probabilities.verify()?)?.parse()?,
-            prospect: ProspectSamples(read_csv(&agent.prospect.verify()?)?),
-            cpt: CptSamples(read_csv(&agent.cpt.verify()?)?),
+            probabilies: DataFormat::read(&agent.probabilities.verified(&agent_root)?)?.parse()?,
+            prospect: ProspectSamples(read_csv(&agent.prospect.verified(&agent_root)?)?),
+            cpt: CptSamples(read_csv(&agent.cpt.verified(&agent_root)?)?),
         })
     }
 }
 
 #[derive(Debug, Deserialize)]
-struct AgentConfig {
+struct AgentConfig<V> {
     probabilities: MyPath,
     sharer_trust: MyPath,
     prospect: MyPath,
     cpt: MyPath,
     initial_states: MyPath,
-    condition: ConditionConfig,
+    condition: ConditionConfig<V>,
     uncertainty: UncertaintyConfig,
-}
-
-impl AgentConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        self.probabilities.join_path(&root);
-        self.sharer_trust.join_path(&root);
-        self.prospect.join_path(&root);
-        self.cpt.join_path(&root);
-        self.initial_states.join_path(&root);
-        self.condition.set_root(&root);
-        self.uncertainty.set_root(&root);
-    }
 }
 
 #[derive(Debug, Deserialize)]
 struct StrategyConfig {
     informing: MyPath,
     information: InformationConfig,
-}
-
-impl StrategyConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        self.informing.join_path(&root);
-        self.information.set_root(&root);
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,11 +149,26 @@ pub struct InformationConfig {
 }
 
 impl InformationConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        self.misinfo.join_path(&root);
-        self.correction.join_path(&root);
-        self.observation.join_path(&root);
-        self.inhibition.join_path(&root);
+    fn into_samples<V, P>(self, root: P) -> anyhow::Result<InformationSamples<V>>
+    where
+        V: MyFloat + for<'a> Deserialize<'a>,
+        P: AsRef<Path>,
+    {
+        Ok(InformationSamples {
+            misinfo: read_csv_and_then(&self.misinfo.verified(&root)?, OpinionRecord::try_into)?,
+            correction: read_csv_and_then(
+                &self.correction.verified(&root)?,
+                OpinionRecord::try_into,
+            )?,
+            observation: read_csv_and_then(
+                &self.observation.verified(&root)?,
+                OpinionRecord::try_into,
+            )?,
+            inhibition: read_csv_and_then(
+                &self.inhibition.verified(&root)?,
+                InhibitionRecord::try_into,
+            )?,
+        })
     }
 }
 
@@ -183,15 +182,13 @@ struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        let root = root.as_ref().join(&self.path);
-        self.graph.join_path(&root);
-        self.community.join_path(&root);
+    fn get_root<P: AsRef<Path>>(&self, root: P) -> PathBuf {
+        root.as_ref().join(&self.path)
     }
 
-    fn parse_graph(&self) -> anyhow::Result<GraphB> {
+    fn parse_graph<P: AsRef<Path>>(&self, root: P) -> Result<GraphB, io::Error> {
         let builder = graph_lib::io::ParseBuilder::new(
-            File::open(&self.graph.verify()?)?,
+            File::open(self.graph.verified(self.get_root(root))?)?,
             graph_lib::io::DataFormat::EdgeList,
         );
         if !self.directed {
@@ -204,6 +201,15 @@ impl NetworkConfig {
             Ok(GraphB::Di(builder.parse()?))
         }
     }
+
+    fn parse_comm<V: MyFloat + for<'a> Deserialize<'a>, P: AsRef<Path>>(
+        &self,
+        root: P,
+    ) -> anyhow::Result<SupportLevels<V>> {
+        read_csv_with(self.community.verified(&self.get_root(root))?, |iter| {
+            SupportLevels::from_iter(iter)
+        })
+    }
 }
 
 #[serde_as]
@@ -214,26 +220,189 @@ struct InitialStates<V: MyFloat> {
     initial_base_rates: InitialBaseRates<V>,
 }
 
-#[derive(Debug, Deserialize)]
-struct ConditionConfig {
-    h_psi_if_phi0: MyPath,
-    h_b_if_phi0: MyPath,
-    o_b: MyPath,
-    a_fh: MyPath,
-    b_kh: MyPath,
-    theta_h: MyPath,
-    thetad_h: MyPath,
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ConditionParam<V> {
+    Import(MyPath),
+    Generate(Vec<Vec<SimplexParam<V>>>),
 }
 
-impl ConditionConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        self.h_psi_if_phi0.join_path(&root);
-        self.h_b_if_phi0.join_path(&root);
-        self.o_b.join_path(&root);
-        self.a_fh.join_path(&root);
-        self.b_kh.join_path(&root);
-        self.theta_h.join_path(&root);
-        self.thetad_h.join_path(&root);
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum SimplexParam<V> {
+    B(usize, SamplerOption<V>),
+    U(SamplerOption<V>),
+}
+
+enum ConditionSampler<D0: Domain, D1: Domain, V: SampleUniform> {
+    Array(Vec<MArrD1<D0, SimplexD1<D1, V>>>),
+    Random(MArrD1<D0, SimplexContainer<D1::Idx, V>>),
+}
+
+impl<D0: Domain, D1: Domain<Idx: Copy>, V: MyFloat + SampleUniform> ConditionSampler<D0, D1, V> {
+    fn sample<R: Rng>(&self, rng: &mut R) -> MArrD1<D0, SimplexD1<D1, V>> {
+        match self {
+            ConditionSampler::Array(vec) => vec.choose(rng).unwrap().to_owned(),
+            ConditionSampler::Random(marr_d1) => MArrD1::from_iter(marr_d1.into_iter().map(|c| {
+                let mut acc = V::zero();
+                let mut b = MArrD1::default();
+                let mut u = V::default();
+                for x in &c.fixed {
+                    match x {
+                        SimplexIndexed::B(d1, v) => {
+                            acc += *v;
+                            b[*d1] = *v;
+                        }
+                        SimplexIndexed::U(v) => {
+                            acc += *v;
+                            u = *v;
+                        }
+                    }
+                }
+                if let Some(x) = &c.sampler {
+                    match x {
+                        SimplexIndexed::B(d1, s) => {
+                            let v = s.choose(rng);
+                            acc += v;
+                            b[*d1] = v;
+                        }
+                        SimplexIndexed::U(s) => {
+                            let v = s.choose(rng);
+                            acc += v;
+                            u = v;
+                        }
+                    }
+                }
+                match &c.auto {
+                    SimplexIndexed::B(d1, _) => b[*d1] = V::one() - acc,
+                    SimplexIndexed::U(_) => u = V::one() - acc,
+                }
+                Simplex::new_unchecked(b, u)
+            })),
+        }
+    }
+}
+
+struct SimplexContainer<Idx, V: SampleUniform> {
+    sampler: Option<SimplexIndexed<Idx, Sampler<V>>>,
+    fixed: Vec<SimplexIndexed<Idx, V>>,
+    auto: SimplexIndexed<Idx, ()>,
+}
+
+enum SimplexIndexed<Idx, T> {
+    B(Idx, T),
+    U(T),
+}
+
+impl<V> ConditionParam<V>
+where
+    V: MyFloat + for<'a> Deserialize<'a>,
+{
+    fn into_sample<D0, D1, P>(self, root: P) -> anyhow::Result<ConditionSampler<D0, D1, V>>
+    where
+        D0: Domain<Idx: Debug> + Keys<D0::Idx>,
+        D1: Domain<Idx: Debug + From<usize> + Copy> + Keys<D1::Idx>,
+        P: AsRef<Path>,
+    {
+        match self {
+            ConditionParam::Import(path) => Ok(ConditionSampler::Array(read_csv_and_then(
+                path.verified(root)?,
+                ConditionRecord::try_into,
+            )?)),
+            ConditionParam::Generate(pss) => {
+                ensure!(D0::LEN == pss.len(), "few conditional opinion(s)");
+                let containers = pss.into_iter().map(|ps| {
+                    let mut b_check = MArrD1::<D1, bool>::from_fn(|_| false);
+                    let mut u_check = false;
+                    let mut sampler = None;
+                    let mut fixed = Vec::new();
+                    for p in ps {
+                        match p {
+                            SimplexParam::B(i, so) => {
+                                ensure!(!b_check[i.into()], "b({i}) is duplicated");
+                                b_check[i.into()] = true;
+                                match so {
+                                    SamplerOption::Single(v) => fixed.push(SimplexIndexed::B(i.into(), v)),
+                                    _ => {
+                                        ensure!(sampler.is_none(), "at most one sampler is avilable");
+                                        sampler = Some(SimplexIndexed::B(i.into(), so.into()));
+                                    },
+                                }
+                            }
+                            SimplexParam::U(so) => {
+                                ensure!(!u_check, "u is duplicated");
+                                u_check = true;
+                                match so {
+                                    SamplerOption::Single(v) => fixed.push(SimplexIndexed::U(v)),
+                                    _ => {
+                                        ensure!(sampler.is_none(), "at most one sampler is avilable");
+                                        sampler = Some(SimplexIndexed::U(so.into()));
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    let b_remain = D1::keys()
+                        .filter_map(|i| if b_check[i] { None } else { Some(i) })
+                        .collect_vec();
+                    let auto = match b_remain.len() {
+                        0 => {
+                            ensure!(!u_check, "one belief or uncertainty should be unset");
+                            SimplexIndexed::U(())
+                        }
+                        1 => {
+                            ensure!(u_check, "uncertainty should be set");
+                            SimplexIndexed::B(b_remain[0], ())
+                        }
+                        _ => {
+                            if u_check {
+                                bail!(
+                                    "{} belief(s) of indexes {:?} should be set",
+                                    b_remain.len() - 1,
+                                    b_remain
+                                );
+                            } else {
+                                bail!("{} belief(s) or {} belief(s) and uncertainty should be set from indexes {:?}",
+                                b_remain.len(), b_remain.len() - 1, b_remain);
+                            }
+                        }
+                    };
+                    Ok(SimplexContainer { sampler, fixed, auto })
+                }).zip(D0::keys())
+                .map(|(c, d0)| c.with_context(|| format!("at domain {d0:?}")))
+                .try_collect::<_, Vec<_>, _>()?;
+                // for ps in pss { }
+                Ok(ConditionSampler::Random(MArrD1::from_iter(containers)))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ConditionConfig<V> {
+    h_psi_if_phi0: ConditionParam<V>,
+    h_b_if_phi0: ConditionParam<V>,
+    o_b: ConditionParam<V>,
+    a_fh: ConditionParam<V>,
+    b_kh: ConditionParam<V>,
+    theta_h: ConditionParam<V>,
+    thetad_h: ConditionParam<V>,
+}
+
+impl<V: MyFloat + for<'a> Deserialize<'a>> ConditionConfig<V> {
+    fn into_samples<P: AsRef<Path>>(self, root: P) -> anyhow::Result<ConditionSamples<V>> {
+        Ok(ConditionSamples {
+            h_psi_if_phi0: self
+                .h_psi_if_phi0
+                .into_sample(&root)
+                .context("h_psi_if_phi0")?,
+            h_b_if_phi0: self.h_b_if_phi0.into_sample(&root).context("h_b_if_phi0")?,
+            o_b: self.o_b.into_sample(&root).context("o_b")?,
+            a_fh: self.a_fh.into_sample(&root).context("a_fh")?,
+            b_kh: self.b_kh.into_sample(&root).context("b_kh")?,
+            theta_h: self.theta_h.into_sample(&root).context("theta_h")?,
+            thetad_h: self.thetad_h.into_sample(&root).context("thetad_h")?,
+        })
     }
 }
 
@@ -246,13 +415,39 @@ struct UncertaintyConfig {
 }
 
 impl UncertaintyConfig {
-    fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-        self.fh_fpsi_if_fphi0.join_path(&root);
-        self.kh_kpsi_if_kphi0.join_path(&root);
-        self.fh_fphi_fo.join_path(&root);
-        self.kh_kphi_ko.join_path(&root);
+    fn into_samples<V: MyFloat + for<'a> Deserialize<'a>, P: AsRef<Path>>(
+        self,
+        root: P,
+    ) -> anyhow::Result<UncertaintySamples<V>> {
+        Ok(UncertaintySamples {
+            fh_fpsi_if_fphi0: read_csv_and_then(
+                self.fh_fpsi_if_fphi0.verified(&root)?,
+                UncertaintyD1Record::try_into,
+            )?,
+            kh_kpsi_if_kphi0: read_csv_and_then(
+                self.kh_kpsi_if_kphi0.verified(&root)?,
+                UncertaintyD1Record::try_into,
+            )?,
+            fh_fphi_fo: read_csv_and_then(
+                self.fh_fphi_fo.verified(&root)?,
+                UncertaintyD2Record::try_into,
+            )?,
+            kh_kphi_ko: read_csv_and_then(
+                self.kh_kphi_ko.verified(&root)?,
+                UncertaintyD2Record::try_into,
+            )?,
+        })
     }
 }
+
+// impl UncertaintyConfig {
+//     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
+//         self.fh_fpsi_if_fphi0.join_path(&root);
+//         self.kh_kpsi_if_kphi0.join_path(&root);
+//         self.fh_fphi_fo.join_path(&root);
+//         self.kh_kphi_ko.join_path(&root);
+//     }
+// }
 
 pub struct OpinionSamples<V: MyFloat> {
     initial_opinions: InitialOpinions<V>,
@@ -275,14 +470,14 @@ impl<V: MyFloat> OpinionSamples<V> {
     }
 }
 
-struct ConditionSamples<V> {
-    h_psi_if_phi0: Vec<MArrD1<Psi, SimplexD1<H, V>>>,
-    h_b_if_phi0: Vec<MArrD1<B, SimplexD1<H, V>>>,
-    o_b: Vec<MArrD1<B, SimplexD1<O, V>>>,
-    a_fh: Vec<MArrD1<FH, SimplexD1<A, V>>>,
-    b_kh: Vec<MArrD1<KH, SimplexD1<B, V>>>,
-    theta_h: Vec<MArrD1<H, SimplexD1<Theta, V>>>,
-    thetad_h: Vec<MArrD1<H, SimplexD1<Thetad, V>>>,
+struct ConditionSamples<V: SampleUniform> {
+    h_psi_if_phi0: ConditionSampler<Psi, H, V>,
+    h_b_if_phi0: ConditionSampler<B, H, V>,
+    o_b: ConditionSampler<B, O, V>,
+    a_fh: ConditionSampler<FH, A, V>,
+    b_kh: ConditionSampler<KH, B, V>,
+    theta_h: ConditionSampler<H, Theta, V>,
+    thetad_h: ConditionSampler<H, Thetad, V>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -301,31 +496,12 @@ where
     D1: Domain<Idx: Debug>,
     D2: Domain<Idx: Debug>,
 {
-    type Error = anyhow::Error;
+    type Error = InvalidValueError;
     fn try_from(value: ConditionRecord<V>) -> Result<Self, Self::Error> {
         Ok(marr_d1![
             SimplexD1::try_new(marr_d1![value.b00, value.b01], value.u0)?,
             SimplexD1::try_new(marr_d1![value.b10, value.b11], value.u1)?,
         ])
-    }
-}
-
-impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<ConditionConfig> for ConditionSamples<V> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: ConditionConfig) -> Result<Self, Self::Error> {
-        Ok(Self {
-            h_psi_if_phi0: read_csv_and_then(
-                value.h_psi_if_phi0.verify()?,
-                ConditionRecord::try_into,
-            )?,
-            h_b_if_phi0: read_csv_and_then(value.h_b_if_phi0.verify()?, ConditionRecord::try_into)?,
-            o_b: read_csv_and_then(value.o_b.verify()?, ConditionRecord::try_into)?,
-            a_fh: read_csv_and_then(value.a_fh.verify()?, ConditionRecord::try_into)?,
-            b_kh: read_csv_and_then(value.b_kh.verify()?, ConditionRecord::try_into)?,
-            theta_h: read_csv_and_then(value.theta_h.verify()?, ConditionRecord::try_into)?,
-            thetad_h: read_csv_and_then(value.thetad_h.verify()?, ConditionRecord::try_into)?,
-        })
     }
 }
 
@@ -343,7 +519,7 @@ struct UncertaintyD1Record<V> {
 }
 
 impl<V: MyFloat, D1: Domain> TryFrom<UncertaintyD1Record<V>> for MArrD1<D1, V> {
-    type Error = anyhow::Error;
+    type Error = InvalidValueError;
     fn try_from(value: UncertaintyD1Record<V>) -> Result<Self, Self::Error> {
         check_unit_interval(value.u0, "u0")?;
         check_unit_interval(value.u1, "u1")?;
@@ -360,7 +536,7 @@ struct UncertaintyD2Record<V> {
 }
 
 impl<V: MyFloat, D1: Domain, D2: Domain> TryFrom<UncertaintyD2Record<V>> for MArrD2<D1, D2, V> {
-    type Error = anyhow::Error;
+    type Error = InvalidValueError;
     fn try_from(value: UncertaintyD2Record<V>) -> Result<Self, Self::Error> {
         check_unit_interval(value.u00, "u00")?;
         check_unit_interval(value.u01, "u01")?;
@@ -370,44 +546,19 @@ impl<V: MyFloat, D1: Domain, D2: Domain> TryFrom<UncertaintyD2Record<V>> for MAr
     }
 }
 
-impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<UncertaintyConfig> for UncertaintySamples<V> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: UncertaintyConfig) -> Result<Self, Self::Error> {
-        Ok(Self {
-            fh_fpsi_if_fphi0: read_csv_and_then(
-                value.fh_fpsi_if_fphi0.verify()?,
-                UncertaintyD1Record::try_into,
-            )?,
-            kh_kpsi_if_kphi0: read_csv_and_then(
-                value.kh_kpsi_if_kphi0.verify()?,
-                UncertaintyD1Record::try_into,
-            )?,
-            fh_fphi_fo: read_csv_and_then(
-                value.fh_fphi_fo.verify()?,
-                UncertaintyD2Record::try_into,
-            )?,
-            kh_kphi_ko: read_csv_and_then(
-                value.kh_kphi_ko.verify()?,
-                UncertaintyD2Record::try_into,
-            )?,
-        })
-    }
-}
-
 fn reset_fixed<V: MyFloat, R: Rng>(
     condition: &ConditionSamples<V>,
     uncertainty: &UncertaintySamples<V>,
     fixed: &mut FixedOpinions<V>,
     rng: &mut R,
 ) {
-    let o_b = condition.o_b.choose(rng).unwrap().to_owned();
-    let b_kh = condition.b_kh.choose(rng).unwrap().to_owned();
-    let a_fh = condition.a_fh.choose(rng).unwrap().to_owned();
-    let theta_h = condition.theta_h.choose(rng).unwrap().to_owned();
-    let thetad_h = condition.thetad_h.choose(rng).unwrap().to_owned();
-    let h_psi_if_phi0 = condition.h_psi_if_phi0.choose(rng).unwrap().to_owned();
-    let h_b_if_phi0 = condition.h_b_if_phi0.choose(rng).unwrap().to_owned();
+    let o_b = condition.o_b.sample(rng);
+    let b_kh = condition.b_kh.sample(rng);
+    let a_fh = condition.a_fh.sample(rng);
+    let theta_h = condition.theta_h.sample(rng);
+    let thetad_h = condition.thetad_h.sample(rng);
+    let h_psi_if_phi0 = condition.h_psi_if_phi0.sample(rng);
+    let h_b_if_phi0 = condition.h_b_if_phi0.sample(rng);
     let uncertainty_fh_fpsi_if_fphi0 = uncertainty.fh_fpsi_if_fphi0.choose(rng).unwrap().to_owned();
     let uncertainty_kh_kpsi_if_kphi0 = uncertainty.kh_kpsi_if_kphi0.choose(rng).unwrap().to_owned();
     let uncertainty_fh_fo_fphi = uncertainty.fh_fphi_fo.choose(rng).unwrap().to_owned();
@@ -592,7 +743,7 @@ impl<V: MyFloat, D1> TryFrom<OpinionRecord<V>> for OpinionD1<D1, V>
 where
     D1: Domain<Idx: Debug>,
 {
-    type Error = anyhow::Error;
+    type Error = InvalidValueError;
     fn try_from(value: OpinionRecord<V>) -> Result<Self, Self::Error> {
         Ok(OpinionD1::try_new(
             marr_d1![value.b0, value.b1],
@@ -630,7 +781,7 @@ impl<V: MyFloat> TryFrom<InhibitionRecord<V>>
         MArrD1<B, SimplexD1<H, V>>,
     )
 {
-    type Error = anyhow::Error;
+    type Error = InvalidValueError;
     fn try_from(value: InhibitionRecord<V>) -> Result<Self, Self::Error> {
         Ok((
             OpinionD1::try_new(
@@ -647,19 +798,6 @@ impl<V: MyFloat> TryFrom<InhibitionRecord<V>>
                 SimplexD1::try_new(marr_d1![value.b1_b0, value.b1_b1], value.b1_u)?,
             ],
         ))
-    }
-}
-
-impl<V: MyFloat + for<'a> Deserialize<'a>> TryFrom<InformationConfig> for InformationSamples<V> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: InformationConfig) -> Result<Self, Self::Error> {
-        Ok(Self {
-            misinfo: read_csv_and_then(&value.misinfo.verify()?, OpinionRecord::try_into)?,
-            correction: read_csv_and_then(&value.correction.verify()?, OpinionRecord::try_into)?,
-            observation: read_csv_and_then(&value.observation.verify()?, OpinionRecord::try_into)?,
-            inhibition: read_csv_and_then(&value.inhibition.verify()?, InhibitionRecord::try_into)?,
-        })
     }
 }
 
@@ -869,15 +1007,19 @@ impl<V: MyFloat> CptSamples<V> {
     }
 }
 
-fn read_csv_and_then<T, P, F, U>(path: P, f: F) -> anyhow::Result<Vec<U>>
+fn read_csv_and_then<T, P, F, U, E>(path: P, f: F) -> anyhow::Result<Vec<U>>
 where
     T: DeserializeOwned,
     P: AsRef<Path>,
-    F: Fn(T) -> Result<U, anyhow::Error>,
+    F: Fn(T) -> Result<U, E>,
+    E: std::error::Error + Send + Sync + 'static,
 {
     let file = File::open(path)?;
     let mut rdr = csv::Reader::from_reader(file);
-    Ok(rdr.deserialize::<T>().map(|res| f(res?)).try_collect()?)
+    Ok(rdr
+        .deserialize::<T>()
+        .into_iter()
+        .process_results(|iter| iter.map(f).try_collect())??)
 }
 
 fn read_csv_with<T, P, F, U>(path: P, processor: F) -> anyhow::Result<U>
@@ -903,13 +1045,16 @@ where
 mod tests {
     use std::path::Path;
 
-    use rand::{rngs::SmallRng, SeedableRng};
+    use base::opinion::{Phi, H};
+    use rand::{rngs::SmallRng, thread_rng, SeedableRng};
+    use serde::Deserialize;
     use subjective_logic::{
         marr_d1, marr_d2,
         mul::labeled::{OpinionD1, SimplexD1},
     };
+    use toml::toml;
 
-    use super::{Config, SupportLevel, SupportLevels};
+    use super::{ConditionParam, ConditionSampler, Config, SupportLevel, SupportLevels};
     use crate::exec::Exec;
 
     #[test]
@@ -944,14 +1089,15 @@ mod tests {
             exec.community_psi1.levels[exec.community_psi1.indexes_by_level[10]]
                 > exec.community_psi1.levels[exec.community_psi1.indexes_by_level[90]]
         );
-        assert_eq!(exec.opinion.condition.o_b.len(), 7);
-        assert_eq!(
-            exec.opinion.condition.o_b[3],
-            marr_d1![
-                SimplexD1::new(marr_d1![1.0, 0.00], 0.00),
-                SimplexD1::new(marr_d1![0.0, 0.75], 0.25)
-            ]
+        assert!(
+            matches!(&exec.opinion.condition.o_b, ConditionSampler::Array(arr) if arr.len() == 7)
         );
+        assert!(matches!(
+            &exec.opinion.condition.o_b, ConditionSampler::Array(arr) if arr[3] == marr_d1![
+            SimplexD1::new(marr_d1![1.0, 0.00], 0.00),
+            SimplexD1::new(marr_d1![0.0, 0.75], 0.25)
+            ]
+        ));
         assert_eq!(
             exec.opinion.uncertainty.fh_fpsi_if_fphi0[0],
             marr_d1![0.1, 0.1]
@@ -981,6 +1127,91 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(0);
         for _ in 0..10 {
             assert!(exec.sharer_trust.misinfo.choose(&mut rng) < 0.5);
+        }
+        Ok(())
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestCondParam<V> {
+        hoge: ConditionParam<V>,
+    }
+
+    #[test]
+    fn test_cond_param() -> anyhow::Result<()> {
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{b = [0,{single = 0.95}]},{b = [0,{single = 0.95}]},{u = {single = 0.05}}],
+                [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+            ] }
+        }
+        .try_into()?;
+        let r = param.hoge.into_sample::<Phi, H, _>("");
+        assert!(r.is_err());
+        println!("{:#?}", r.err());
+
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{b = [0,{single = 0.95}]},{u = {single = 0.95}},{u = {single = 0.05}}],
+                [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+            ] }
+        }
+        .try_into()?;
+        let r = param.hoge.into_sample::<Phi, H, _>("");
+        assert!(r.is_err());
+        println!("{:#?}", r.err());
+
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{b = [0,{single = 0.95}]},{b = [1,{single = 0.95}]},{u = {single = 0.05}}],
+                [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+            ] }
+        }
+        .try_into()?;
+        let r = param.hoge.into_sample::<Phi, H, _>("");
+        assert!(r.is_err());
+        println!("{:#?}", r.err());
+
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+                [{b = [0,{array = [0.0,0.1]}]}, {b = [1,{uniform = [0.80,0.90]}]}],
+            ] }
+        }
+        .try_into()?;
+        let r = param.hoge.into_sample::<Phi, H, _>("");
+        assert!(r.is_err());
+        println!("{:#?}", r.err());
+
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{u = {single = 0.05}},{b = [0,{single = 0.95}]}],
+                [{b = [1,{single = 0.85}]},{b = [0,{single = 0.0}]}],
+            ] }
+        }
+        .try_into()?;
+        let s: ConditionSampler<Phi, H, f32> = param.hoge.into_sample("")?;
+        let c = s.sample(&mut thread_rng());
+        assert_eq!(c[Phi(0)].b()[H(0)], 0.95);
+        assert_eq!(c[Phi(0)].u(), &0.05);
+        assert_eq!(c[Phi(1)].b()[H(0)], 0.0);
+        assert_eq!(c[Phi(1)].b()[H(1)], 0.85);
+
+        let param: TestCondParam<f32> = toml! {
+            hoge = { generate = [
+                [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+                [{b = [0,{single = 0.0}]}, {b = [1,{uniform = [0.80,0.90]}]}],
+            ] }
+        }
+        .try_into()?;
+        let s: ConditionSampler<Phi, H, f32> = param.hoge.into_sample("")?;
+        for _ in 0..20 {
+            let c = s.sample(&mut thread_rng());
+            assert_eq!(c[Phi(0)].b()[H(0)], 0.95);
+            assert_eq!(c[Phi(0)].u(), &0.05);
+            assert_eq!(c[Phi(1)].b()[H(0)], 0.0);
+            assert_eq!(c[Phi(1)].u() + c[Phi(1)].b()[H(1)], 1.0);
+            assert!(c[Phi(1)].b()[H(1)] >= 0.80);
+            assert!(c[Phi(1)].b()[H(1)] < 0.90);
         }
         Ok(())
     }

@@ -2378,6 +2378,7 @@ dependencies = [
  "serde",
  "serde_with",
  "subjective-logic",
+ "thiserror",
  "tokio",
  "toml",
  "tracing",
