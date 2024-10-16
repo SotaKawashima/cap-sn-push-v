@@ -191,14 +191,14 @@ impl NetworkConfig {
             File::open(self.graph.verified(self.get_root(root))?)?,
             graph_lib::io::DataFormat::EdgeList,
         );
-        if !self.directed {
+        if self.directed {
             if self.transposed {
-                Ok(GraphB::Ud(builder.transpose().parse()?))
+                Ok(GraphB::Di(builder.transpose().parse()?))
             } else {
-                Ok(GraphB::Ud(builder.parse()?))
+                Ok(GraphB::Di(builder.parse()?))
             }
         } else {
-            Ok(GraphB::Di(builder.parse()?))
+            Ok(GraphB::Ud(builder.parse()?))
         }
     }
 
