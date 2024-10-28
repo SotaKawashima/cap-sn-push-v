@@ -1,0 +1,10 @@
+o_b =      { import = "../ops/cond/95_60-90.csv" }
+a_fh =     { import = "../ops/cond/95_70-95.csv" }
+b_kh =     { import = "../ops/cond/95_60-85.csv" }
+theta_h =  { import = "../ops/cond/95_60-90.csv" }
+thetad_h = { import = "../ops/cond/95_60-90.csv" }
+h_psi_if_phi0 = {generate = [
+    [{b = [0,{single = 0.95}]}, {u = {single = 0.05}}],
+    [{b = [0,{single = 0.0}]}, {b = [1,{uniform = [0.80,0.90]}]}],
+]}
+h_b_if_phi0 = { import = "../ops/cond/95_80-90.csv" }

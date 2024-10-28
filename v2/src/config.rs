@@ -36,8 +36,8 @@ use subjective_logic::{
 
 use crate::{exec::Exec, io::MyPath};
 
-pub struct Config<V> {
-    agent: AgentConfig<V>,
+pub struct Config {
+    agent: AgentConfig,
     strategy: StrategyConfig,
     network: NetworkConfig,
     agent_root: PathBuf,
@@ -45,13 +45,13 @@ pub struct Config<V> {
     network_root: PathBuf,
 }
 
-impl<V: for<'a> Deserialize<'a>> Config<V> {
+impl Config {
     pub fn try_new<P: AsRef<Path>>(
         network_config: P,
         agent_config: P,
         strategy_config: P,
     ) -> anyhow::Result<Self> {
-        let agent: AgentConfig<V> = DataFormat::read(&agent_config)?.parse()?;
+        let agent: AgentConfig = DataFormat::read(&agent_config)?.parse()?;
         let strategy: StrategyConfig = DataFormat::read(&strategy_config)?.parse()?;
         let network: NetworkConfig = DataFormat::read(&network_config)?.parse()?;
         Ok(Self {
@@ -76,9 +76,13 @@ impl<V: for<'a> Deserialize<'a>> Config<V> {
         })
     }
 
-    pub fn into_exec(self, enable_inhibition: bool, delay_selfish: u32) -> anyhow::Result<Exec<V>>
+    pub fn into_exec<V>(
+        self,
+        enable_inhibition: bool,
+        delay_selfish: u32,
+    ) -> anyhow::Result<Exec<V>>
     where
-        V: MyFloat,
+        V: MyFloat + for<'a> Deserialize<'a>,
     {
         let Self {
             agent,
@@ -107,8 +111,8 @@ impl<V: for<'a> Deserialize<'a>> Config<V> {
             mean_degree,
             sharer_trust: DataFormat::read(&agent.sharer_trust.verified(&agent_root)?)?.parse()?,
             opinion: OpinionSamples {
-                condition: agent.condition.into_samples(&agent_root)?,
-                uncertainty: agent.uncertainty.into_samples(&agent_root)?,
+                condition: ConditionConfig::read(&agent.condition.verified(&agent_root)?)?,
+                uncertainty: UncertaintyConfig::read(&agent.uncertainty.verified(&agent_root)?)?,
                 initial_opinions,
                 initial_base_rates,
             },
@@ -123,14 +127,14 @@ impl<V: for<'a> Deserialize<'a>> Config<V> {
 }
 
 #[derive(Debug, Deserialize)]
-struct AgentConfig<V> {
+struct AgentConfig {
     probabilities: MyPath,
     sharer_trust: MyPath,
     prospect: MyPath,
     cpt: MyPath,
     initial_states: MyPath,
-    condition: ConditionConfig<V>,
-    uncertainty: UncertaintyConfig,
+    condition: MyPath,   // ConditionConfig<V>,
+    uncertainty: MyPath, // UncertaintyConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -390,19 +394,11 @@ struct ConditionConfig<V> {
 }
 
 impl<V: MyFloat + for<'a> Deserialize<'a>> ConditionConfig<V> {
-    fn into_samples<P: AsRef<Path>>(self, root: P) -> anyhow::Result<ConditionSamples<V>> {
-        Ok(ConditionSamples {
-            h_psi_if_phi0: self
-                .h_psi_if_phi0
-                .into_sample(&root)
-                .context("h_psi_if_phi0")?,
-            h_b_if_phi0: self.h_b_if_phi0.into_sample(&root).context("h_b_if_phi0")?,
-            o_b: self.o_b.into_sample(&root).context("o_b")?,
-            a_fh: self.a_fh.into_sample(&root).context("a_fh")?,
-            b_kh: self.b_kh.into_sample(&root).context("b_kh")?,
-            theta_h: self.theta_h.into_sample(&root).context("theta_h")?,
-            thetad_h: self.thetad_h.into_sample(&root).context("thetad_h")?,
-        })
+    fn read<P: AsRef<Path>>(root: P) -> anyhow::Result<ConditionSamples<V>> {
+        let root = root.as_ref();
+        let parent = root.parent().unwrap();
+        let this = DataFormat::read(root)?.parse::<Self>()?;
+        ConditionSamples::try_new(this, parent)
     }
 }
 
@@ -415,39 +411,15 @@ struct UncertaintyConfig {
 }
 
 impl UncertaintyConfig {
-    fn into_samples<V: MyFloat + for<'a> Deserialize<'a>, P: AsRef<Path>>(
-        self,
+    fn read<V: MyFloat + for<'a> Deserialize<'a>, P: AsRef<Path>>(
         root: P,
     ) -> anyhow::Result<UncertaintySamples<V>> {
-        Ok(UncertaintySamples {
-            fh_fpsi_if_fphi0: read_csv_and_then(
-                self.fh_fpsi_if_fphi0.verified(&root)?,
-                UncertaintyD1Record::try_into,
-            )?,
-            kh_kpsi_if_kphi0: read_csv_and_then(
-                self.kh_kpsi_if_kphi0.verified(&root)?,
-                UncertaintyD1Record::try_into,
-            )?,
-            fh_fphi_fo: read_csv_and_then(
-                self.fh_fphi_fo.verified(&root)?,
-                UncertaintyD2Record::try_into,
-            )?,
-            kh_kphi_ko: read_csv_and_then(
-                self.kh_kphi_ko.verified(&root)?,
-                UncertaintyD2Record::try_into,
-            )?,
-        })
+        let root = root.as_ref();
+        let parent = root.parent().unwrap();
+        let this = DataFormat::read(root)?.parse::<Self>()?;
+        UncertaintySamples::try_new(this, parent)
     }
 }
-
-// impl UncertaintyConfig {
-//     fn set_root<P: AsRef<Path>>(&mut self, root: P) {
-//         self.fh_fpsi_if_fphi0.join_path(&root);
-//         self.kh_kpsi_if_kphi0.join_path(&root);
-//         self.fh_fphi_fo.join_path(&root);
-//         self.kh_kphi_ko.join_path(&root);
-//     }
-// }
 
 pub struct OpinionSamples<V: MyFloat> {
     initial_opinions: InitialOpinions<V>,
@@ -480,6 +452,26 @@ struct ConditionSamples<V: SampleUniform> {
     thetad_h: ConditionSampler<H, Thetad, V>,
 }
 
+impl<V: SampleUniform + MyFloat + for<'a> Deserialize<'a>> ConditionSamples<V> {
+    fn try_new<P: AsRef<Path>>(config: ConditionConfig<V>, root: P) -> anyhow::Result<Self> {
+        Ok(Self {
+            h_psi_if_phi0: config
+                .h_psi_if_phi0
+                .into_sample(&root)
+                .context("h_psi_if_phi0")?,
+            h_b_if_phi0: config
+                .h_b_if_phi0
+                .into_sample(&root)
+                .context("h_b_if_phi0")?,
+            o_b: config.o_b.into_sample(&root).context("o_b")?,
+            a_fh: config.a_fh.into_sample(&root).context("a_fh")?,
+            b_kh: config.b_kh.into_sample(&root).context("b_kh")?,
+            theta_h: config.theta_h.into_sample(&root).context("theta_h")?,
+            thetad_h: config.thetad_h.into_sample(&root).context("thetad_h")?,
+        })
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ConditionRecord<V> {
     b00: V,
@@ -510,6 +502,29 @@ struct UncertaintySamples<V> {
     kh_kpsi_if_kphi0: Vec<MArrD1<KPsi, V>>,
     fh_fphi_fo: Vec<MArrD2<FPhi, FO, V>>,
     kh_kphi_ko: Vec<MArrD2<KPhi, KO, V>>,
+}
+
+impl<V: MyFloat + for<'a> Deserialize<'a>> UncertaintySamples<V> {
+    fn try_new<P: AsRef<Path>>(config: UncertaintyConfig, root: P) -> anyhow::Result<Self> {
+        Ok(Self {
+            fh_fpsi_if_fphi0: read_csv_and_then(
+                config.fh_fpsi_if_fphi0.verified(&root)?,
+                UncertaintyD1Record::try_into,
+            )?,
+            kh_kpsi_if_kphi0: read_csv_and_then(
+                config.kh_kpsi_if_kphi0.verified(&root)?,
+                UncertaintyD1Record::try_into,
+            )?,
+            fh_fphi_fo: read_csv_and_then(
+                config.fh_fphi_fo.verified(&root)?,
+                UncertaintyD2Record::try_into,
+            )?,
+            kh_kphi_ko: read_csv_and_then(
+                config.kh_kphi_ko.verified(&root)?,
+                UncertaintyD2Record::try_into,
+            )?,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]

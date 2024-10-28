@@ -1,0 +1,4 @@
+fh_fpsi_if_fphi0 = "../ops/unct/1d_10.csv"
+kh_kpsi_if_kphi0 = "../ops/unct/1d_10.csv"
+fh_fphi_fo = "../ops/unct/2d_10.csv"
+kh_kphi_ko = "../ops/unct/2d_10.csv"
