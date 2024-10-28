@@ -8,11 +8,14 @@ use base::{
 };
 use graph_lib::prelude::{Graph, GraphB};
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
-use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
+use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
 use crate::config::*;
 
-pub struct Exec<V: MyFloat + SampleUniform> {
+pub struct Exec<V: MyFloat>
+where
+    Open01: Distribution<V>,
+{
     pub enable_inhibition: bool,
     pub graph: GraphB,
     pub fnum_agents: V,
@@ -57,11 +60,12 @@ pub struct AgentExt<V> {
     psi1_support_level: V,
 }
 
-impl<V> AgentExt<V> {
-    fn get_trust<R: Rng>(&mut self, label: InfoLabel, exec: &Exec<V>, rng: &mut R) -> V
-    where
-        V: MyFloat,
-    {
+impl<V> AgentExt<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
+    fn get_trust<R: Rng>(&mut self, label: InfoLabel, exec: &Exec<V>, rng: &mut R) -> V {
         *self.trusts.entry(label).or_insert_with(|| match label {
             InfoLabel::Misinfo => {
                 // let p = self.psi1_support_level;
@@ -84,11 +88,7 @@ impl<V> AgentExt<V> {
         })
     }
 
-    fn get_plural_ignorances<'a, R>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V)
-    where
-        V: MyFloat,
-        R: Rng,
-    {
+    fn get_plural_ignorances<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V) {
         *self.plural_ignores.get_or_insert_with(|| {
             (
                 exec.probabilies.plural_ignore_friend.choose(rng),
@@ -97,11 +97,7 @@ impl<V> AgentExt<V> {
         })
     }
 
-    fn viewing_probs<'a, R>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V)
-    where
-        V: MyFloat,
-        R: Rng,
-    {
+    fn viewing_probs<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V) {
         *self.viewing_probs.get_or_insert_with(|| {
             (
                 exec.probabilies.viewing_friend.choose(rng),
@@ -110,11 +106,7 @@ impl<V> AgentExt<V> {
         })
     }
 
-    fn arrival_prob<'a, R>(&mut self, exec: &Exec<V>, rng: &mut R) -> V
-    where
-        V: MyFloat,
-        R: Rng,
-    {
+    fn arrival_prob<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> V {
         *self
             .arrival_prob
             .get_or_insert_with(|| exec.probabilies.arrival_friend.choose(rng))
@@ -283,6 +275,7 @@ impl Instance {
     ) -> V
     where
         V: MyFloat,
+        Open01: Distribution<V>,
     {
         V::one()
             - (V::one() - V::from_usize(ins.num_shared(info_idx)).unwrap() / ins.exec.fnum_agents)
@@ -308,7 +301,10 @@ where
             sampling: &Sampling<V>,
             informings: &[Informing<V>],
             is_observation: &mut [bool],
-        ) -> BTreeMap<u32, Vec<AgentIdx>> {
+        ) -> BTreeMap<u32, Vec<AgentIdx>>
+        where
+            Open01: Distribution<V>,
+        {
             let mut informers = BTreeMap::new();
             let samples = match sampling {
                 &Sampling::Random(p) => exec

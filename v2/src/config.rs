@@ -17,9 +17,7 @@ use graph_lib::prelude::{Graph, GraphB};
 use input::format::DataFormat;
 use itertools::{Itertools, ProcessResults};
 use rand::{seq::SliceRandom, Rng};
-use rand_distr::{
-    uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal, Uniform,
-};
+use rand_distr::{Beta, Distribution, Exp1, Open01, Standard, StandardNormal, Uniform};
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_with::{serde_as, FromInto, TryFromInto};
 use subjective_logic::{
@@ -83,6 +81,7 @@ impl Config {
     ) -> anyhow::Result<Exec<V>>
     where
         V: MyFloat + for<'a> Deserialize<'a>,
+        Open01: Distribution<V>,
     {
         let Self {
             agent,
@@ -238,12 +237,21 @@ enum SimplexParam<V> {
     U(SamplerOption<V>),
 }
 
-enum ConditionSampler<D0: Domain, D1: Domain, V: SampleUniform> {
+enum ConditionSampler<D0, D1, V>
+where
+    D0: Domain,
+    D1: Domain,
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     Array(Vec<MArrD1<D0, SimplexD1<D1, V>>>),
     Random(MArrD1<D0, SimplexContainer<D1::Idx, V>>),
 }
 
-impl<D0: Domain, D1: Domain<Idx: Copy>, V: MyFloat + SampleUniform> ConditionSampler<D0, D1, V> {
+impl<D0: Domain, D1: Domain<Idx: Copy>, V: MyFloat> ConditionSampler<D0, D1, V>
+where
+    Open01: Distribution<V>,
+{
     fn sample<R: Rng>(&self, rng: &mut R) -> MArrD1<D0, SimplexD1<D1, V>> {
         match self {
             ConditionSampler::Array(vec) => vec.choose(rng).unwrap().to_owned(),
@@ -287,7 +295,11 @@ impl<D0: Domain, D1: Domain<Idx: Copy>, V: MyFloat + SampleUniform> ConditionSam
     }
 }
 
-struct SimplexContainer<Idx, V: SampleUniform> {
+struct SimplexContainer<Idx, V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     sampler: Option<SimplexIndexed<Idx, Sampler<V>>>,
     fixed: Vec<SimplexIndexed<Idx, V>>,
     auto: SimplexIndexed<Idx, ()>,
@@ -301,6 +313,7 @@ enum SimplexIndexed<Idx, T> {
 impl<V> ConditionParam<V>
 where
     V: MyFloat + for<'a> Deserialize<'a>,
+    Open01: Distribution<V>,
 {
     fn into_sample<D0, D1, P>(self, root: P) -> anyhow::Result<ConditionSampler<D0, D1, V>>
     where
@@ -393,7 +406,10 @@ struct ConditionConfig<V> {
     thetad_h: ConditionParam<V>,
 }
 
-impl<V: MyFloat + for<'a> Deserialize<'a>> ConditionConfig<V> {
+impl<V: MyFloat + for<'a> Deserialize<'a>> ConditionConfig<V>
+where
+    Open01: Distribution<V>,
+{
     fn read<P: AsRef<Path>>(root: P) -> anyhow::Result<ConditionSamples<V>> {
         let root = root.as_ref();
         let parent = root.parent().unwrap();
@@ -421,14 +437,20 @@ impl UncertaintyConfig {
     }
 }
 
-pub struct OpinionSamples<V: MyFloat> {
+pub struct OpinionSamples<V: MyFloat>
+where
+    Open01: Distribution<V>,
+{
     initial_opinions: InitialOpinions<V>,
     initial_base_rates: InitialBaseRates<V>,
     condition: ConditionSamples<V>,
     uncertainty: UncertaintySamples<V>,
 }
 
-impl<V: MyFloat> OpinionSamples<V> {
+impl<V: MyFloat> OpinionSamples<V>
+where
+    Open01: Distribution<V>,
+{
     pub fn reset_to<R: Rng>(&self, ops: &mut MyOpinions<V>, rng: &mut R)
     where
         Standard: Distribution<V>,
@@ -442,7 +464,11 @@ impl<V: MyFloat> OpinionSamples<V> {
     }
 }
 
-struct ConditionSamples<V: SampleUniform> {
+struct ConditionSamples<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     h_psi_if_phi0: ConditionSampler<Psi, H, V>,
     h_b_if_phi0: ConditionSampler<B, H, V>,
     o_b: ConditionSampler<B, O, V>,
@@ -452,7 +478,10 @@ struct ConditionSamples<V: SampleUniform> {
     thetad_h: ConditionSampler<H, Thetad, V>,
 }
 
-impl<V: SampleUniform + MyFloat + for<'a> Deserialize<'a>> ConditionSamples<V> {
+impl<V: MyFloat + for<'a> Deserialize<'a>> ConditionSamples<V>
+where
+    Open01: Distribution<V>,
+{
     fn try_new<P: AsRef<Path>>(config: ConditionConfig<V>, root: P) -> anyhow::Result<Self> {
         Ok(Self {
             h_psi_if_phi0: config
@@ -566,7 +595,9 @@ fn reset_fixed<V: MyFloat, R: Rng>(
     uncertainty: &UncertaintySamples<V>,
     fixed: &mut FixedOpinions<V>,
     rng: &mut R,
-) {
+) where
+    Open01: Distribution<V>,
+{
     let o_b = condition.o_b.sample(rng);
     let b_kh = condition.b_kh.sample(rng);
     let a_fh = condition.a_fh.sample(rng);
@@ -691,30 +722,45 @@ enum SamplerOption<V> {
     Single(V),
     Array(Vec<V>),
     Uniform(V, V),
+    Beta(V, V),
 }
 
-pub enum Sampler<V: SampleUniform> {
+pub enum Sampler<V: MyFloat>
+where
+    Open01: Distribution<V>,
+{
     Single(V),
     Arr(Vec<V>),
     Uni(Uniform<V>),
+    Beta(Beta<V>),
 }
 
-impl<V: SampleUniform> From<SamplerOption<V>> for Sampler<V> {
+impl<V> From<SamplerOption<V>> for Sampler<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     fn from(value: SamplerOption<V>) -> Self {
         match value {
             SamplerOption::Single(v) => Self::Single(v),
             SamplerOption::Array(v) => Self::Arr(v),
             SamplerOption::Uniform(low, high) => Self::Uni(Uniform::new(low, high)),
+            SamplerOption::Beta(alpha, beta) => Self::Beta(Beta::new(alpha, beta).unwrap()),
         }
     }
 }
 
-impl<V: MyFloat + SampleUniform> Sampler<V> {
+impl<V> Sampler<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     pub fn choose<R: Rng>(&self, rng: &mut R) -> V {
         match self {
             Self::Single(v) => *v,
             Self::Arr(v) => *v.choose(rng).unwrap(),
             Self::Uni(u) => u.sample(rng),
+            Self::Beta(b) => b.sample(rng),
         }
     }
 }
@@ -722,7 +768,11 @@ impl<V: MyFloat + SampleUniform> Sampler<V> {
 #[serde_as]
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct SharerTrustSamples<V: SampleUniform> {
+pub struct SharerTrustSamples<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     #[serde_as(as = "FromInto<SamplerOption<V>>")]
     pub misinfo: Sampler<V>,
     #[serde_as(as = "FromInto<SamplerOption<V>>")]
@@ -967,7 +1017,11 @@ pub struct InformingParams<V> {
 #[serde_as]
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "V: serde::Deserialize<'de>"))]
-pub struct ProbabilitySamples<V: SampleUniform> {
+pub struct ProbabilitySamples<V>
+where
+    V: MyFloat,
+    Open01: Distribution<V>,
+{
     #[serde_as(as = "FromInto<SamplerOption<V>>")]
     pub viewing: Sampler<V>,
     #[serde_as(as = "FromInto<SamplerOption<V>>")]
@@ -1070,7 +1124,7 @@ mod tests {
     use toml::toml;
 
     use super::{ConditionParam, ConditionSampler, Config, SupportLevel, SupportLevels};
-    use crate::exec::Exec;
+    use crate::{config::Sampler, exec::Exec};
 
     #[test]
     fn test_support_levels() {
@@ -1143,6 +1197,18 @@ mod tests {
         for _ in 0..10 {
             assert!(exec.sharer_trust.misinfo.choose(&mut rng) < 0.5);
         }
+
+        assert!(matches!(
+            exec.probabilies.plural_ignore_social,
+            Sampler::Beta(_)
+        ));
+        let mut p = 0.0;
+        for _ in 0..10 {
+            p += exec.probabilies.plural_ignore_social.choose(&mut rng);
+        }
+        p /= 10.0;
+        assert!((p - 0.1).abs() < 0.05);
+
         Ok(())
     }
 
