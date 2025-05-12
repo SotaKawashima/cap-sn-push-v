@@ -1,6 +1,11 @@
+//! # Simulation Library (version 2)
+//! This library provides an algorithm for a simulation.
+//!
+
 mod config;
 mod exec;
 mod io;
+mod parameter;
 
 use base::{
     opinion::MyFloat,
@@ -15,6 +20,7 @@ use polars_arrow::datatypes::Metadata;
 use rand_distr::{uniform::SampleUniform, Distribution, Exp1, Open01, Standard, StandardNormal};
 use std::path::PathBuf;
 
+/// A command line interface structure for the simulation
 #[derive(clap::Parser)]
 pub struct Cli {
     /// string to identify given configuration data
@@ -23,16 +29,16 @@ pub struct Cli {
     output_dir: PathBuf,
     /// the path of a runtime config file
     #[arg(long)]
-    runtime: MyPath,
+    runtime: MyPath<RuntimeParams>,
     /// the path of a network config file
     #[arg(long)]
-    network: MyPath,
+    network: PathBuf,
     /// the path of a agent config file
     #[arg(long)]
-    agent: MyPath,
+    agent: PathBuf,
     /// the path of a strategy config file
     #[arg(long)]
-    strategy: MyPath,
+    strategy: PathBuf,
     /// Enable inhibition information
     #[arg(short, default_value_t = false)]
     enable_inhibition: bool,
@@ -47,6 +53,7 @@ pub struct Cli {
     compressing: bool,
 }
 
+/// An entry point for the simulation
 pub async fn start<V>(args: Cli) -> anyhow::Result<()>
 where
     V: MyFloat + SampleUniform + 'static,
@@ -60,39 +67,31 @@ where
     let Cli {
         identifier,
         output_dir,
-        runtime: runtime_path,
-        network: network_config,
-        agent: agent_config,
-        strategy: strategy_config,
+        runtime,
+        network,
+        agent,
+        strategy,
         enable_inhibition,
         delay_selfish,
         overwriting,
         compressing,
     } = args;
-    let runtime = DataFormat::read(runtime_path.verified("")?)?.parse::<RuntimeParams>()?;
-    let config = Config::try_new(
-        network_config.verified("")?,
-        agent_config.verified("")?,
-        strategy_config.verified("")?,
-    )?;
+    let runtime_params = DataFormat::read(runtime.verified("")?)?.parse::<RuntimeParams>()?;
     let metadata = Metadata::from_iter([
         ("app".to_string(), env!("CARGO_PKG_NAME").to_string()),
         ("version".to_string(), env!("CARGO_PKG_VERSION").to_string()),
-        (
-            "runtime".to_string(),
-            runtime_path.to_string_lossy().to_string(),
-        ),
+        ("runtime".to_string(), runtime.to_string_lossy().to_string()),
         (
             "agent_config".to_string(),
-            agent_config.to_string_lossy().to_string(),
+            agent.to_string_lossy().to_string(),
         ),
         (
             "network_config".to_string(),
-            network_config.to_string_lossy().to_string(),
+            network.to_string_lossy().to_string(),
         ),
         (
             "strategy_config".to_string(),
-            strategy_config.to_string_lossy().to_string(),
+            strategy.to_string_lossy().to_string(),
         ),
         (
             "enable_inhibition".to_string(),
@@ -101,13 +100,14 @@ where
         ("delay_selfish".to_string(), delay_selfish.to_string()),
         (
             "iteration_count".to_string(),
-            runtime.iteration_count.to_string(),
+            runtime_params.iteration_count.to_string(),
         ),
     ]);
+    let config = Config::try_new(network, agent, strategy)?;
     let writers =
         FileWriters::try_new(&identifier, &output_dir, overwriting, compressing, metadata)?;
     let exec = config.into_exec(enable_inhibition, delay_selfish)?;
-    run::<V, _, AgentExt<V>, Instance>(writers, &runtime, exec, None).await
+    run::<V, _, AgentExt<V>, Instance>(writers, &runtime_params, exec, None).await
 }
 
 #[cfg(test)]

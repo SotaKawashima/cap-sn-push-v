@@ -10,7 +10,10 @@ use graph_lib::prelude::{Graph, GraphB};
 use rand::{seq::IteratorRandom, seq::SliceRandom, Rng};
 use rand_distr::{Distribution, Exp1, Open01, Standard, StandardNormal};
 
-use crate::config::*;
+use crate::parameter::{
+    CptSamples, InformationSamples, Informing, InformingParams, OpinionSamples, PopSampleType,
+    ProbabilitySamples, ProspectSamples, SharerTrustSamples, SupportLevelTable,
+};
 
 pub struct Exec<V: MyFloat>
 where
@@ -24,8 +27,8 @@ where
     pub opinion: OpinionSamples<V>,
     pub information: InformationSamples<V>,
     pub informing: InformingParams<V>,
-    pub community_psi1: SupportLevels<V>,
-    pub probabilies: ProbabilitySamples<V>,
+    pub community_psi1: SupportLevelTable<V>,
+    pub probabilities: ProbabilitySamples<V>,
     pub prospect: ProspectSamples<V>,
     pub cpt: CptSamples<V>,
     pub delay_selfish: u32,
@@ -38,6 +41,7 @@ where
     Standard: Distribution<V>,
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
+    <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
 {
     fn num_agents(&self) -> usize {
         self.graph.node_count()
@@ -64,6 +68,7 @@ impl<V> AgentExt<V>
 where
     V: MyFloat,
     Open01: Distribution<V>,
+    <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
 {
     fn get_trust<R: Rng>(&mut self, label: InfoLabel, exec: &Exec<V>, rng: &mut R) -> V {
         *self.trusts.entry(label).or_insert_with(|| match label {
@@ -91,8 +96,8 @@ where
     fn get_plural_ignorances<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V) {
         *self.plural_ignores.get_or_insert_with(|| {
             (
-                exec.probabilies.plural_ignore_friend.choose(rng),
-                exec.probabilies.plural_ignore_social.choose(rng),
+                exec.probabilities.plural_ignore_friend.choose(rng),
+                exec.probabilities.plural_ignore_social.choose(rng),
             )
         })
     }
@@ -100,8 +105,8 @@ where
     fn viewing_probs<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> (V, V) {
         *self.viewing_probs.get_or_insert_with(|| {
             (
-                exec.probabilies.viewing_friend.choose(rng),
-                exec.probabilies.viewing_social.choose(rng),
+                exec.probabilities.viewing_friend.choose(rng),
+                exec.probabilities.viewing_social.choose(rng),
             )
         })
     }
@@ -109,7 +114,7 @@ where
     fn arrival_prob<'a, R: Rng>(&mut self, exec: &Exec<V>, rng: &mut R) -> V {
         *self
             .arrival_prob
-            .get_or_insert_with(|| exec.probabilies.arrival_friend.choose(rng))
+            .get_or_insert_with(|| exec.probabilities.arrival_friend.choose(rng))
     }
 }
 
@@ -155,6 +160,7 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     Open01: Distribution<V>,
+    <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
 {
     type Exec = Exec<V>;
     type Ix = Instance;
@@ -196,7 +202,7 @@ where
     fn visit_prob<R: Rng>(&mut self, exec: &Self::Exec, rng: &mut R) -> V {
         *self
             .visit_prob
-            .get_or_insert_with(|| exec.probabilies.viewing.choose(rng))
+            .get_or_insert_with(|| exec.probabilities.viewing.choose(rng))
     }
 
     fn reset_core<R: Rng>(
@@ -276,6 +282,7 @@ impl Instance {
     where
         V: MyFloat,
         Open01: Distribution<V>,
+        <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
     {
         V::one()
             - (V::one() - V::from_usize(ins.num_shared(info_idx)).unwrap() / ins.exec.fnum_agents)
@@ -291,6 +298,7 @@ where
     StandardNormal: Distribution<V>,
     Exp1: Distribution<V>,
     R: Rng,
+    <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
 {
     fn from_exec(exec: &Exec<V>, rng: &mut R) -> Self {
         let mut is_observation = vec![true; exec.graph.node_count()];
@@ -298,25 +306,26 @@ where
         fn make_informers<V: MyFloat, R: Rng>(
             exec: &Exec<V>,
             rng: &mut R,
-            sampling: &Sampling<V>,
+            sampling: &PopSampleType<V>,
             informings: &[Informing<V>],
             is_observation: &mut [bool],
         ) -> BTreeMap<u32, Vec<AgentIdx>>
         where
             Open01: Distribution<V>,
+            <V as rand_distr::uniform::SampleUniform>::Sampler: Sync + Send,
         {
             let mut informers = BTreeMap::new();
             let samples = match sampling {
-                &Sampling::Random(p) => exec
+                &PopSampleType::Random(p) => exec
                     .community_psi1
                     .random(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
-                &Sampling::Top(p) => exec
+                &PopSampleType::Top(p) => exec
                     .community_psi1
                     .top(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
-                &Sampling::Middle(p) => exec
+                &PopSampleType::Middle(p) => exec
                     .community_psi1
                     .middle(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
-                &Sampling::Bottom(p) => exec
+                &PopSampleType::Bottom(p) => exec
                     .community_psi1
                     .bottom(V::to_usize(&(exec.fnum_agents * p)).unwrap(), rng),
             };
@@ -345,14 +354,14 @@ where
         let misinfo_informers = make_informers(
             exec,
             rng,
-            &Sampling::Top(exec.informing.max_pop_misinfo),
+            &PopSampleType::Top(exec.informing.max_pop_misinfo),
             &exec.informing.misinfo,
             &mut is_observation,
         );
         let corection_informers = make_informers(
             exec,
             rng,
-            &Sampling::Bottom(exec.informing.max_pop_correction),
+            &PopSampleType::Bottom(exec.informing.max_pop_correction),
             &exec.informing.correction,
             &mut is_observation,
         );
@@ -498,7 +507,8 @@ mod tests {
         ops::{Product2, Projection},
     };
 
-    use super::{new_trusts, Config, Exec, Instance};
+    use super::{new_trusts, Exec, Instance};
+    use crate::config::Config;
 
     #[test]
     fn test_instance() -> anyhow::Result<()> {

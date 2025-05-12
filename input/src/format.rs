@@ -48,6 +48,11 @@ impl DataFormat {
             DataFormat::TOML(s) => Ok(T::deserialize(toml::Deserializer::new(s))?),
         }
     }
+
+    pub fn de<P: AsRef<Path>, T: for<'a> Deserialize<'a>>(path: P) -> anyhow::Result<T> {
+        let f = Self::read(path)?;
+        Ok(f.parse::<T>()?)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
