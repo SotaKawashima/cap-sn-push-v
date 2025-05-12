@@ -261,7 +261,7 @@ where
 pub enum SimplexParam<V> {
     /// belief: T, uncertainty: V
     Fixed(Vec<V>, V),
-    /// alpha: Vec<V>
+    /// alpha: `Vec<V>`
     Dirichlet {
         alpha: Vec<V>,
         zeros: Option<Vec<usize>>,
