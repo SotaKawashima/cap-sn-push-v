@@ -93,6 +93,34 @@ uncertainty_fh_fo_if_fphi1 = [
     { base = 0.0 },
     { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
 ]
+uncertainty_fh_fpsi_if_fphi0 = [
+    { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+]
+uncertainty_kh_kpsi_if_kphi0 = [
+    { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+]
+uncertainty_fh_fphi_fo = [
+    [
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    ],
+    [
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    ]
+]
+uncertainty_kh_kphi_ko = [
+    [
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    ],
+    [
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+        { base = 0.0, error = { dist = "Standard", low = 0.0, high = 0.2 } },
+    ]
+]
 
 [initial_opinions.fixed.h_psi_b_if_phi0]
 no_cause  = { Fixed = [[0.95, 0.00], 0.05] }
