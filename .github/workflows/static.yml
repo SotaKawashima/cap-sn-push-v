@@ -29,6 +29,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: setup-git-credentials
+        uses: de-vri-es/setup-git-credentials@v2.1.2
+        with:
+          credentials: ${{secrets.GIT_CREDENTIALS}}
       - name: Checkout
         uses: actions/checkout@v4
       # --------- doc generation step ---------
