@@ -1,0 +1,20 @@
+probabilities  = "../agent/probs.toml"
+sharer_trust   = "../agent/trust.toml"
+prospect       = "../prospect/x[4-8_33]-ym3.csv"
+cpt            = "../agent/cpt.csv"
+initial_states = "../agent/initial_states.toml"
+
+[condition]
+o_b           = "../cond/d95b0_d[0-20_21]u20.csv"
+a_fh          = "../cond/d95b0_d[10-30_21]u10.csv"
+b_kh          = "../cond/d95b0_d[10-30_21]u10.csv"
+theta_h       = "../cond/d95b0_d[20-40_21]u40.csv"
+thetad_h      = "../cond/d95b0_d[50-70_21]u10.csv"
+h_psi_if_phi0 = "../cond/d0b0_d[50-70_21]u25.csv"
+h_b_if_phi0   = "../cond/d60b0_d[0-20_21]u20.csv"
+
+[uncertainty]
+fh_fpsi_if_fphi0 = "../uncertainty/1d_30.csv"
+kh_kpsi_if_kphi0 = "../uncertainty/1d_30.csv"
+fh_fphi_fo       = "../uncertainty/2d_30_1.csv"
+kh_kphi_ko       = "../uncertainty/2d_30_1.csv"

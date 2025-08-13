@@ -1,0 +1,8 @@
+viewing = { single = 0.5 }
+viewing_friend = { single = 0.1 }
+viewing_social = { single = 0.1 }
+arrival_friend = { single = 0.5 }
+plural_ignore_friend = { uniform = [0.0, 1.0] }
+plural_ignore_social = { uniform = [0.5, 1.0] }
+# plural_ignore_friend = { array = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9] }
+# plural_ignore_social = { array = [0.5,0.6,0.7,0.8,0.9] }

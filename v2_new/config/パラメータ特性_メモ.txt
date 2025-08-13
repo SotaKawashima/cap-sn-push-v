@@ -1,0 +1,4 @@
+h_b_if_phi0 のパラメータ特性
+d0 = 0.65 を境にmisinfoとcorrectionの拡散量が逆転する (d<.65でmisinfo増）
+d0 が 1.0 に近いほど selfishが減少する
+u1が 0.0 に近いほど inhibitionの効きが悪くなる

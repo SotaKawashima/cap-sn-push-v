@@ -1,0 +1,38 @@
+probabilities  = "./test/probs1.toml"
+sharer_trust   = "./test/trust1.toml"
+prospect       = "./test/prospect1.csv"
+cpt            = "./agent/cpt.csv"
+initial_states = "./agent/initial_states.toml"
+
+[condition]
+o_b           = "./test/95_50.csv"
+a_fh          = "./test/95_50.csv"
+b_kh          = "./test/50_90.csv"
+theta_h       = "./test/95_50.csv"
+thetad_h      = "./test/95_50.csv"
+h_psi_if_phi0 = "./test/95_50.csv"
+h_b_if_phi0   = "./test/95_50.csv"
+
+# parameter for selfish by misinfo
+# o_b           = "./ops/cond/95_[50-50_1].csv"
+# a_fh          = "./ops/cond/95_[30-50_9].csv"
+# b_kh          = "./ops/cond/95_[30-50_9].csv"
+# theta_h       = "./ops/cond/95_[30-30_1].csv"
+# thetad_h      = "./ops/cond/95_[80-100_9].csv"
+# h_psi_if_phi0 = "./ops/cond/95_[95-95_1].csv"
+# h_b_if_phi0   = "./ops/cond/95_[95-95_1].csv"
+
+# parameter for selfish by correction?
+# o_b           = "./ops/cond/95_[50-50_1].csv"
+# a_fh          = "./ops/cond/95_[50-50_1].csv"
+# b_kh          = "./ops/cond/95_[95-95_1].csv"
+# theta_h       = "./ops/cond/95_[75-90_7].csv"
+# thetad_h      = "./ops/cond/95_[75-90_7].csv"
+# h_psi_if_phi0 = "./ops/cond/95_[95-95_1].csv"
+# h_b_if_phi0   = "./ops/cond/95_[95-95_1].csv"
+
+[uncertainty]
+fh_fpsi_if_fphi0 = "./ops/unct/1d_10.csv"
+kh_kpsi_if_kphi0 = "./ops/unct/1d_10.csv"
+fh_fo_fphi       = "./ops/unct/2d_10.csv"
+kh_ko_kphi       = "./ops/unct/2d_10.csv"

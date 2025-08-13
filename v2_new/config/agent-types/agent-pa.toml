@@ -1,0 +1,7 @@
+probabilities  = "../agent/probs-pa.toml"
+sharer_trust   = "../agent/trust.toml"
+prospect       = "../prospect/x[4-8_33]-ym3.csv"
+cpt            = "../agent/cpt.csv"
+initial_states = "../agent/initial_states.toml"
+condition      = "../agent/condition.toml"
+uncertainty    = "../agent/uncertainty.toml"
