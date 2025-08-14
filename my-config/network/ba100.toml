@@ -1,0 +1,6 @@
+community = "./test/network/ba100/comm.csv"
+
+[graph]
+location = { LocalFile = './test/network/ba100/edgelist.txt' }
+directed = false
+transposed = false

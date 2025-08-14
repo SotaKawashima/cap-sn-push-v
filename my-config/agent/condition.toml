@@ -1,0 +1,7 @@
+o_b =      { import = "../ops/cond/d95b0_d[0-20_21]u20.csv" }
+a_fh =     { import = "../ops/cond/d95b0_d[10-30_21]u10.csv" }
+b_kh =     { import = "../ops/cond/d95b0_d[10-30_21]u10.csv" }
+theta_h =  { import = "../ops/cond/d95b0_d[20-40_21]u40.csv" }
+thetad_h = { import = "../ops/cond/d95b0_d[50-70_21]u10.csv" }
+h_psi_if_phi0 = { import = "../ops/cond/d0b0_d[50-70_21]u25.csv" }
+h_b_if_phi0 = { import = "../ops/cond/d70b0_d[0-20_21]u30.csv" }
